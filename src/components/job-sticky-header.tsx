@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { Job } from "@/lib/mock-jobs";
 import { ApplyButton } from "@/components/apply-button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,9 +54,11 @@ export function JobStickyHeader({ job }: { job: Job }) {
               </p>
             </div>
 
+            <ThemeToggle className="ml-auto shrink-0" />
+
             <div
               className={cn(
-                "ml-auto shrink-0 transition-all duration-200",
+                "shrink-0 transition-all duration-200",
                 isCondensed
                   ? "translate-y-0 opacity-100"
                   : "pointer-events-none translate-y-1 opacity-0",
