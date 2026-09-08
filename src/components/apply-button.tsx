@@ -22,9 +22,18 @@ export function ApplyButton({
     <Button
       type="button"
       onClick={open}
-      className={cn("group/apply gap-2", className)}
+      className={cn(
+        "group/apply relative isolate gap-2 overflow-hidden",
+        className,
+      )}
       {...props}
     >
+      {/* Brandbook "кант" dissolve, swept across on hover. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-300 group-hover/apply:opacity-100 motion-reduce:transition-none"
+        style={{ backgroundImage: "var(--brand-gradient)" }}
+      />
       {label}
       {showIcon ? (
         // No data-icon="inline-end" here: that attribute triggers the button's

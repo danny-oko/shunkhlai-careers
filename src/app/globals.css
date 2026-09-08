@@ -11,6 +11,8 @@
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-blue: var(--brand-blue);
   --color-brand-foreground: var(--brand-foreground);
   --color-ring: var(--ring);
   --color-input: var(--input);
@@ -37,11 +39,22 @@
 }
 
 :root {
-  /* Shunkhlai brand accent - reserved strictly for primary actions.
-     Brandbook alternative (Pantone 166 C, RGB 234/89/1) is:
-     --brand: oklch(0.635 0.198 41.5); */
-  --brand: oklch(0.505 0.192 27.5);
+  /* Shunkhlai brand, per brandbook 1.3.
+     --brand      Pantone 166 C, RGB 234/89/1
+     --brand-2    Pantone 151 C, RGB 241/135/0 - the gradient partner
+     --brand-blue Reflex Blue C, RGB 0/77/158
+     Together --brand and --brand-2 form the "оngoniy uusalt" dissolve
+     used across every brandbook header. */
+  --brand: #ea5901;
+  --brand-2: #f18700;
+  --brand-blue: #004d9e;
   --brand-foreground: oklch(1 0 0);
+  --brand-gradient: linear-gradient(
+    90deg,
+    var(--brand) 0%,
+    var(--brand-2) 50%,
+    var(--brand) 100%
+  );
 
   --app-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -68,13 +81,15 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.916 0.003 285);
   --input: oklch(0.9 0.003 285);
-  --ring: oklch(0.505 0.192 27.5);
+  --ring: var(--brand);
 
   --radius: 0.5rem;
 }
 
 .dark {
-  --brand: oklch(0.585 0.208 27.5);
+  --brand: #f2660a;
+  --brand-2: #f79420;
+  --brand-blue: #3d84d6;
   --brand-foreground: oklch(1 0 0);
 
   --background: oklch(0.155 0.003 285);
@@ -98,7 +113,7 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.585 0.208 27.5);
+  --ring: var(--brand);
 }
 
 @layer base {
@@ -124,5 +139,141 @@
   }
   p {
     text-wrap: pretty;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Brand motion
+   Ambient background movement derived from brandbook 1.14 (the eagle built
+   from overlapping arcs) and 1.15 (the feather lattice). Everything here is
+   decorative and is switched off under prefers-reduced-motion.
+   ---------------------------------------------------------------------- */
+
+@keyframes brand-drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(4%, -3%, 0) scale(1.08);
+  }
+}
+
+@keyframes brand-drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate3d(-5%, 4%, 0) scale(0.95);
+  }
+}
+
+@keyframes brand-drift-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(0.98);
+  }
+  50% {
+    transform: translate3d(3%, 5%, 0) scale(1.1);
+  }
+}
+
+/* The feather lattice creeps diagonally by exactly one tile, so the loop
+   is seamless. */
+@keyframes brand-lattice {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 64px 64px;
+  }
+}
+
+/* The diagonal light streak that runs across every brandbook header band. */
+@keyframes brand-sweep {
+  from {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  to {
+    transform: translateX(320%) skewX(-20deg);
+  }
+}
+
+@keyframes brand-shimmer {
+  from {
+    background-position: 200% center;
+  }
+  to {
+    background-position: -200% center;
+  }
+}
+
+.brand-drift-a {
+  animation: brand-drift-a 26s ease-in-out infinite;
+}
+.brand-drift-b {
+  animation: brand-drift-b 32s ease-in-out infinite;
+}
+.brand-drift-c {
+  animation: brand-drift-c 38s ease-in-out infinite;
+}
+.brand-lattice {
+  animation: brand-lattice 90s linear infinite;
+}
+.brand-sweep {
+  animation: brand-sweep 7s ease-in-out infinite;
+}
+
+/* Motto: the gradient dissolve travelling through the type itself. */
+.brand-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--brand) 20%,
+    var(--brand-2) 40%,
+    color-mix(in oklab, var(--brand-2) 55%, white) 50%,
+    var(--brand-2) 60%,
+    var(--brand) 80%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: brand-shimmer 9s linear infinite;
+}
+
+
+/* Above-the-fold entrance. Pure CSS so hero content never waits on an
+   IntersectionObserver callback (or on JS at all) to become visible.
+   `both` applies the start frame during the delay and holds the end frame. */
+@keyframes brand-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.brand-rise {
+  animation: brand-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-rise {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-drift-a,
+  .brand-drift-b,
+  .brand-drift-c,
+  .brand-lattice,
+  .brand-sweep,
+  .brand-shimmer {
+    animation: none !important;
   }
 }

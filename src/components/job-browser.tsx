@@ -117,9 +117,15 @@ export function JobBrowser({ jobs }: { jobs: Job[] }) {
               </button>
             </div>
           ) : (
-            <ul>
-              {visibleJobs.map((job) => (
-                <li key={job.id} className="border-b border-border/70">
+            /* Keyed on the active filters so the entrance replays whenever
+               the result set changes. */
+            <ul key={`${location}-${department}`}>
+              {visibleJobs.map((job, index) => (
+                <li
+                  key={job.id}
+                  style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
+                  className="brand-rise border-b border-border/70"
+                >
                   <Link
                     href={`/careers/${job.id}`}
                     className="group relative isolate flex items-center justify-between gap-6 px-6 py-8 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2 sm:px-10 sm:py-10"
