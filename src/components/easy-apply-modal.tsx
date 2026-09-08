@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useForm, useWatch, Controller } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, Loader2, Sparkles } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -17,10 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { CvDropzone } from "@/components/cv-dropzone";
-import { cn } from "@/lib/utils";
 import { apiClient, toApiError } from "@/lib/api";
 import {
   applicationDefaults,
@@ -54,15 +52,12 @@ export function EasyApplyModal({
     handleSubmit,
     control,
     reset,
-    clearErrors,
     formState: { errors, isSubmitting },
   } = useForm<ApplicationValues>({
     resolver: zodResolver(applicationSchema),
     defaultValues: applicationDefaults,
     mode: "onBlur",
   });
-
-  const needsCvHelp = useWatch({ control, name: "needsCvHelp" });
 
   async function onSubmit(values: ApplicationValues) {
     const payload = new FormData();
@@ -72,7 +67,6 @@ export function EasyApplyModal({
     payload.append("email", values.email);
     payload.append("phone", values.phone);
     payload.append("registerId", values.registerId);
-    payload.append("needsCvHelp", String(values.needsCvHelp));
     if (values.note) payload.append("note", values.note);
     if (values.cv) payload.append("cv", values.cv);
 
@@ -216,12 +210,7 @@ export function EasyApplyModal({
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-baseline justify-between">
-                  <Label htmlFor="cv">Curriculum vitae</Label>
-                  {needsCvHelp ? (
-                    <span className="text-xs text-muted-foreground">Optional</span>
-                  ) : null}
-                </div>
+                <Label htmlFor="cv">Curriculum vitae</Label>
                 <Controller
                   name="cv"
                   control={control}
@@ -229,7 +218,6 @@ export function EasyApplyModal({
                     <CvDropzone
                       file={field.value ?? null}
                       onFileChange={field.onChange}
-                      disabled={needsCvHelp}
                       invalid={Boolean(errors.cv)}
                       describedBy={errors.cv ? "cv-error" : undefined}
                     />
@@ -237,49 +225,6 @@ export function EasyApplyModal({
                 />
                 <FieldError id="cv-error" message={errors.cv?.message as string} />
               </div>
-
-              <label
-                htmlFor="needsCvHelp"
-                className={cn(
-                  "flex cursor-pointer items-start gap-3.5 rounded-lg border p-4 transition-colors",
-                  needsCvHelp
-                    ? "border-primary/30 bg-primary/5"
-                    : "border-border hover:bg-muted/40",
-                )}
-              >
-                <Sparkles
-                  className={cn(
-                    "mt-0.5 size-4 shrink-0 transition-colors",
-                    needsCvHelp ? "text-primary" : "text-muted-foreground",
-                  )}
-                />
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-medium">
-                    I need help creating a CV
-                  </p>
-                  <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
-                    Skip the upload. Our recruitment team will call you and build
-                    your CV together over the phone.
-                  </p>
-                </div>
-                <Controller
-                  name="needsCvHelp"
-                  control={control}
-                  render={({ field }) => (
-                    <Switch
-                      id="needsCvHelp"
-                      checked={field.value}
-                      onCheckedChange={(checked) => {
-                        field.onChange(checked);
-                        // A pending "attach your CV" error is moot once the
-                        // applicant has asked us to help them write one.
-                        if (checked) clearErrors("cv");
-                      }}
-                      className="mt-0.5"
-                    />
-                  )}
-                />
-              </label>
 
               <div className="space-y-2">
                 <Label htmlFor="note">

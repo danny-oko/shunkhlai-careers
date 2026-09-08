@@ -22,15 +22,15 @@ export function ApplyButton({
     <Button
       type="button"
       onClick={open}
-      className={cn("group/apply", className)}
+      className={cn("group/apply gap-2", className)}
       {...props}
     >
       {label}
       {showIcon ? (
-        <ArrowRight
-          data-icon="inline-end"
-          className="transition-transform duration-200 group-hover/apply:translate-x-0.5"
-        />
+        // No data-icon="inline-end" here: that attribute triggers the button's
+        // has-data-[icon=inline-end]:pr-2 rule, which would override the right
+        // half of our px-* and push the label off centre.
+        <ArrowRight className="transition-transform duration-200 group-hover/apply:translate-x-0.5" />
       ) : null}
     </Button>
   );

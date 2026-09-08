@@ -4,7 +4,11 @@ export type Job = {
   id: string;
   title: string;
   department: string;
+  /** Display string, e.g. "Ulaanbaatar, Mongolia". */
   location: string;
+  /** Structured location used by the filter tree. "Remote" is its own country. */
+  country: string;
+  city?: string;
   type: JobType;
   /** Short one-line hook shown under the title in the header. */
   summary: string;
@@ -24,6 +28,8 @@ export const jobs: Job[] = [
     title: "Account Executive",
     department: "Commercial",
     location: "Ulaanbaatar, Mongolia",
+    country: "Mongolia",
+    city: "Ulaanbaatar",
     type: "Full-time",
     summary:
       "Own the full commercial cycle for our corporate fuel and logistics accounts across Ulaanbaatar.",
@@ -62,6 +68,8 @@ export const jobs: Job[] = [
     title: "Financial Analyst",
     department: "Finance",
     location: "Ulaanbaatar, Mongolia",
+    country: "Mongolia",
+    city: "Ulaanbaatar",
     type: "Full-time",
     summary:
       "Turn operational data from across the group into the numbers leadership actually plans against.",
@@ -100,6 +108,7 @@ export const jobs: Job[] = [
     title: "Product Designer",
     department: "Digital",
     location: "Remote",
+    country: "Remote",
     type: "Full-time",
     summary:
       "Design the customer-facing digital products behind Mongolia's largest fuel retail network.",
@@ -135,6 +144,8 @@ export const jobs: Job[] = [
     title: "Station Manager",
     department: "Retail Operations",
     location: "Ulaanbaatar, Mongolia",
+    country: "Mongolia",
+    city: "Ulaanbaatar",
     type: "Full-time",
     summary:
       "Run one of our highest-volume fuel stations — the people, the margin and the standard customers judge us by.",
@@ -173,6 +184,8 @@ export const jobs: Job[] = [
     title: "Logistics Coordinator",
     department: "Logistics",
     location: "Ulaanbaatar, Mongolia",
+    country: "Mongolia",
+    city: "Ulaanbaatar",
     type: "Full-time",
     summary:
       "Plan and dispatch the tanker fleet that keeps every Shunkhlai station supplied across the country.",
@@ -211,6 +224,8 @@ export const jobs: Job[] = [
     title: "HSE Officer",
     department: "Health, Safety & Environment",
     location: "Ulaanbaatar, Mongolia",
+    country: "Mongolia",
+    city: "Ulaanbaatar",
     type: "Full-time",
     summary:
       "Keep our ISO 14001, ISO 9001 and OHSAS 18001 commitments real at every site, not just on the certificate.",
@@ -249,6 +264,7 @@ export const jobs: Job[] = [
     title: "Backend Engineer",
     department: "Digital",
     location: "Remote",
+    country: "Remote",
     type: "Full-time",
     summary:
       "Build the services behind loyalty, payments and fleet management for millions of transactions a month.",
@@ -287,6 +303,8 @@ export const jobs: Job[] = [
     title: "Marketing Intern",
     department: "Marketing",
     location: "Ulaanbaatar, Mongolia",
+    country: "Mongolia",
+    city: "Ulaanbaatar",
     type: "Internship",
     summary:
       "A six-month paid internship for a student who wants real campaign work, not coffee runs.",
@@ -324,4 +342,95 @@ export function getJobById(id: string): Job | undefined {
 
 export function getAllJobIds(): string[] {
   return jobs.map((job) => job.id);
+}
+
+/* -------------------------------------------------------------------------
+   Filtering
+   ---------------------------------------------------------------------- */
+
+/**
+ * A single row in a filter list. `depth: 1` rows are children of the country
+ * above them and render indented behind an em dash.
+ */
+export type FilterOption = {
+  value: string;
+  label: string;
+  depth: 0 | 1;
+  count: number;
+};
+
+export const ALL_LOCATIONS = "all-locations";
+export const ALL_DEPARTMENTS = "all-departments";
+
+/**
+ * Builds the location tree: every country, each followed by its cities.
+ * Countries without a city (Remote) contribute a single row.
+ */
+export function getLocationOptions(source: Job[] = jobs): FilterOption[] {
+  const countries = new Map<string, Map<string, number>>();
+
+  for (const job of source) {
+    const cities = countries.get(job.country) ?? new Map<string, number>();
+    if (job.city) {
+      cities.set(job.city, (cities.get(job.city) ?? 0) + 1);
+    }
+    countries.set(job.country, cities);
+  }
+
+  const options: FilterOption[] = [
+    { value: ALL_LOCATIONS, label: "All locations", depth: 0, count: source.length },
+  ];
+
+  for (const country of [...countries.keys()].sort((a, b) => a.localeCompare(b))) {
+    const cities = countries.get(country)!;
+    options.push({
+      value: `country:${country}`,
+      label: country,
+      depth: 0,
+      count: source.filter((job) => job.country === country).length,
+    });
+
+    for (const city of [...cities.keys()].sort((a, b) => a.localeCompare(b))) {
+      options.push({
+        value: `city:${city}`,
+        label: city,
+        depth: 1,
+        count: cities.get(city)!,
+      });
+    }
+  }
+
+  return options;
+}
+
+export function getDepartmentOptions(source: Job[] = jobs): FilterOption[] {
+  const departments = new Map<string, number>();
+  for (const job of source) {
+    departments.set(job.department, (departments.get(job.department) ?? 0) + 1);
+  }
+
+  return [
+    { value: ALL_DEPARTMENTS, label: "All departments", depth: 0, count: source.length },
+    ...[...departments.keys()]
+      .sort((a, b) => a.localeCompare(b))
+      .map<FilterOption>((department) => ({
+        value: `department:${department}`,
+        label: department,
+        depth: 0,
+        count: departments.get(department)!,
+      })),
+  ];
+}
+
+export function matchesLocation(job: Job, value: string): boolean {
+  if (value === ALL_LOCATIONS) return true;
+  if (value.startsWith("country:")) return job.country === value.slice(8);
+  if (value.startsWith("city:")) return job.city === value.slice(5);
+  return true;
+}
+
+export function matchesDepartment(job: Job, value: string): boolean {
+  if (value === ALL_DEPARTMENTS) return true;
+  if (value.startsWith("department:")) return job.department === value.slice(11);
+  return true;
 }

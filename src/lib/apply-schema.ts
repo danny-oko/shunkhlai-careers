@@ -62,17 +62,14 @@ export const applicationSchema = z
       .trim()
       .max(1000, "Please keep this under 1000 characters.")
       .optional(),
-    needsCvHelp: z.boolean(),
     cv: z.custom<File | null>().nullable(),
   })
   .superRefine((values, ctx) => {
-    if (values.needsCvHelp) return;
-
     if (!values.cv) {
       ctx.addIssue({
         code: "custom",
         path: ["cv"],
-        message: "Attach your CV, or ask us to help you create one.",
+        message: "Attach your CV to continue.",
       });
       return;
     }
@@ -91,6 +88,5 @@ export const applicationDefaults: ApplicationValues = {
   phone: "",
   registerId: "",
   note: "",
-  needsCvHelp: false,
   cv: null,
 };
