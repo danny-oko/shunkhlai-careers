@@ -6,6 +6,7 @@ import { JobStickyHeader } from "@/components/job-sticky-header";
 import { JobHeader } from "@/components/job-header";
 import { JobContent } from "@/components/job-content";
 import { ApplyButton } from "@/components/apply-button";
+import { Reveal } from "@/components/reveal";
 import { getAllJobIds, getJobById } from "@/lib/mock-jobs";
 
 export function generateStaticParams() {
@@ -42,7 +43,7 @@ export default async function JobPage({ params }: PageProps<"/careers/[id]">) {
         <div className="mx-auto w-full max-w-4xl px-6 pt-16">
           <JobContent job={job} />
 
-          <section className="my-16 border-t border-border/70 pt-12">
+          <Reveal as="section" className="my-16 border-t border-border/70 pt-12">
             <h2 className="text-2xl font-semibold tracking-[-0.025em]">
               Ready to apply?
             </h2>
@@ -55,7 +56,7 @@ export default async function JobPage({ params }: PageProps<"/careers/[id]">) {
               showIcon
               className="mt-7 h-11 rounded-full px-6 text-[0.9375rem]"
             />
-          </section>
+          </Reveal>
         </div>
       </main>
 

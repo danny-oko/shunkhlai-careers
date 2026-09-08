@@ -2,6 +2,9 @@ import Link from "next/link";
 import { Clock, Globe, TrendingUp, Users, Wallet } from "lucide-react";
 import type { Job } from "@/lib/mock-jobs";
 import { ApplyButton } from "@/components/apply-button";
+import { ArcBloom } from "@/components/brand/arc-bloom";
+import { GradientRule } from "@/components/brand/gradient-rule";
+import { Rise } from "@/components/brand/rise";
 import { cn } from "@/lib/utils";
 
 function HeroGrid() {
@@ -64,6 +67,7 @@ export function JobHeader({ job }: { job: Job }) {
   return (
     <header className="relative isolate border-b border-border/70 [--grid-cell:5.5rem] [--grid-line:color-mix(in_oklab,var(--foreground)_7%,transparent)] sm:[--grid-cell:7rem]">
       <HeroGrid />
+      <ArcBloom className="-z-10" />
 
       <div className="relative mx-auto max-w-4xl px-6 py-20 text-center sm:py-28">
         <Crosshair className="top-0 left-0" />
@@ -71,17 +75,25 @@ export function JobHeader({ job }: { job: Job }) {
         <Crosshair className="top-full left-0" />
         <Crosshair className="top-full left-full" />
 
-        <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-          <MetaItem icon={Users}>{job.department}</MetaItem>
-          <MetaItem icon={Globe}>{job.location}</MetaItem>
-          <MetaItem icon={Clock}>{job.type}</MetaItem>
-        </div>
+        <Rise>
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+            <MetaItem icon={Users}>{job.department}</MetaItem>
+            <MetaItem icon={Globe}>{job.location}</MetaItem>
+            <MetaItem icon={Clock}>{job.type}</MetaItem>
+          </div>
+        </Rise>
 
-        <h1 className="mt-9 text-[2.75rem] leading-[0.95] font-semibold tracking-[-0.04em] text-balance sm:mt-11 sm:text-6xl lg:text-[4.25rem]">
-          {job.title}
-        </h1>
+        <Rise delay={100}>
+          <h1 className="mt-9 text-[2.75rem] leading-[0.95] font-semibold tracking-[-0.04em] text-balance sm:mt-11 sm:text-6xl lg:text-[4.25rem]">
+            {job.title}
+          </h1>
+        </Rise>
 
-        <nav aria-label="Breadcrumb" className="mt-9 text-sm sm:mt-11">
+        <Rise delay={190} className="mt-9 flex justify-center sm:mt-11">
+          <GradientRule className="max-w-[5rem] rounded-full" />
+        </Rise>
+
+        <nav aria-label="Breadcrumb" className="brand-rise mt-9 text-sm [animation-delay:260ms]">
           <Link
             href="/careers"
             className="text-muted-foreground transition-colors hover:text-foreground"
@@ -96,16 +108,20 @@ export function JobHeader({ job }: { job: Job }) {
       </div>
 
       <div className="relative mx-auto max-w-2xl px-6 pb-16 text-center sm:pb-20">
-        <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
-          {job.summary}
-        </p>
+        <Rise delay={330}>
+          <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
+            {job.summary}
+          </p>
+        </Rise>
 
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-          <MetaItem icon={TrendingUp}>{job.experience}</MetaItem>
-          {job.salary ? <MetaItem icon={Wallet}>{job.salary}</MetaItem> : null}
-        </div>
+        <Rise delay={400}>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+            <MetaItem icon={TrendingUp}>{job.experience}</MetaItem>
+            {job.salary ? <MetaItem icon={Wallet}>{job.salary}</MetaItem> : null}
+          </div>
+        </Rise>
 
-        <div className="mt-10 flex flex-col items-center gap-3">
+        <Rise delay={470} className="mt-10 flex flex-col items-center gap-3">
           <ApplyButton
             size="lg"
             showIcon
@@ -114,7 +130,7 @@ export function JobHeader({ job }: { job: Job }) {
           <p className="text-sm text-muted-foreground">
             Takes about two minutes. No account needed.
           </p>
-        </div>
+        </Rise>
       </div>
     </header>
   );
