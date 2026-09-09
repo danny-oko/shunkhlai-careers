@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { SiteLoader } from "@/components/landing/site-loader";
 import { HeroStage } from "@/components/landing/hero-stage";
+import { HeroJourney } from "@/components/landing/hero-journey";
 import { CompanyStats } from "@/components/landing/company-stats";
 import { RoleSpectrum } from "@/components/landing/role-spectrum";
 import { FeaturedRoles } from "@/components/landing/featured-roles";
@@ -29,6 +30,7 @@ export default function LandingPage() {
     <main className="flex-1">
       <SiteLoader />
       <HeroStage roleCount={roleCount} />
+      <HeroJourney />
       <CompanyStats />
       <RoleSpectrum />
       <FeaturedRoles />
