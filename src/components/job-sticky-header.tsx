@@ -5,12 +5,12 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { Job } from "@/lib/mock-jobs";
 import { ApplyButton } from "@/components/apply-button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 /**
- * Sticky top bar. The wordmark and back link are always visible; the job
- * title and Apply button fade in once the reader has scrolled past the hero.
+ * Contextual bar for a single job, docked directly under the site header.
+ * The back link is always visible; the job title and Apply button fade in
+ * once the reader has scrolled past the hero.
  */
 export function JobStickyHeader({ job }: { job: Job }) {
   const [isCondensed, setIsCondensed] = React.useState(false);
@@ -23,7 +23,7 @@ export function JobStickyHeader({ job }: { job: Job }) {
   }, []);
 
   return (
-    <div className="sticky top-0 z-40">
+    <div className="sticky top-16 z-40 mt-16">
         <div
           className={cn(
             "border-b bg-background/80 backdrop-blur-md transition-colors duration-200",
@@ -36,8 +36,8 @@ export function JobStickyHeader({ job }: { job: Job }) {
               className="inline-flex shrink-0 items-center gap-2 text-sm font-medium tracking-[-0.01em] transition-colors hover:text-muted-foreground"
             >
               <ArrowLeft className="size-4" />
-              <span className="hidden sm:inline">Shunkhlai Careers</span>
-              <span className="sm:hidden">Careers</span>
+              <span className="hidden sm:inline">Бүх ажлын байр</span>
+              <span className="sm:hidden">Буцах</span>
             </Link>
 
             <div
@@ -54,11 +54,9 @@ export function JobStickyHeader({ job }: { job: Job }) {
               </p>
             </div>
 
-            <ThemeToggle className="ml-auto shrink-0" />
-
             <div
               className={cn(
-                "shrink-0 transition-all duration-200",
+                "ml-auto shrink-0 transition-all duration-200",
                 isCondensed
                   ? "translate-y-0 opacity-100"
                   : "pointer-events-none translate-y-1 opacity-0",

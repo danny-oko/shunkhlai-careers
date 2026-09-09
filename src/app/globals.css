@@ -14,6 +14,10 @@
   --color-brand-2: var(--brand-2);
   --color-brand-blue: var(--brand-blue);
   --color-brand-foreground: var(--brand-foreground);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-muted: var(--ink-muted);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -49,6 +53,15 @@
   --brand-2: #f18700;
   --brand-blue: #004d9e;
   --brand-foreground: oklch(1 0 0);
+
+  /* The 60-30-10 split the whole site is built on:
+     60% neutral ground (--background / --foreground),
+     30% "ink" — Reflex Blue darkened into a panel colour,
+     10% orange accent (--brand) on CTAs, numerals and rules only. */
+  --ink: #06203d;
+  --ink-2: #0b3466;
+  --ink-foreground: oklch(0.985 0 0);
+  --ink-muted: #a3bad6;
   --brand-gradient: linear-gradient(
     90deg,
     var(--brand) 0%,
@@ -92,6 +105,13 @@
   --brand-blue: #3d84d6;
   --brand-foreground: oklch(1 0 0);
 
+  /* Ink sits below the charcoal page ground in dark mode so the 30% panels
+     still read as a distinct, deeper layer rather than a lighter card. */
+  --ink: #041729;
+  --ink-2: #082a4d;
+  --ink-foreground: oklch(0.985 0 0);
+  --ink-muted: #93aac6;
+
   --background: oklch(0.155 0.003 285);
   --foreground: oklch(0.975 0 0);
 
@@ -128,6 +148,13 @@
   html {
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
+    /* The page scrollbar is hidden so the full-bleed hero and the rails run
+       to the real edge of the window. Scrolling itself is untouched: wheel,
+       trackpad, touch, Space/PageDown and keyboard focus all still work. */
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
   }
   /* Tight kerning + optical sizing for display type */
   h1,
@@ -276,4 +303,121 @@
   .brand-shimmer {
     animation: none !important;
   }
+}
+
+/* -------------------------------------------------------------------------
+   Landing / About motion
+   Everything below is decorative and is disabled under
+   prefers-reduced-motion by the block at the end of this file.
+   ---------------------------------------------------------------------- */
+
+/* Slow push-in on the hero key visuals, so a still photograph still feels
+   like footage. It runs continuously and alternates, so a poster is never
+   snapped back to its start frame part-way through a crossfade. */
+@keyframes brand-kenburns {
+  from {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.12) translate3d(-1.5%, -1.5%, 0);
+  }
+}
+
+/* Only from `sm` up. Below that the hero frame is portrait and the poster is
+   letterboxed with object-contain, where a zoom would push it out of frame. */
+@media (min-width: 40rem) {
+  .brand-kenburns {
+    animation: brand-kenburns 16s ease-in-out infinite alternate;
+  }
+}
+
+/* Continuous horizontal rail. The track renders its children twice, so
+   translating by exactly -50% loops seamlessly. */
+@keyframes brand-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.brand-marquee {
+  animation: brand-marquee var(--marquee-duration, 40s) linear infinite;
+}
+
+.brand-marquee-reverse {
+  animation: brand-marquee var(--marquee-duration, 40s) linear infinite reverse;
+}
+
+/* Pause the rails on hover so a reader can actually read a quote. */
+.brand-marquee-group:hover .brand-marquee,
+.brand-marquee-group:hover .brand-marquee-reverse {
+  animation-play-state: paused;
+}
+
+/* The word that swaps inside the hero headline. */
+@keyframes brand-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5em) rotate(2deg);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+.brand-word-in {
+  animation: brand-word-in 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Scroll cue under the hero. */
+@keyframes brand-cue {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 0.35;
+  }
+}
+
+.brand-cue {
+  animation: brand-cue 2.2s ease-in-out infinite;
+}
+
+/* Hides the scrollbar on the drag-scroll story rails without removing the
+   ability to scroll them. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-kenburns,
+  .brand-marquee,
+  .brand-marquee-reverse,
+  .brand-word-in,
+  .brand-cue {
+    animation: none !important;
+  }
+}
+
+/* Opening loader: the three panels that sweep the screen away. */
+@keyframes loader-panel-out {
+  to {
+    transform: translateY(-101%);
+  }
+}
+
+.loader-panel-out {
+  animation: loader-panel-out 900ms cubic-bezier(0.76, 0, 0.24, 1) both;
 }

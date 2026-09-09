@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -17,18 +19,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Absolute base for Open Graph images. Update if the site moves.
+  metadataBase: new URL("https://careers.shunkhlai.mn"),
   title: {
-    default: "Careers — Shunkhlai Group",
-    template: "%s — Shunkhlai Careers",
+    default: "Шунхлай ХХК — Careers",
+    template: "%s — Шунхлай Careers",
   },
   description:
-    "Open roles at Shunkhlai Group. Build the energy, logistics and digital infrastructure Mongolia runs on.",
+    "Шунхлай ХХК-ийн карьерын сайт. Хүний нөөц, санхүү, лаборатори, логистик, борлуулалт, маркетинг, мэдээллийн технологийн нээлттэй ажлын байр.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="mn"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
@@ -39,7 +43,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem
           disableTransitionOnChange
         >
+          {/* Shared chrome lives here, so no page mounts it itself. The
+              header is fixed, so pages own the top offset their own hero
+              needs — the landing hero deliberately opens underneath it. */}
+          <SiteHeader />
           {children}
+          <SiteFooter />
           <Toaster position="bottom-right" />
         </ThemeProvider>
       </body>

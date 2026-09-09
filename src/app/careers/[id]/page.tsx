@@ -59,17 +59,6 @@ export default async function JobPage({ params }: PageProps<"/careers/[id]">) {
           </Reveal>
         </div>
       </main>
-
-      <footer className="border-t border-border/70">
-        <div className="mx-auto flex max-w-4xl flex-col gap-1 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Shunkhlai Group LLC
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Ulaanbaatar, Mongolia
-          </p>
-        </div>
-      </footer>
     </ApplyProvider>
   );
 }
