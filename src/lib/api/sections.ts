@@ -1,146 +1,164 @@
 import { APPLICANT_BASE } from "./core/config";
-import { type SectionResource, createSection } from "./core/factories";
-import { apiGet, apiPost } from "./core/request";
+import { type SectionEntry, createSection } from "./core/factories";
 
 /**
- * The CV builder's fifteen sections.
+ * The CV sections.
  *
- * Every one of them is the same resource — optional tab bundle, read one,
- * save (entryid 0 = new), delete — so they are declared as data. Adding a
- * section is one entry here, not a new file.
+ * Three bundle endpoints return every list the CV needs:
  *
- *   sections.education.tabData()          → GetHrAppEducationData
- *   sections.education.get(123)           → GetHrAppEducation?entryid=123
- *   sections.education.save({ entryid: 0, … })
- *   sections.education.remove(entry)
+ *   GetHrAppEducationData  → hrappedulist · hrapplanglist · hrappquallist · hrappcomplist
+ *   GetHrAppExperienceData → hrappexplist · hrappprojectlist · hrappinternlist
+ *   GetHrAppFamilyData     → hrappfamilylist · hrapprelativelist
  *
- * Endpoints marked "one or more entries at once" in the reference accept an
- * array in `save`.
+ * Each section below points at its bundle and names its list, so a screen can
+ * either read one section or take the whole bundle in a single call.
  */
 
 const p = (name: string) => `${APPLICANT_BASE}/${name}`;
 
-export const education = createSection({
-  tabData: p("GetHrAppEducationData"),
+const EDUCATION_BUNDLE = p("GetHrAppEducationData");
+const EXPERIENCE_BUNDLE = p("GetHrAppExperienceData");
+const FAMILY_BUNDLE = p("GetHrAppFamilyData");
+
+export type EducationEntry = SectionEntry & {
+  entryid: number;
+  countryid?: number;
+  divisionid?: number;
+  universityid?: number;
+  universitynametext?: string;
+  universityname?: string;
+  professionid?: number;
+  professionname?: string;
+  educationlevelid?: number;
+  educationlevelname?: string;
+  fromdate?: string;
+  todate?: string;
+  isgraduated?: "Y" | "N";
+  gpa?: number;
+  gpapercent?: number;
+  score?: string;
+  certificateno?: string;
+  thesis?: string;
+  note?: string;
+};
+
+export type LanguageEntry = SectionEntry & {
+  entryid: number;
+  forlanguageid?: number;
+  forlanguagename?: string;
+  studytime?: number;
+  listeninglevelid?: number;
+  speakinglevelid?: number;
+  readinglevelid?: number;
+  writinglevelid?: number;
+  score?: string;
+};
+
+export type ComputerSkillEntry = SectionEntry & {
+  entryid: number;
+  skillcompid?: number;
+  skillcompname?: string;
+  levelid?: number;
+  levelname?: string;
+  compnametext?: string;
+  note?: string;
+};
+
+export type ExperienceEntry = SectionEntry & {
+  entryid: number;
+  orgname?: string;
+  businesstypeid?: number;
+  businesstypename?: string;
+  jobid?: number;
+  jobname?: string;
+  fromdate?: string;
+  todate?: string;
+  isworking?: "Y" | "N";
+  basewage?: number;
+  responsibility?: string;
+  reason?: string;
+  headname?: string;
+  headjobid?: number;
+  headphone?: string;
+};
+
+export type FamilyEntry = SectionEntry & {
+  entryid: number;
+  relativeid?: number;
+  relativename?: string;
+  lastname?: string;
+  firstname?: string;
+  gender?: "M" | "F";
+  famregno?: string;
+  birthdate?: string;
+  countryid?: number;
+  divisionid?: number;
+  districtid?: number;
+  professionid?: number | null;
+  orgname?: string;
+  jobid?: number | null;
+  phone?: string;
+  note?: string;
+};
+
+/** Delete takes `ENTRYID` in capitals here — the only endpoint that does. */
+export const education = createSection<EducationEntry>({
+  bundle: EDUCATION_BUNDLE,
+  listKey: "hrappedulist",
   get: p("GetHrAppEducation"),
   save: p("SaveHrAppEducation"),
   remove: p("DeleteHrAppEducation"),
+  removeParam: "ENTRYID",
 });
 
-export const foreignLanguage = createSection({
+export const language = createSection<LanguageEntry>({
+  bundle: EDUCATION_BUNDLE,
+  listKey: "hrapplanglist",
   get: p("GetAppForLanguage"),
   save: p("SaveAppForLanguage"),
   remove: p("DeleteAppForLanguage"),
 });
 
-/** Batch save. */
-export const computerSkill = createSection({
+/** Saved as an array — the endpoint takes every row at once. */
+export const computerSkill = createSection<ComputerSkillEntry>({
+  bundle: EDUCATION_BUNDLE,
+  listKey: "hrappcomplist",
   get: p("GetAppSkillComp"),
   save: p("SaveAppSkillComp"),
   remove: p("DeleteAppSkillComp"),
+  batch: true,
 });
 
-/** Batch save. */
-export const qualification = createSection({
-  get: p("GetAppQualification"),
-  save: p("SaveAppQualification"),
-  remove: p("DeleteAppQualification"),
-});
-
-export const training = createSection({
-  save: p("SaveHrAppTraining"),
-  remove: p("DeleteHrAppTraining"),
-});
-
-export const certificate = createSection({
-  save: p("SaveHrAppCertificate"),
-  remove: p("DeleteHrAppCertificate"),
-});
-
-/** Batch save. Shares the Family tab bundle with `relative`. */
-export const family = createSection({
-  tabData: p("GetHrAppFamilyData"),
-  get: p("GetAppFamily"),
-  save: p("SaveAppFamily"),
-  remove: p("DeleteAppFamily"),
-});
-
-/** Batch save. */
-export const relative = createSection({
-  tabData: p("GetHrAppFamilyData"),
-  get: p("GetAppRelative"),
-  save: p("SaveAppRelative"),
-  remove: p("DeleteAppRelative"),
-});
-
-/** Batch save. The only section with its own list endpoint. */
-export const reference = createSection({
-  list: p("GetAppReferenceList"),
-  get: p("GetAppReference"),
-  save: p("SaveAppReference"),
-  remove: p("DeleteAppReference"),
-});
-
-export const experience = createSection({
-  tabData: p("GetHrAppExperienceData"),
+export const experience = createSection<ExperienceEntry>({
+  bundle: EXPERIENCE_BUNDLE,
+  listKey: "hrappexplist",
   get: p("GetAppExperience"),
   save: p("SaveAppExperience"),
   remove: p("DeleteAppExperience"),
 });
 
-export const project = createSection({
-  get: p("GetAppProject"),
-  save: p("SaveAppProject"),
-  remove: p("DeleteAppProject"),
-});
-
-export const internship = createSection({
-  get: p("GetAppInternship"),
-  save: p("SaveAppInternship"),
-  remove: p("DeleteAppInternship"),
-});
-
-/** Shares the "Personal characteristics" tab bundle with `ability`. */
-export const award = createSection({
-  tabData: p("GetHrAppSpecialityData"),
-  get: p("GetAppAward"),
-  save: p("SaveAppAward"),
-  remove: p("DeleteAppAward"),
-});
-
-export const ability = createSection({
-  tabData: p("GetHrAppSpecialityData"),
-  get: p("GetAppAbility"),
-  save: p("SaveAppAbility"),
-  remove: p("DeleteAppAbility"),
+/** Saved as an array. */
+export const family = createSection<FamilyEntry>({
+  bundle: FAMILY_BUNDLE,
+  listKey: "hrappfamilylist",
+  get: p("GetAppFamily"),
+  save: p("SaveAppFamily"),
+  remove: p("DeleteAppFamily"),
+  batch: true,
 });
 
 /**
- * Interests are a single free-text record rather than a list, so they get
- * plain functions instead of the section shape.
+ * Read-only for now: these lists arrive inside the bundles above, but the
+ * collection carries no save/delete endpoints for them. The endpoint
+ * reference does (`SaveAppQualification`, `SaveAppProject`, …) — add them here
+ * when the backend team confirms they are live.
  */
-export const interest = {
-  get: <T = unknown>() => apiGet<T>(p("GetAppInterest")),
-  save: (body: { interest?: string; [key: string]: unknown }) =>
-    apiPost<unknown>(p("SaveAppInterest"), body),
-};
+export const readOnlyLists = {
+  qualification: { bundle: EDUCATION_BUNDLE, listKey: "hrappquallist" },
+  project: { bundle: EXPERIENCE_BUNDLE, listKey: "hrappprojectlist" },
+  internship: { bundle: EXPERIENCE_BUNDLE, listKey: "hrappinternlist" },
+  relative: { bundle: FAMILY_BUNDLE, listKey: "hrapprelativelist" },
+} as const;
 
-/** Every list-shaped section, for iterating (e.g. a completeness indicator). */
-export const cvSections = {
-  education,
-  foreignLanguage,
-  computerSkill,
-  qualification,
-  training,
-  certificate,
-  family,
-  relative,
-  reference,
-  experience,
-  project,
-  internship,
-  award,
-  ability,
-} satisfies Record<string, SectionResource>;
-
+export const cvSections = { education, language, computerSkill, experience, family };
 export type CvSectionName = keyof typeof cvSections;

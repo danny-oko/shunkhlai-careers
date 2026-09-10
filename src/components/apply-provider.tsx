@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import type { Job } from "@/lib/jobs/types";
-import { EasyApplyModal } from "@/components/easy-apply-modal";
+import type { JobDetail } from "@/lib/jobs/types";
+import { ApplyDialog } from "@/components/apply-dialog";
 
 type ApplyContextValue = {
-  job: Job;
+  job: JobDetail;
   isOpen: boolean;
   open: () => void;
   close: () => void;
@@ -25,7 +25,7 @@ export function ApplyProvider({
   job,
   children,
 }: {
-  job: Job;
+  job: JobDetail;
   children: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -43,7 +43,7 @@ export function ApplyProvider({
   return (
     <ApplyContext.Provider value={value}>
       {children}
-      <EasyApplyModal job={job} open={isOpen} onOpenChange={setIsOpen} />
+      <ApplyDialog job={job} open={isOpen} onOpenChange={setIsOpen} />
     </ApplyContext.Provider>
   );
 }

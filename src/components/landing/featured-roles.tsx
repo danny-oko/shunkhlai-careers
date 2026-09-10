@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Job } from "@/lib/jobs/types";
 
-/** Picks one role per department so the shortlist reads as a range, not a list. */
+/** One role per position group, so the shortlist reads as a range, not a list. */
 function pickFeatured(jobs: Job[], count = 3) {
   const seen = new Set<string>();
   return jobs
+    .filter((job) => job.isOpen)
     .filter((job) => {
-      if (seen.has(job.department)) return false;
-      seen.add(job.department);
+      if (seen.has(job.positionGroup)) return false;
+      seen.add(job.positionGroup);
       return true;
     })
     .slice(0, count);
@@ -54,7 +55,7 @@ export function FeaturedRoles({ jobs }: { jobs: Job[] }) {
 
                 <div className="flex items-start justify-between gap-4">
                   <Badge variant="secondary" className="h-6 px-2.5">
-                    {job.department}
+                    {job.positionGroup}
                   </Badge>
                   <ArrowUpRight className="size-4 shrink-0 text-muted-foreground transition-all duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand" />
                 </div>
@@ -63,7 +64,10 @@ export function FeaturedRoles({ jobs }: { jobs: Job[] }) {
                   {job.title}
                 </h3>
                 <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground text-pretty">
-                  {job.summary}
+                  {job.company}
+                  {job.remainingDays >= 0
+                    ? ` · зар хаагдахад ${job.remainingDays} хоног`
+                    : ""}
                 </p>
 
                 <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
@@ -71,7 +75,7 @@ export function FeaturedRoles({ jobs }: { jobs: Job[] }) {
                     <MapPin className="size-3.5" />
                     {job.location}
                   </span>
-                  <span>{job.type}</span>
+                  <span>{job.workType}</span>
                 </div>
               </Link>
             </Reveal>

@@ -2,6 +2,10 @@ import { API_BASE_URL, SYSTEM_BASE } from "./core/config";
 import { apiGet, apiGetList, apiPost, apiUpload } from "./core/request";
 
 /**
+ * NOT IN THE POSTMAN COLLECTION. These come from the older endpoint
+ * reference document and are unverified against a live server — treat the
+ * shapes here as provisional until someone exercises them.
+ *
  * `/api/system` — the CMS behind the marketing surfaces: company profiles,
  * homepage sliders, news, videos and the internship microsite.
  *

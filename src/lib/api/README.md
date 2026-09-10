@@ -1,108 +1,139 @@
 # Recruitment API layer
 
-Everything the app knows about the recruitment backend lives in this folder.
-`Recruitment_API_Endpoint_Reference.docx` documents **117 endpoints** across
-three bases; they are grouped here by what they are *for* rather than by the
-path they hang off.
+Everything the app knows about the recruitment backend lives here. It is
+modelled on the Postman collection **“Careers Web API — Үндсэн”**, whose saved
+example responses are the source of truth for every shape below.
 
 ```
 src/lib/
   api/
     core/        transport — nothing here knows about jobs or applicants
-      config.ts     base URL, endpoint bases, fixture-mode switch
+      config.ts     base URL, Origin/language headers, mock-mode switch
       client.ts     axios instance, auth header, 401 → refresh → replay
-      tokens.ts     applicant + admin token storage
-      request.ts    apiGet / apiGetList / apiPost / apiUpload, envelope unwrapping
+      tokens.ts     token storage, applicant and admin tiers
+      request.ts    the { rettype, retmsg, retdata } envelope
       errors.ts     one error shape for the whole app
       factories.ts  the two repeating endpoint patterns (below)
-    auth.ts         4    login / refresh, applicant and admin
-    account.ts      8    registration, OTP, password reset, credential changes
-    profile.ts      6    core applicant record, photo and CV upload
-    sections.ts    ~45   the fifteen CV sections
-    reference.ts    20   dropdown lists
-    jobs.ts         4    public postings + the filter bundle
-    applications.ts 9    applying, tracking, interests, internship sign-up
-    system.ts       21   CMS: company, sliders, news, video, internship pages
-    index.ts        the only import path components should use
+    auth.ts         sign-up / sign-in (one endpoint) and refresh
+    account.ts      phone, email and password changes
+    profile.ts      core record, photo, CV, completion percentages
+    reference.ts    every dropdown
+    sections.ts     the CV sections, over three bundle endpoints
+    jobs.ts         open postings, detail, filter data
+    applications.ts applying, tracking, interested roles
+    system.ts       CMS endpoints from the older reference doc — NOT in the collection
 
-  jobs/          domain — the shape the UI actually renders
-    types.ts       Job, FilterOption
-    mapper.ts      RecruitmentOrderDto → Job   ← the whole translation surface
-    service.ts     listJobs / listJobsSafe / getJob
-    filters.ts     location + department filtering
-    fixtures.ts    offline postings, written in the backend's shape
+  jobs/          domain — the shape the UI renders
+    types.ts       Job, JobDetail, FacetOption
+    mapper.ts      posting rows → Job   ← the whole translation surface
+    service.ts     listJobs / listJobsSafe / getJob / getFilterData
+    filters.ts     facet tallies and matching
+
+src/server/mock/   the bundled stand-in backend (see below)
+src/app/api/applicant/[...path]/route.ts
 ```
 
-## Two patterns carry two thirds of the surface
+## The envelope
 
-**Reference dropdowns (20 endpoints).** Every one takes `?search=&lfr=false&ids=1`,
-some add a single parent id (`countryid`, `divisionid`, `skillcompid`, `type`).
-`createDropdown()` in `core/factories.ts` turns each into one line in
-`reference.ts` and normalises the rows into `{ value, label, raw }`.
+Every response looks like this, success or failure:
 
-**CV sections (~45 endpoints).** Education, languages, computer skills,
-qualifications, training, certificates, family, relatives, references,
-experience, projects, internships, awards, abilities and interests are all the
-same resource: an optional `GetHrApp…Data` bundle for the whole tab, a
-single-entry `Get…` by `entryid`, a `Save…` where `entryid: 0` means insert,
-and a `Delete…`. `createSection()` expresses each as four paths, so
-`sections.ts` reads as a table of what exists rather than 45 near-identical
-functions.
+```json
+{ "totalrow": 0, "affectedrows": 86, "retdata": …, "rettype": 0, "retmsg": "" }
+```
 
-Four sections share two tab bundles: `family` + `relative` both read
-`GetHrAppFamilyData`, and `award` + `ability` both read `GetHrAppSpecialityData`.
+`rettype: 0` means success and `retdata` is the payload. **A failure can arrive
+with HTTP 200** and its text in `retmsg`, so `core/request.ts` unwraps and
+raises in the same place: anything non-zero becomes an `ApiError` carrying
+`retmsg`. Components never see the envelope.
 
-## Auth tiers
+Two headers ride along on every call: `language` (MN) and `Origin`. Browsers
+set `Origin` themselves and forbid scripts from touching it, so the client only
+supplies it for server-side requests.
 
-| Tier | Endpoints | How this layer handles it |
-| --- | --- | --- |
-| None | all reference data, job postings, registration, OTP, password reset, every `/api/system` read | `skipAuth: true` |
-| Applicant bearer | the profile, CV sections, applying, interests | default |
-| Admin bearer | every `/api/system` write | `audience: "admin"` |
-| "Special" | the two refresh endpoints — expiring access token in the header *and* the refresh token in the body | `core/client.ts`, driven by a 401 |
+## Sign-up and sign-in are the same endpoint
 
-A 401 triggers one refresh; requests that raced into the same 401 wait on that
-single call rather than each starting their own. A failed refresh clears the
-session.
+`POST /api/applicant/SaveHrAppUser` creates the account when the register
+number is new and signs in when it already exists, returning
+`retdata.access_token` / `refresh_token` either way. There is no `/auth/login`
+in the collection.
 
-## Known gaps
+**The phone number is the initial password.** `mobilephone` carries the phone on
+first sign-up and the password on every sign-in after that — until
+`changeUserInfo` with `type: "PASSWORD"` replaces it. The sign-in copy says so
+out loud, because otherwise the first login is a guessing game.
 
-1. **Response shapes are not documented.** The reference gives request bodies
-   and query strings only. Three places therefore guess, and each says so in a
-   comment: `core/request.ts` (`data` / `result` envelope), `core/tokens.ts`
-   (`readTokenPair`), `core/factories.ts` (dropdown row id/label), and
-   `jobs/mapper.ts` (posting fields). Check them against one real response each
-   and delete the alternatives that turn out to be wrong.
+## Two patterns carry most of the surface
 
-2. **Easy Apply has no endpoint.** The site's one-screen apply form does not
-   match anything in the reference. The documented path is four authenticated
-   calls — `account.register()` → `auth.signIn()` → `profile.uploadCv()` →
-   `applications.apply()` — which means an application requires an account. Until
-   that is settled, the form posts to `applications.EASY_APPLY_PATH` and treats
-   an unreachable backend as a local success.
+**Reference dropdowns.** Around twenty endpoints take `?search=&lfr=false&ids=`
+(three take `search` only) and answer with `{ key, text }` rows. `createDropdown`
+turns each into one line in `reference.ts` and normalises rows to
+`{ value, label, raw }` — `raw` matters for `getPositionsDropdown`, whose rows
+carry `posgroupid` and `depid`.
 
-3. **The delete endpoints document no body.** `createSection().remove()` posts
-   the whole entry back, which satisfies both a `{ entryid }`-only handler and
-   one that wants the full row.
+**CV sections.** Three bundle endpoints return every list the CV needs:
 
-4. **Tokens are in `localStorage`,** so authenticated calls are client-side
-   only and Server Components cannot render authenticated pages. Moving to an
-   httpOnly cookie set by a route handler would change `core/tokens.ts` and
-   nothing else.
+| Bundle | Lists |
+| --- | --- |
+| `GetHrAppEducationData` | `hrappedulist` · `hrapplanglist` · `hrappquallist` · `hrappcomplist` |
+| `GetHrAppExperienceData` | `hrappexplist` · `hrappprojectlist` · `hrappinternlist` |
+| `GetHrAppFamilyData` | `hrappfamilylist` · `hrapprelativelist` |
 
-5. **Not yet reached by any UI:** `sections`, `reference`, `account`, `profile`,
-   `system`, and most of `applications`. They are typed and callable; the
-   screens that use them (sign-up, the CV builder, "my applications", the
-   internship microsite, the news/slider surfaces) do not exist yet.
+`createSection` points a section at its bundle and names its list, so a screen
+can read one section or take the whole bundle in a single call. `SectionManager`
+on the UI side renders any of them from a field description, which is why
+education, languages, computer skills, experience and family are five config
+objects rather than five screens.
+
+Three details the collection is explicit about, and this layer encodes:
+
+1. **Deletes take their id in the query string**, and the parameter name varies:
+   `?entryid=` for most, `?ENTRYID=` for education, `?entryID=` for
+   `DeleteOrderApp` and `getRecruitmentOrderItem`.
+2. **`SaveAppSkillComp` and `SaveAppFamily` take an array** — every row at once.
+3. **`Get…?entryid=0` returns nothing.** Use the bundle for lists.
+
+## Job postings
+
+`getRecruitmentOrderList` returns rows keyed by `entryid`, with `posname`,
+`locname`, `companyname`, `posgroupname`, `worktype`, the advert window and
+`remainingdays` (negative once closed). `getRecruitmentOrderItem` answers with
+an *object*: `hrrecruitmentorder[0]` plus `mainresp[]` and `mainreq[]`, each row
+a `{ name }`. The same text also arrives as JSON strings in `orderreq` /
+`orderres`; the parsed arrays are what `jobs/mapper.ts` reads.
+
+`getDropDownData` returns the filter bundle in one call: `location`,
+`salarylevel`, `smcompany`, `hrposgroup`, `positiontype`. The API filters on
+position name, location and salary band; position group, company and work type
+are refined client-side over the rows already fetched.
+
+## The bundled mock backend
+
+`NEXT_PUBLIC_API_URL` unset → the app talks to `src/app/api/applicant/[...path]`,
+which answers on the same paths with the same envelope, backed by the in-memory
+store in `src/server/mock/`. Accounts, CVs, applications and every CV section
+are real writes that survive until the server restarts. Set the env var and the
+client goes to the real origin instead; nothing else changes.
+
+The seed data in `src/server/mock/data.ts` uses shapes copied from the
+collection's example responses. The first two postings are the collection's own
+example rows, kept verbatim; the rest is local demo content in the same shape.
 
 ## Conventions
 
 - Components never import axios. If a call is missing, add it to the module it
   belongs to and export it from `index.ts`.
 - Endpoint modules speak the backend's language — `entryid`, `regno`,
-  `mobilephone` — and return its DTOs unchanged. Renaming happens in `lib/jobs`
-  (and the equivalent domain folders that follow), never in a component.
+  `mobilephone` — and return its rows unchanged. Renaming happens in
+  `lib/jobs`, never in a component.
 - Public reads pass `skipAuth: true` so they work during server rendering.
-- `NEXT_PUBLIC_API_URL` must be an **absolute** origin; the same modules run on
-  the server, where a relative base has nothing to resolve against. Unset, the
-  app serves `jobs/fixtures.ts` through the real mapper.
+- Tokens live in `localStorage`, so authenticated screens are client-rendered
+  and the public job pages stay on the server. Moving to an httpOnly cookie
+  would change `core/tokens.ts` and nothing else.
+
+## Not covered
+
+`system.ts` holds the `/api/system` CMS endpoints from the older endpoint
+reference. They are **not in this collection** and unverified — treat those
+shapes as provisional. The same goes for `auth.refresh()`: the collection never
+exercises a refresh endpoint, so the 401 interceptor's retry path is the one
+piece of this layer that has not been proven against a real response.

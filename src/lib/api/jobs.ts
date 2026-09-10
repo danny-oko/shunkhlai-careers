@@ -1,90 +1,103 @@
 import { APPLICANT_BASE } from "./core/config";
-import { apiGet, apiGetList, apiPost } from "./core/request";
+import { apiGet, apiGetList } from "./core/request";
 
 /**
- * Public job postings. These are the only applicant endpoints that need no
- * session, which is what lets the careers pages render on the server.
- *
- * The endpoint reference documents request parameters but not response
- * bodies, so the DTO below lists the fields a recruitment order plausibly
- * carries and stays open-ended. Everything downstream reads the DTO through
- * `src/lib/jobs/mapper.ts`, so when a real response lands, that one mapper is
- * the only thing to correct.
+ * Open postings. Public — no token — which is what lets the careers pages
+ * render on the server.
  */
 
-export type RecruitmentOrderDto = {
-  entryid?: number | string;
-  entryID?: number | string;
-  jobname?: string;
+/** One row of `getRecruitmentOrderList`. */
+export type JobListRow = {
+  entryid: number;
+  posname: string;
+  locname: string;
+  companyname: string;
+  companyid: string;
+  postypeid: number;
+  postype: string;
+  posgroupid: number;
+  posgroupname: string;
+  worktype: string;
+  requestdate: string;
+  advbegindate: string;
+  advenddate: string;
+  status: number;
+  statusname: string;
+  /** Days left before the advert closes; negative once it has. */
+  remainingdays: number;
+};
+
+/** The posting record inside `getRecruitmentOrderItem`. */
+export type JobOrder = JobListRow & {
+  mapurl?: string | null;
+  salarylevel?: string | null;
+  levelname?: string | null;
+  quantity?: number;
+  addreq?: string | null;
+  /** JSON strings holding `{ text }` arrays — `mainreq`/`mainresp` are the parsed form. */
+  orderreq?: string | null;
+  orderres?: string | null;
+};
+
+export type JobDetail = {
+  hrrecruitmentorder: JobOrder[];
+  /** Main responsibilities, one `name` per row. */
+  mainresp: Array<{ name: string }>;
+  /** Main requirements, one `name` per row. */
+  mainreq: Array<{ name: string }>;
+};
+
+/** Everything the job-search filters are built from, in one call. */
+export type JobFilterData = {
+  location: Array<{
+    entryid: number;
+    name: string;
+    divisionname: string;
+    districtname: string;
+    code: string;
+    divisionid: number;
+    districtid: number;
+  }>;
+  salarylevel: Array<{ key: number; text: string }>;
+  smcompany: Array<{ companyid: string; name: string }>;
+  hrposgroup: Array<{ posgroupid: number; name: string }>;
+  positiontype: Array<{ valuestr: number; name: string }>;
+};
+
+export type JobQuery = {
+  /** Search by position name. */
   jobName?: string;
-  positionname?: string;
-  depname?: string;
-  departmentname?: string;
-  companyname?: string;
-  companyID?: string;
-  locationname?: string;
-  locationid?: number | string;
-  countryname?: string;
-  worktype?: string;
-  worktypename?: string;
-  salary?: string;
-  salaryLevelID?: string;
-  salarylevelname?: string;
-  experience?: string;
-  expyear?: number | string;
-  brieftext?: string;
-  description?: string;
-  requirement?: string;
-  duty?: string;
-  benefit?: string;
-  begindate?: string;
-  enddate?: string;
-  regdate?: string;
-  [key: string]: unknown;
+  /** Location id from `JobFilterData.location`; `0` means every location. */
+  locationid?: number;
+  /** Salary band key from `JobFilterData.salarylevel`. */
+  salaryLevelID?: number | string;
 };
 
-export type FullTimeJobQuery = {
-  jobName?: string;
-  locationid?: number | string;
-  salaryLevelID?: string;
-};
-
-export type PartTimeJobQuery = {
-  companyID?: string[];
-  locationID?: number;
-};
-
-/** GET /api/applicant/getRecruitmentOrderList — open full-time postings. */
-export function listFullTime(query: FullTimeJobQuery = {}) {
-  return apiGetList<RecruitmentOrderDto>(
+/** GET /api/applicant/getRecruitmentOrderList */
+export function listOrders(query: JobQuery = {}) {
+  return apiGetList<JobListRow>(
     `${APPLICANT_BASE}/getRecruitmentOrderList`,
-    query,
+    {
+      jobName: query.jobName ?? "",
+      locationid: query.locationid ?? 0,
+      salaryLevelID: query.salaryLevelID ?? "",
+    },
     { skipAuth: true },
   );
 }
 
-/** POST /api/applicant/getRecOrderPartTimeList — open part-time postings. */
-export function listPartTime(query: PartTimeJobQuery = {}) {
-  return apiPost<RecruitmentOrderDto[]>(
-    `${APPLICANT_BASE}/getRecOrderPartTimeList`,
-    query,
-    { skipAuth: true },
-  );
-}
-
-/** GET /api/applicant/getRecruitmentOrderItem — full detail for one posting. */
+/** GET /api/applicant/getRecruitmentOrderItem — note the capital `ID`. */
 export function getOrder(entryID: number | string) {
-  return apiGet<RecruitmentOrderDto>(
+  return apiGet<JobDetail>(
     `${APPLICANT_BASE}/getRecruitmentOrderItem`,
     { entryID },
     { skipAuth: true },
   );
 }
 
-/**
- * GET /api/applicant/getDropDownData — the bundle of locations, salary bands
- * and companies the job-search filters are built from.
- */
-export function filterData<T = unknown>() {
-  return apiGet<T>(`${APPLICANT_BASE}/getDropDownData`, undefined, { skipAuth: true });
+/** GET /api/applicant/getDropDownData */
+export function filterData() {
+  return apiGet<JobFilterData>(`${APPLICANT_BASE}/getDropDownData`, undefined, {
+    skipAuth: true,
+  });
 }

@@ -4,7 +4,13 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 
-import { API_BASE_URL, API_TIMEOUT_MS, AUTH_BASE } from "./config";
+import {
+  API_TIMEOUT_MS,
+  AUTH_BASE,
+  LANGUAGE,
+  ORIGIN_URL,
+  resolveBaseUrl,
+} from "./config";
 import {
   type Audience,
   clearSession,
@@ -26,12 +32,14 @@ declare module "axios" {
 }
 
 export const http: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: resolveBaseUrl(),
   timeout: API_TIMEOUT_MS,
   withCredentials: false,
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
+    // The collection sends this on every call; it selects the response language.
+    language: LANGUAGE,
   },
 });
 
@@ -40,6 +48,12 @@ http.interceptors.request.use(
     // Let the browser set the multipart boundary for FormData payloads.
     if (typeof FormData !== "undefined" && config.data instanceof FormData) {
       delete config.headers["Content-Type"];
+    }
+
+    // Browsers set (and forbid scripts from setting) `Origin` themselves, so
+    // this only has to be supplied for server-side calls.
+    if (typeof window === "undefined" && ORIGIN_URL) {
+      config.headers.Origin = ORIGIN_URL;
     }
 
     if (!config.skipAuth) {
@@ -57,10 +71,12 @@ http.interceptors.request.use(
 /* -------------------------------------------------------------------------
    Token refresh
    ------------------------------------------------------------------------
-   Both refresh endpoints are documented as `Auth: Special` — they want the
-   old (expiring) access token in the header *and* the refresh token in the
-   body. A 401 therefore triggers one refresh, and every request that raced
-   into the same 401 waits on that single call rather than starting its own. */
+   Login hands back `access_token` and `refresh_token` together. The refresh
+   endpoints come from the endpoint reference rather than the Postman
+   collection, which never exercises them: they want the old (expiring) access
+   token in the header *and* the refresh token in the body. A 401 triggers one
+   refresh, and every request that raced into the same 401 waits on that single
+   call rather than starting its own. A refresh that fails clears the session. */
 
 const REFRESH_PATHS: Record<Audience, string> = {
   applicant: `${AUTH_BASE}/refresh-token`,
@@ -78,13 +94,14 @@ async function refreshAccessToken(audience: Audience): Promise<string | null> {
     // A bare axios call, not `http`: the instance's own interceptors would
     // recurse straight back into this function on another 401.
     const response = await axios.post(
-      `${API_BASE_URL}${REFRESH_PATHS[audience]}`,
+      `${resolveBaseUrl()}${REFRESH_PATHS[audience]}`,
       { refreshToken },
       {
         timeout: API_TIMEOUT_MS,
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
+          language: LANGUAGE,
           Authorization: `Bearer ${staleAccessToken}`,
         },
       },

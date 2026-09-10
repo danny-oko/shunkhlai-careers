@@ -1,14 +1,10 @@
 import { APPLICANT_BASE } from "./core/config";
 import { createDropdown } from "./core/factories";
-import { apiGet, apiGetList } from "./core/request";
+import { apiGetList } from "./core/request";
 
 /**
- * Reference data — the dropdown lists behind every form in the CV builder.
- *
- * All of these are public (`Auth: not required`) and change rarely, which
- * makes them the natural first candidates for caching if the app later opts
- * into `cacheComponents`. Each takes `{ search, lfr, ids }`; the ones with a
- * parent take one more id, spelled here exactly as the backend expects it.
+ * Reference data — every dropdown the forms need. All public, all `{ key, text }`.
+ * Save the `key`.
  */
 
 const p = (name: string) => `${APPLICANT_BASE}/${name}`;
@@ -16,33 +12,36 @@ const p = (name: string) => `${APPLICANT_BASE}/${name}`;
 export const countries = createDropdown(p("GetCountryDropDown"));
 export const divisions = createDropdown<{ countryid: number }>(p("GetDivisionDropDown"));
 export const districts = createDropdown<{ divisionid: number }>(p("GetDistrictDropDown"));
+export const relativeTypes = createDropdown(p("GetRelativeDropDown"));
+
+/** `countryid: 0` returns universities from every country. */
 export const universities = createDropdown<{ countryid: number }>(p("GetUniversityDropDown"));
 export const professions = createDropdown(p("GetProfessionDropDown"));
 export const educationLevels = createDropdown(p("get_educationlevel_dropdown"));
+
 export const foreignLanguages = createDropdown(p("GetForLanguageDropDown"));
-export const foreignLanguageLevels = createDropdown(p("GetForLanguageLevelDropDown"));
+/** One list drives all four skills — listening, speaking, reading, writing. */
+export const languageLevels = createDropdown(p("GetForLanguageLevelDropDown"));
+
 export const computerSkills = createDropdown(p("GetSkillCompDropDown"));
 export const computerSkillLevels = createDropdown<{ skillcompid: number }>(
   p("GetSkillCompLevelDropDown"),
 );
-export const relativeTypes = createDropdown(p("GetRelativeDropDown"));
+
 export const jobTitles = createDropdown(p("GetJobDropDown"));
 export const businessTypes = createDropdown(p("GetBusinessTypeDropDown"));
-export const awardTypes = createDropdown(p("GetAwardTypeDropDown"));
-/** `type` selects the category — sport vs. art. */
-export const abilities = createDropdown<{ type: number }>(p("GetAbilityDropDown"));
 
-/* The three below take `search` only — no `lfr` / `ids`. */
-export const sources = createDropdown(p("GetSourceDropDown"));
-export const positionGroups = createDropdown(p("getPosGroupDropdown"));
-export const positions = createDropdown(p("getPositionsDropdown"));
+/* These three take `search` only — no `lfr` / `ids`. */
+export const positionGroups = createDropdown(p("getPosGroupDropdown"), { standard: false });
+/** Rows carry `posgroupid` and `depid` in `raw`, so they can be filtered by group. */
+export const positions = createDropdown(p("getPositionsDropdown"), { standard: false });
+/** "Where did you hear about us" — feeds `recsourceid` on an application. */
+export const sources = createDropdown(p("GetSourceDropDown"), { standard: false });
 
-/** GET /api/applicant/getSiProfession — profession list from the external "SI" source. */
-export function siProfessions<T = unknown>() {
-  return apiGetList<T>(p("getSiProfession"), undefined, { skipAuth: true });
-}
+export type DefaultCountry = { countryid: number; countryname: string };
 
-/** GET /api/applicant/getCountryID — this tenant's default country. */
-export function defaultCountryId<T = unknown>() {
-  return apiGet<T>(p("getCountryID"), undefined, { skipAuth: true });
+/** The tenant's home country, used to pre-filter the city/province list. */
+export async function defaultCountry(): Promise<DefaultCountry | null> {
+  const rows = await apiGetList<DefaultCountry>(p("getCountryID"), undefined, { skipAuth: true });
+  return rows[0] ?? null;
 }

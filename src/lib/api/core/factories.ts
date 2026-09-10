@@ -3,137 +3,138 @@ import { apiGet, apiGetList, apiPost } from "./request";
 /* -------------------------------------------------------------------------
    Pattern 1 — reference dropdowns
    ------------------------------------------------------------------------
-   ~20 endpoints share one signature: `?search=&lfr=false&ids=1`, sometimes
-   with a single parent id (countryid, divisionid, skillcompid, type). They
-   are public, so they are also the endpoints most worth caching later. */
+   Around twenty endpoints share one shape: `?search=&lfr=false&ids=`, some
+   with a parent id, all answering with `{ key, text }` rows (a few add
+   `row_index`, and the positions list adds `posgroupid` / `depid`). */
 
 export type DropdownQuery = {
+  /** Filter by name. */
   search?: string;
-  /** "list-for-report" flag in the reference; the UI always sends `false`. */
+  /** `true` returns only the five most recent rows. */
   lfr?: boolean;
-  ids?: string | number;
+  /** Ask for specific ids back, so a saved value can be resolved to its label. */
+  ids?: string | number | Array<string | number>;
+};
+
+export type DropdownRow = {
+  key: number | string;
+  text: string;
+  row_index?: number;
+  [extra: string]: unknown;
 };
 
 /** A dropdown row after normalisation, ready for a `<select>` or combobox. */
 export type DropdownOption = {
   value: string;
   label: string;
-  /** The untouched backend row, for the fields the UI occasionally needs. */
-  raw: Record<string, unknown>;
+  /** The untouched row — `getPositionsDropdown` carries posgroupid/depid here. */
+  raw: DropdownRow;
 };
 
-/**
- * Row shapes are not documented, so this accepts the id/label spellings this
- * kind of backend returns. Narrow it once a real response is available.
- */
-function toOption(row: unknown): DropdownOption | null {
-  if (typeof row !== "object" || row === null) return null;
-  const record = row as Record<string, unknown>;
-
-  const rawValue =
-    record.id ?? record.ID ?? record.value ?? record.entryid ?? record.entryID ?? record.code;
-  const rawLabel =
-    record.name ?? record.Name ?? record.text ?? record.label ?? record.title ?? record.descr;
-
-  if (rawValue === undefined || rawValue === null) return null;
-
-  return {
-    value: String(rawValue),
-    label: String(rawLabel ?? rawValue),
-    raw: record,
-  };
+export function toOption(row: DropdownRow): DropdownOption {
+  return { value: String(row.key), label: (row.text ?? "").trim(), raw: row };
 }
 
 /**
- * Builds a typed reader for one dropdown endpoint.
+ * Builds a reader for one dropdown endpoint.
  *
- * @param path   Endpoint path, e.g. `/api/applicant/GetCountryDropDown`.
- * @param defaults Extra query defaults for endpoints that take a parent id.
+ * @param path      e.g. `/api/applicant/GetCountryDropDown`
+ * @param options   `standard: false` for the three that take `search` only.
  */
 export function createDropdown<TExtra extends Record<string, unknown> = Record<string, never>>(
   path: string,
-  defaults?: Partial<TExtra>,
+  options: { standard?: boolean } = {},
 ) {
+  const standard = options.standard ?? true;
+
   return async function readDropdown(
     query: DropdownQuery & Partial<TExtra> = {},
   ): Promise<DropdownOption[]> {
-    const { search = "", lfr = false, ids = 1, ...extra } = query;
-    const rows = await apiGetList<unknown>(
-      path,
-      { search, lfr, ids, ...defaults, ...extra },
-      { skipAuth: true },
-    );
-    return rows.map(toOption).filter((option): option is DropdownOption => option !== null);
+    const { search = "", lfr = false, ids = "", ...extra } = query;
+    const params: Record<string, unknown> = standard
+      ? { search, lfr, ids, ...extra }
+      : { search, ...extra };
+
+    const rows = await apiGetList<DropdownRow>(path, params, { skipAuth: true });
+    return rows.filter((row) => row && row.key !== undefined).map(toOption);
   };
 }
 
 /* -------------------------------------------------------------------------
    Pattern 2 — CV section resources
    ------------------------------------------------------------------------
-   Fifteen profile sections (education, languages, experience, family, …) all
-   expose the same shape: an optional "everything for this tab" bundle, a
-   single-entry read by `entryid`, a save where `entryid: 0` means insert, and
-   a delete. That is ~45 of the 92 applicant endpoints; describing them as
-   data instead of writing them out keeps the module honest and short. */
-
-export type SectionPaths = {
-  /** `GetHrApp…Data` — saved entries plus the reference data the tab needs. */
-  tabData?: string;
-  /** A list endpoint, where the section has one (only references do today). */
-  list?: string;
-  /** `Get…` — a single entry by `entryid`. */
-  get?: string;
-  /** `Save…` — insert when `entryid` is 0, update otherwise. */
-  save: string;
-  /** `Delete…` */
-  remove?: string;
-};
+   The CV sections all work the same way: one bundle call returns several
+   lists at once (education, languages, qualifications and computer skills
+   share `GetHrAppEducationData`), a `Get…?entryid=` reads one row for
+   editing, `Save…` inserts when `entryid` is 0, and `Delete…` takes its id in
+   the *query string* — with the parameter spelled differently per endpoint,
+   which is why `removeParam` is explicit. */
 
 export type SectionEntry = { entryid?: number; [key: string]: unknown };
 
+export type SectionConfig = {
+  /** `GetHrApp…Data` — returns this section's list alongside its siblings. */
+  bundle: string;
+  /** Key inside the bundle holding this section's rows. */
+  listKey: string;
+  /** `Get…` — one row by `entryid`, for editing. */
+  get?: string;
+  /** `Save…` — `entryid: 0` inserts. */
+  save: string;
+  /** `Delete…` */
+  remove?: string;
+  /** Query parameter name for the delete call — the casing genuinely varies. */
+  removeParam?: "entryid" | "ENTRYID" | "entryID";
+  /** True when the save endpoint takes an array of rows rather than one. */
+  batch?: boolean;
+};
+
 export type SectionResource<TEntry extends SectionEntry = SectionEntry> = {
-  paths: SectionPaths;
-  /** Everything the tab renders, in one call. */
-  tabData<T = unknown>(): Promise<T>;
+  config: SectionConfig;
+  /** Every row in this section. */
   list(): Promise<TEntry[]>;
-  get(entryid: number): Promise<TEntry>;
-  /** Several endpoints accept a batch; pass an array to use that. */
-  save(payload: TEntry | TEntry[]): Promise<unknown>;
-  /**
-   * The reference documents no body for the delete endpoints. Passing the
-   * whole entry back is the safe reading — it satisfies both a
-   * `{ entryid }`-only handler and one that wants the full row.
-   */
-  remove(entry: TEntry | number): Promise<unknown>;
+  /** The whole bundle, when a screen renders several sections at once. */
+  bundle<T = Record<string, unknown>>(): Promise<T>;
+  get(entryid: number): Promise<TEntry | null>;
+  save(entry: TEntry | TEntry[]): Promise<unknown>;
+  remove(entryid: number): Promise<unknown>;
 };
 
 export function createSection<TEntry extends SectionEntry = SectionEntry>(
-  paths: SectionPaths,
+  config: SectionConfig,
 ): SectionResource<TEntry> {
-  function missing(operation: string): never {
-    throw new Error(`This profile section has no ${operation} endpoint.`);
-  }
-
   return {
-    paths,
-    tabData<T = unknown>() {
-      return paths.tabData ? apiGet<T>(paths.tabData) : missing("tab data");
+    config,
+
+    async bundle<T = Record<string, unknown>>() {
+      return apiGet<T>(config.bundle);
     },
-    list() {
-      return paths.list ? apiGetList<TEntry>(paths.list) : missing("list");
+
+    async list() {
+      const data = await apiGet<Record<string, unknown>>(config.bundle);
+      const rows = data?.[config.listKey];
+      return Array.isArray(rows) ? (rows as TEntry[]) : [];
     },
-    get(entryid: number) {
-      return paths.get ? apiGet<TEntry>(paths.get, { entryid }) : missing("get");
+
+    async get(entryid: number) {
+      if (!config.get) throw new Error(`${config.listKey}: no single-row endpoint.`);
+      // The collection warns that entryid 0 comes back empty.
+      if (!entryid) return null;
+      const row = await apiGet<TEntry | TEntry[] | null>(config.get, { entryid });
+      if (Array.isArray(row)) return row[0] ?? null;
+      return row ?? null;
     },
-    save(payload: TEntry | TEntry[]) {
-      return apiPost<unknown>(paths.save, payload);
+
+    save(entry: TEntry | TEntry[]) {
+      const payload = config.batch && !Array.isArray(entry) ? [entry] : entry;
+      return apiPost<unknown>(config.save, payload);
     },
-    remove(entry: TEntry | number) {
-      if (!paths.remove) return missing("delete");
-      return apiPost<unknown>(
-        paths.remove,
-        typeof entry === "number" ? { entryid: entry } : entry,
-      );
+
+    remove(entryid: number) {
+      if (!config.remove) throw new Error(`${config.listKey}: no delete endpoint.`);
+      return apiPost<unknown>(config.remove, undefined, {
+        params: { [config.removeParam ?? "entryid"]: entryid },
+      });
     },
   };
 }

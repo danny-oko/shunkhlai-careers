@@ -1,49 +1,53 @@
 /**
  * The job shape the UI renders.
  *
- * Deliberately not the backend's shape: the recruitment API speaks in
- * `entryid` / `jobname` / `brieftext` and returns its long text as blobs.
- * Everything is translated once, in `mapper.ts`, so a rename on the backend
- * never reaches a component.
+ * The backend speaks `posname` / `locname` / `advenddate`; components speak
+ * this. `mapper.ts` is the only file that knows both.
  */
-
-export type JobType = "Full-time" | "Part-time" | "Contract" | "Internship";
 
 export type Job = {
-  /** The backend's `entryID`, as a string. */
+  /** The posting's `entryid`. */
   id: string;
-  /** URL segment: the id followed by a readable title, e.g. `4-station-manager`. */
+  /** URL segment: id plus a readable title, e.g. `786-bagazh-hariutsagch`. */
   slug: string;
   title: string;
-  department: string;
-  /** Display string, e.g. "Ulaanbaatar, Mongolia". */
+  company: string;
+  companyId: string;
   location: string;
-  /** Structured location used by the filter tree. "Remote" is its own country. */
-  country: string;
-  city?: string;
-  type: JobType;
-  /** Short one-line hook shown under the title in the header. */
-  summary: string;
-  /** Salary band, already formatted for display. Omitted when undisclosed. */
-  salary?: string;
-  experience: string;
+  positionGroup: string;
+  positionGroupId: number;
+  /** "Бүтэн цагийн", "Цагийн", … */
+  workType: string;
+  /** "Үндсэн", "Гэрээт". */
+  positionType: string;
+  statusId: number;
+  status: string;
+  /** Advert window, as the backend formats it (`YYYY.MM.DD`). */
   postedAt: string;
-  aboutRole: string;
-  responsibilities: string[];
-  requirements: string[];
-  benefits: string[];
+  closesAt: string;
+  /** Days left before the advert closes; negative once it has. */
+  remainingDays: number;
+  /** Still accepting applications. */
+  isOpen: boolean;
 };
 
-/**
- * A single row in a filter list. `depth: 1` rows are children of the country
- * above them and render indented behind an em dash.
- */
-export type FilterOption = {
+export type JobDetail = Job & {
+  salaryLevel: string | null;
+  /** Required education level, e.g. "Мэргэжил хамаарахгүй". */
+  level: string | null;
+  /** How many people are being hired. */
+  quantity: number | null;
+  mapUrl: string | null;
+  responsibilities: string[];
+  requirements: string[];
+  additional: string | null;
+};
+
+/** One row in a filter list. */
+export type FacetOption = {
   value: string;
   label: string;
-  depth: 0 | 1;
   count: number;
 };
 
-export const ALL_LOCATIONS = "all-locations";
-export const ALL_DEPARTMENTS = "all-departments";
+export const ALL = "all";

@@ -3,9 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
+import { LogOut, Menu, User, X } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { displayName, useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,8 @@ const links = [
  */
 export function SiteHeader() {
   const pathname = usePathname();
+  const { status, profile, signOut } = useSession();
+  const isAuthenticated = status === "authenticated";
   const [isScrolled, setIsScrolled] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -93,6 +96,42 @@ export function SiteHeader() {
 
         <div className="flex items-center gap-1.5">
           <ThemeToggle />
+
+          {isAuthenticated ? (
+            <>
+              <Button
+                asChild
+                variant="ghost"
+                className="hidden h-9 rounded-full px-3 sm:inline-flex"
+              >
+                <Link href="/account">
+                  <User className="size-4" />
+                  <span className="max-w-[10rem] truncate">
+                    {displayName(profile) || "Миний анкет"}
+                  </span>
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Гарах"
+                onClick={signOut}
+                className="hidden rounded-full sm:inline-flex"
+              >
+                <LogOut className="size-4" />
+              </Button>
+            </>
+          ) : (
+            <Button
+              asChild
+              variant="ghost"
+              className="hidden h-9 rounded-full px-3 sm:inline-flex"
+            >
+              <Link href="/login">Нэвтрэх</Link>
+            </Button>
+          )}
+
           <Button
             asChild
             className="hidden h-9 rounded-full px-4 sm:inline-flex"
@@ -125,6 +164,35 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
+          {isAuthenticated ? (
+            <>
+              <Link
+                href="/account"
+                onClick={() => setIsOpen(false)}
+                className="block border-b border-border/50 py-3.5 text-base"
+              >
+                Миний анкет
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  signOut();
+                }}
+                className="block w-full py-3.5 text-left text-base"
+              >
+                Гарах
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              onClick={() => setIsOpen(false)}
+              className="block py-3.5 text-base"
+            >
+              Нэвтрэх
+            </Link>
+          )}
         </nav>
       )}
     </header>

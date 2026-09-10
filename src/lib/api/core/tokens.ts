@@ -81,34 +81,22 @@ function notify(audience: Audience) {
 }
 
 /**
- * Pulls a token pair out of a login/refresh response.
+ * Pulls a token pair out of an already-unwrapped login response.
  *
- * The endpoint reference documents request bodies but not response shapes, so
- * this accepts the spellings a .NET JWT endpoint realistically returns. Once a
- * real response is in hand, narrow this to the one true shape.
+ * `SaveHrAppUser` answers with `retdata.access_token` / `retdata.refresh_token`
+ * (see the collection's own test script, which stores exactly these).
  */
-export function readTokenPair(payload: unknown): TokenPair | null {
-  if (typeof payload !== "object" || payload === null) return null;
+export function readTokenPair(retdata: unknown): TokenPair | null {
+  if (typeof retdata !== "object" || retdata === null) return null;
+  const record = retdata as Record<string, unknown>;
 
-  const source = payload as Record<string, unknown>;
-  const nested = source.data ?? source.result ?? source;
-  const record = (typeof nested === "object" && nested !== null ? nested : source) as Record<
-    string,
-    unknown
-  >;
-
-  const accessToken =
-    pickString(record, "accessToken") ??
-    pickString(record, "access_token") ??
-    pickString(record, "token") ??
-    pickString(record, "jwtToken");
-
+  const accessToken = pickString(record, "access_token") ?? pickString(record, "accessToken");
   if (!accessToken) return null;
 
   return {
     accessToken,
     refreshToken:
-      pickString(record, "refreshToken") ?? pickString(record, "refresh_token") ?? null,
+      pickString(record, "refresh_token") ?? pickString(record, "refreshToken") ?? null,
   };
 }
 

@@ -1,20 +1,18 @@
 /**
  * The single entry point to the recruitment backend.
  *
- * Import the namespace you need — `import { jobs } from "@/lib/api"` — or the
- * grouped `api` object. Components should never reach for axios directly; if
- * a call does not exist here yet, add it to the module it belongs to.
+ * Import a namespace — `import { jobs } from "@/lib/api"` — rather than
+ * reaching for axios. Everything here is modelled on the Postman collection
+ * "Careers Web API — Үндсэн"; `README.md` maps each module to its requests.
  *
- * Module map (117 documented endpoints):
- *
- *   auth          4   login / refresh, applicant and admin
- *   account       8   registration, OTP, password reset, credential changes
- *   profile       6   core record, photo and CV uploads
- *   sections     ~45  the fifteen CV sections, via `createSection`
- *   reference    20   dropdown lists, via `createDropdown`
- *   jobs          4   public postings and the filter bundle
- *   applications  9   applying, tracking, interests, internship sign-up
- *   system       21   CMS: company, sliders, news, video, internship pages
+ *   auth          sign-up / sign-in (one endpoint) and refresh
+ *   account       phone, email and password changes
+ *   profile       core record, photo, CV, completion percentages
+ *   sections      the CV sections, over three bundle endpoints
+ *   reference     every dropdown
+ *   jobs          open postings, detail, filter data
+ *   applications  applying, tracking, interested roles
+ *   system        CMS endpoints from the endpoint reference (not in the collection)
  */
 
 export * as auth from "./auth";
@@ -27,14 +25,26 @@ export * as applications from "./applications";
 export * as system from "./system";
 
 export { http } from "./core/client";
-export { API_BASE_URL, hasLiveBackend } from "./core/config";
-export { type ApiErrorShape, isBackendUnavailable, toApiError } from "./core/errors";
-export { type DropdownOption, type DropdownQuery } from "./core/factories";
-export { type SectionEntry, type SectionResource } from "./core/factories";
+export { API_BASE_URL, hasLiveBackend, resolveBaseUrl } from "./core/config";
+export {
+  ApiError,
+  type ApiErrorShape,
+  isBackendUnavailable,
+  isUnauthorized,
+  toApiError,
+} from "./core/errors";
+export {
+  type DropdownOption,
+  type DropdownQuery,
+  type DropdownRow,
+  type SectionEntry,
+  type SectionResource,
+} from "./core/factories";
 export {
   type Audience,
   type TokenPair,
   clearSession,
   isSignedIn,
   onSessionChange,
+  readAccessToken,
 } from "./core/tokens";

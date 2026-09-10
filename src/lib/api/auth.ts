@@ -1,4 +1,4 @@
-import { AUTH_BASE } from "./core/config";
+import { APPLICANT_BASE, AUTH_BASE } from "./core/config";
 import { apiPost } from "./core/request";
 import {
   type Audience,
@@ -9,66 +9,80 @@ import {
 } from "./core/tokens";
 
 /**
- * `/api/applicant/auth` — 4 endpoints.
+ * Sign-up and sign-in are the *same* endpoint.
  *
- * Login and refresh both hand back a JWT pair; every function here stores it,
- * so callers never touch the token store directly.
+ * `POST /api/applicant/SaveHrAppUser` creates the account when the register
+ * number is new and simply signs the applicant in when it already exists,
+ * returning `access_token` / `refresh_token` either way. There is no separate
+ * login route in the Postman collection.
+ *
+ * `mobilephone` doubles as the password: it is the initial credential, and
+ * after `account.changePassword()` it carries the new one.
  */
 
-export type ApplicantCredentials = {
-  regNo: string;
-  /**
-   * Named `mobile` by the backend, but it carries the password — see the
-   * endpoint reference. Kept under the backend's name at the wire boundary
-   * and renamed for the UI in `signIn` below.
-   */
-  mobile: string;
+export type SignUpInput = {
+  lastname: string;
+  firstname: string;
+  regno: string;
+  email: string;
+  /** Phone number on first sign-up; the password on every sign-in after that. */
+  mobilephone: string;
 };
 
-export type AdminCredentials = {
-  userid: string;
-  password: string;
+export type SignInInput = {
+  regno: string;
+  /** The password — the phone number until the applicant changes it. */
+  mobilephone: string;
 };
 
-async function login(
-  path: string,
-  body: unknown,
-  audience: Audience,
-): Promise<TokenPair> {
-  const payload = await apiPost<unknown>(path, body, { skipAuth: true });
-  const pair = readTokenPair(payload);
+async function authenticate(body: unknown): Promise<TokenPair> {
+  const retdata = await apiPost<unknown>(`${APPLICANT_BASE}/SaveHrAppUser`, body, {
+    skipAuth: true,
+  });
+
+  const pair = readTokenPair(retdata);
   if (!pair) {
-    throw new Error("The login response did not contain an access token.");
+    throw new Error("Нэвтрэх хариунд токен ирсэнгүй.");
   }
-  storeSession(pair, audience);
+
+  storeSession(pair, "applicant");
   return pair;
 }
 
-/** POST /api/applicant/auth/login */
-export function signIn(input: { registerNumber: string; password: string }) {
-  const body: ApplicantCredentials = {
-    regNo: input.registerNumber,
-    mobile: input.password,
-  };
-  return login(`${AUTH_BASE}/login`, body, "applicant");
+/** Create an account (and sign in). */
+export function signUp(input: SignUpInput) {
+  return authenticate(input);
 }
 
-/** POST /api/applicant/auth/refresh-token — normally driven by the 401 interceptor. */
+/**
+ * Sign in an existing applicant. The endpoint wants the full body, so the
+ * name and email fields are sent empty — the register number and password are
+ * what identify the account.
+ */
+export function signIn(input: SignInInput) {
+  return authenticate({
+    lastname: "",
+    firstname: "",
+    email: "",
+    regno: input.regno,
+    mobilephone: input.mobilephone,
+  });
+}
+
+/**
+ * Documented in the endpoint reference but never exercised by the collection;
+ * the 401 interceptor calls it before giving up on a session.
+ */
 export function refresh(refreshToken: string) {
-  return login(`${AUTH_BASE}/refresh-token`, { refreshToken }, "applicant");
+  return apiPost<unknown>(`${AUTH_BASE}/refresh-token`, { refreshToken }).then((retdata) => {
+    const pair = readTokenPair(retdata);
+    if (!pair) throw new Error("Refresh did not return a token.");
+    storeSession(pair, "applicant");
+    return pair;
+  });
 }
 
-/** POST /api/applicant/auth/adminUserLogin */
-export function signInAsAdmin(body: AdminCredentials) {
-  return login(`${AUTH_BASE}/adminUserLogin`, body, "admin");
-}
-
-/** POST /api/applicant/auth/admin-user-refresh-token */
-export function refreshAdmin(refreshToken: string) {
-  return login(`${AUTH_BASE}/admin-user-refresh-token`, { refreshToken }, "admin");
-}
-
-/** Local sign-out: the reference documents no server-side logout. */
+/** Local sign-out: the collection documents no server-side logout. */
 export function signOut(audience: Audience = "applicant") {
   clearSession(audience);
 }
