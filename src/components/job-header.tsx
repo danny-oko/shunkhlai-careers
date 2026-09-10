@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { Clock, Globe, TrendingUp, Users, Wallet } from "lucide-react";
-import type { Job } from "@/lib/mock-jobs";
+import { CalendarClock, Clock, Globe, GraduationCap, Users, Wallet } from "lucide-react";
+import type { JobDetail } from "@/lib/jobs/types";
 import { ApplyButton } from "@/components/apply-button";
-import { ArcBloom } from "@/components/brand/arc-bloom";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { Rise } from "@/components/brand/rise";
 import { cn } from "@/lib/utils";
@@ -63,11 +62,10 @@ function MetaItem({
   );
 }
 
-export function JobHeader({ job }: { job: Job }) {
+export function JobHeader({ job }: { job: JobDetail }) {
   return (
     <header className="relative isolate border-b border-border/70 [--grid-cell:5.5rem] [--grid-line:color-mix(in_oklab,var(--foreground)_7%,transparent)] sm:[--grid-cell:7rem]">
       <HeroGrid />
-      <ArcBloom className="-z-10" />
 
       <div className="relative mx-auto max-w-4xl px-6 py-20 text-center sm:py-28">
         <Crosshair className="top-0 left-0" />
@@ -77,9 +75,9 @@ export function JobHeader({ job }: { job: Job }) {
 
         <Rise>
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-            <MetaItem icon={Users}>{job.department}</MetaItem>
+            <MetaItem icon={Users}>{job.positionGroup}</MetaItem>
             <MetaItem icon={Globe}>{job.location}</MetaItem>
-            <MetaItem icon={Clock}>{job.type}</MetaItem>
+            <MetaItem icon={Clock}>{job.workType}</MetaItem>
           </div>
         </Rise>
 
@@ -98,38 +96,51 @@ export function JobHeader({ job }: { job: Job }) {
             href="/careers"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
-            Careers
+            Нээлттэй ажлын байр
           </Link>
           <span aria-hidden className="px-2 text-muted-foreground/40">
             /
           </span>
-          <span className="font-medium">{job.department}</span>
+          <span className="font-medium">{job.company}</span>
         </nav>
       </div>
 
       <div className="relative mx-auto max-w-2xl px-6 pb-16 text-center sm:pb-20">
         <Rise delay={330}>
-          <p className="text-lg leading-relaxed text-muted-foreground text-pretty">
-            {job.summary}
-          </p>
-        </Rise>
-
-        <Rise delay={400}>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
-            <MetaItem icon={TrendingUp}>{job.experience}</MetaItem>
-            {job.salary ? <MetaItem icon={Wallet}>{job.salary}</MetaItem> : null}
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+            {job.level ? <MetaItem icon={GraduationCap}>{job.level}</MetaItem> : null}
+            {job.salaryLevel ? <MetaItem icon={Wallet}>{job.salaryLevel}₮</MetaItem> : null}
+            <MetaItem icon={CalendarClock}>
+              {job.isOpen
+                ? `${job.closesAt} хүртэл · ${job.remainingDays} хоног`
+                : "Хугацаа дууссан"}
+            </MetaItem>
           </div>
         </Rise>
 
-        <Rise delay={470} className="mt-10 flex flex-col items-center gap-3">
-          <ApplyButton
-            size="lg"
-            showIcon
-            className="h-11 rounded-full px-7 text-[0.9375rem]"
-          />
-          <p className="text-sm text-muted-foreground">
-            Takes about two minutes. No account needed.
-          </p>
+        <Rise delay={400} className="mt-10 flex flex-col items-center gap-3">
+          {job.isOpen ? (
+            <>
+              <ApplyButton
+                size="lg"
+                showIcon
+                label="Анкет илгээх"
+                className="h-11 rounded-full px-7 text-[0.9375rem]"
+              />
+              <p className="text-sm text-muted-foreground">
+                Хадгалсан анкет тань автоматаар хавсрагдана.
+              </p>
+            </>
+          ) : (
+            <p
+              className={cn(
+                "rounded-full border border-border/70 px-5 py-2.5 text-sm",
+                "text-muted-foreground",
+              )}
+            >
+              Энэ зарын хугацаа дууссан байна — {job.status}
+            </p>
+          )}
         </Rise>
       </div>
     </header>

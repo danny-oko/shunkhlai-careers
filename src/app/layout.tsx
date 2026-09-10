@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SessionProvider } from "@/components/auth/session-provider";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
@@ -46,10 +47,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {/* Shared chrome lives here, so no page mounts it itself. The
               header is fixed, so pages own the top offset their own hero
               needs — the landing hero deliberately opens underneath it. */}
-          <SiteHeader />
-          {children}
-          <SiteFooter />
-          <Toaster position="bottom-right" />
+          <SessionProvider>
+            <SiteHeader />
+            {children}
+            <SiteFooter />
+            <Toaster position="bottom-right" />
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>

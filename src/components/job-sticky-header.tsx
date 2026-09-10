@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import type { Job } from "@/lib/mock-jobs";
+import type { Job } from "@/lib/jobs/types";
 import { ApplyButton } from "@/components/apply-button";
 import { cn } from "@/lib/utils";
 

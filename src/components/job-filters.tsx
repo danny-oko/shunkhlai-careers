@@ -3,14 +3,14 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { FilterOption } from "@/lib/mock-jobs";
+import type { FacetOption } from "@/lib/jobs/types";
 
 function FilterPill({
   option,
   isSelected,
   onSelect,
 }: {
-  option: FilterOption;
+  option: FacetOption;
   isSelected: boolean;
   onSelect: (value: string) => void;
 }) {
@@ -28,17 +28,6 @@ function FilterPill({
           : "border-border/70 text-foreground hover:bg-muted",
       )}
     >
-      {option.depth === 1 ? (
-        <span
-          aria-hidden
-          className={cn(
-            "select-none",
-            isSelected ? "text-background/50" : "text-muted-foreground/60",
-          )}
-        >
-          —
-        </span>
-      ) : null}
       <span className="truncate">{option.label}</span>
       <span
         className={cn(
@@ -60,7 +49,7 @@ export function FilterSection({
   defaultOpen = false,
 }: {
   title: string;
-  options: FilterOption[];
+  options: FacetOption[];
   value: string;
   onChange: (value: string) => void;
   defaultOpen?: boolean;

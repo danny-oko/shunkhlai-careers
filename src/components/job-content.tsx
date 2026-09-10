@@ -1,4 +1,4 @@
-import type { Job } from "@/lib/mock-jobs";
+import type { JobDetail } from "@/lib/jobs/types";
 import { Reveal } from "@/components/reveal";
 
 function Section({
@@ -24,7 +24,7 @@ function BulletList({ items }: { items: string[] }) {
       {items.map((item, index) => (
         <Reveal
           as="li"
-          key={item}
+          key={`${index}-${item}`}
           delay={60 + Math.min(index, 8) * 60}
           className="flex gap-3.5 text-[0.9375rem] leading-relaxed"
         >
@@ -39,28 +39,74 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
-export function JobContent({ job }: { job: Job }) {
+/**
+ * The detail endpoint splits a posting into duties (`mainresp`) and
+ * requirements (`mainreq`); either can come back empty, so each block only
+ * renders when it has something to say.
+ */
+export function JobContent({ job }: { job: JobDetail }) {
+  const facts = [
+    job.company ? { label: "Компани", value: job.company } : null,
+    job.location ? { label: "Байршил", value: job.location } : null,
+    job.positionType ? { label: "Ажлын хэлбэр", value: job.positionType } : null,
+    job.quantity ? { label: "Авах хүний тоо", value: String(job.quantity) } : null,
+    job.postedAt ? { label: "Зар нийтэлсэн", value: job.postedAt } : null,
+    job.closesAt ? { label: "Зар хаагдах", value: job.closesAt } : null,
+  ].filter((fact): fact is { label: string; value: string } => fact !== null);
+
   return (
     <div className="space-y-10 pb-4">
-      <Section title="About the role">
+      <Section title="Ажлын байрны мэдээлэл">
         <Reveal delay={60}>
-          <p className="text-[1.0625rem] leading-[1.75] text-foreground/85 text-pretty">
-            {job.aboutRole}
-          </p>
+          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+            {facts.map((fact) => (
+              <div key={fact.label} className="flex flex-col gap-1">
+                <dt className="text-muted-foreground text-xs tracking-[0.08em] uppercase">
+                  {fact.label}
+                </dt>
+                <dd className="text-[0.9375rem] text-foreground/85">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
         </Reveal>
       </Section>
 
-      <Section title="What you'll do">
-        <BulletList items={job.responsibilities} />
-      </Section>
+      {job.responsibilities.length > 0 ? (
+        <Section title="Гол үүрэг, хариуцлага">
+          <BulletList items={job.responsibilities} />
+        </Section>
+      ) : null}
 
-      <Section title="What we're looking for">
-        <BulletList items={job.requirements} />
-      </Section>
+      {job.requirements.length > 0 ? (
+        <Section title="Тавигдах шаардлага">
+          <BulletList items={job.requirements} />
+        </Section>
+      ) : null}
 
-      <Section title="What we offer">
-        <BulletList items={job.benefits} />
-      </Section>
+      {job.additional ? (
+        <Section title="Нэмэлт мэдээлэл">
+          <Reveal delay={60}>
+            <p className="text-[0.9375rem] leading-relaxed text-foreground/85 text-pretty">
+              {job.additional}
+            </p>
+          </Reveal>
+        </Section>
+      ) : null}
+
+      {job.mapUrl ? (
+        <Section title="Байршил">
+          <Reveal delay={60}>
+            <a
+              href={job.mapUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-[0.9375rem] underline underline-offset-4"
+            >
+              Газрын зураг дээр харах
+            </a>
+          </Reveal>
+        </Section>
+      ) : null}
     </div>
   );
 }

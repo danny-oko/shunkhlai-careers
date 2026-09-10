@@ -1,4 +1,3 @@
-import { ArcBloom } from "@/components/brand/arc-bloom";
 import { FeatherLattice } from "@/components/brand/feather-lattice";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { Rise } from "@/components/brand/rise";
@@ -6,7 +5,6 @@ import { Rise } from "@/components/brand/rise";
 export function CareersHero({ roleCount }: { roleCount: number }) {
   return (
     <section className="relative isolate overflow-hidden">
-      <ArcBloom className="-z-10" />
       <FeatherLattice
         className="-z-10 opacity-40 [mask-image:radial-gradient(ellipse_70%_60%_at_50%_35%,black_20%,transparent_100%)]"
         tone="brand"
@@ -25,8 +23,6 @@ export function CareersHero({ roleCount }: { roleCount: number }) {
           </h1>
         </Rise>
 
-        {/* Brandbook p.3 - "Уриа". The gradient dissolve runs through the
-            type itself rather than sitting behind it. */}
         <Rise delay={180} className="mt-8">
           <p className="brand-shimmer max-w-2xl text-xl leading-[1.25] font-semibold tracking-[-0.02em] text-balance sm:text-2xl">
             Хөгжлийн төлөөх хөдөлгүүр бүрийг тэжээнэ

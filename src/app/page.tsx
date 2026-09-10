@@ -8,7 +8,16 @@ import { RoleSpectrum } from "@/components/landing/role-spectrum";
 import { FeaturedRoles } from "@/components/landing/featured-roles";
 import { AcademyVoices } from "@/components/landing/academy-voices";
 import { JourneyCta } from "@/components/landing/journey-cta";
-import { jobs } from "@/lib/mock-jobs";
+import { listJobsSafe } from "@/lib/jobs";
+
+/**
+ * Postings are read with axios, which Next cannot see the way it sees `fetch`,
+ * so without this the page would be prerendered once at build and serve the
+ * same list forever. Five minutes: fresh enough for a careers site, cheap
+ * enough that the recruitment API is not hit on every visit.
+ * (Must stay a literal — the value has to be statically analysable.)
+ */
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Шунхлай ХХК — Хөдөлмөр хөгжлийн хөдөлгүүр",
@@ -23,7 +32,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const jobs = await listJobsSafe();
   const roleCount = jobs.length;
 
   return (
@@ -33,7 +43,7 @@ export default function LandingPage() {
       <HeroJourney />
       <CompanyStats />
       <RoleSpectrum />
-      <FeaturedRoles />
+      <FeaturedRoles jobs={jobs} />
       <AcademyVoices />
       <JourneyCta roleCount={roleCount} />
     </main>
