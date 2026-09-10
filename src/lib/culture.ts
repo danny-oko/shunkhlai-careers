@@ -67,7 +67,13 @@ export type AcademyVoice = {
   quote: string;
 };
 
-/** Shunkhlai Academy — ажилтнуудын зөвлөгөө. */
+/**
+ * Shunkhlai Academy — ажилтнуудын зөвлөгөө.
+ *
+ * Unreferenced at the moment: the landing page's Academy rail was taken down
+ * to be rebuilt. Kept because it indexes the posters in public/brand and holds
+ * their transcribed quotes, which the artwork alone does not give back.
+ */
 export const academyVoices: AcademyVoice[] = [
   {
     src: "/brand/academy-myagmarsuren.jpg",
@@ -111,52 +117,28 @@ export type Benefit = {
   body: string;
 };
 
-/** TODO(HR): confirm the exact package before launch. */
+/**
+ * Content plan 2.6. HR has published these two so far.
+ *
+ * TODO(HR): the rest of the package is still to come — add entries here as
+ * they arrive rather than describing anything that has not been confirmed.
+ */
 export const benefits: Benefit[] = [
   {
-    title: "Эрүүл мэндийн хамгаалалт",
-    titleEn: "Health cover",
-    body: "Ажилтны эрүүл мэндийн урьдчилан сэргийлэх үзлэг, нэмэлт даатгалын дэмжлэг.",
+    title: "Гэр бүлийн өдөр",
+    titleEn: "Family day",
+    body: "Жилд 1 өдрийн цалинтай чөлөө.",
   },
   {
-    title: "Сэтгэл зүйн дэмжлэг",
-    titleEn: "Mental health support",
-    body: "Мэргэжлийн сэтгэл зүйчтэй нууцлалтай уулзах боломж, стресс менежментийн хөтөлбөр.",
-  },
-  {
-    title: "Ажилтны хөнгөлөлт",
-    titleEn: "Employee discount",
-    body: "Шунхлай сүлжээний шатахуун, үйлчилгээнд ажилтанд зориулсан хөнгөлөлт.",
-  },
-  {
-    title: "Тээвэр, хоол",
-    titleEn: "Transport & meals",
-    body: "Ээлжийн ажилтнуудад тээвэр, хоолны зохицуулалт, орон нутгийн салбарт байрны дэмжлэг.",
-  },
-  {
-    title: "Гэр бүлийн арга хэмжээ",
-    titleEn: "Family events",
-    body: "Ажилтны хүүхдүүдэд зориулсан жилийн арга хэмжээ, баярын урамшуулал.",
-  },
-  {
-    title: "Тогтвор суурьшлын урамшуулал",
-    titleEn: "Long-service reward",
-    body: "Байгууллагад ажилласан жилээр нэмэгддэг амралт, урамшууллын систем.",
+    title: "Эрүүл мэндийн өдөр",
+    titleEn: "Health day",
+    body: "Жилд 2 өдрийн цалинтай чөлөө.",
   },
 ];
 
-export type Club = {
-  name: string;
-  nameEn: string;
-  note: string;
-};
-
-/** TODO(HR): confirm the active club list and add photos when available. */
-export const clubs: Club[] = [
-  { name: "Волейбол", nameEn: "Volleyball", note: "Долоо хоног бүрийн дасгалжуулалт, салбар хоорондын тэмцээн" },
-  { name: "Гүйлт", nameEn: "Running", note: "Улирлын марафонд багаараа бүртгүүлдэг" },
-  { name: "Ширээний теннис", nameEn: "Table tennis", note: "Оффисын лигтэй, улирал бүр аварга тодруулдаг" },
-  { name: "Уул уулзалт", nameEn: "Hiking", note: "Улирал бүрийн явган аялал, гэр бүлээрээ оролцоно" },
-  { name: "Ном унших", nameEn: "Book club", note: "Сар бүрийн нэг ном, нэг хэлэлцүүлэг" },
-  { name: "Гэрэл зураг", nameEn: "Photography", note: "Ажлын байрны түүхийг ажилтнууд өөрсдөө буулгадаг" },
-];
+/**
+ * Content plan 2.8. HR has given the count but not the roster.
+ *
+ * TODO(HR): supply the club names and photos, then this becomes a list.
+ */
+export const clubCount = 14;

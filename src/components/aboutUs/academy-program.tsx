@@ -1,23 +1,20 @@
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { Reveal } from "@/components/reveal";
+import { SectionRule } from "@/components/brand/section-rule";
 
-/** TODO(HR): confirm the programme list and durations before launch. */
-const tracks = [
+/**
+ * Content plan 2.5. HR's detailed programme list is still to come, so this
+ * section carries their description and the two facts it states — nothing is
+ * invented to fill the space.
+ */
+const pillars = [
   {
-    title: "Шинэ ажилтны хөтөлбөр",
-    body: "Эхний өдрөөс эхлэн аюулгүй ажиллагаа, бүтээгдэхүүн, үйлчилгээний стандартын дадлагажуулалт.",
+    title: "Гадны сургагч багш",
+    body: "Салбартаа хүлээн зөвшөөрөгдсөн сургагч багш, сургалтын байгууллагууд.",
   },
   {
-    title: "Мэргэжлийн гэрчилгээжүүлэлт",
-    body: "Лаборатори, тээвэр, техник ашиглалтын чиглэлийн албан ёсны сертификатын дэмжлэг.",
-  },
-  {
-    title: "Манлайллын хөтөлбөр",
-    body: "Багийн ахлагч, станцын эрхлэгч болох замд бэлтгэх удирдлагын сургалт.",
-  },
-  {
-    title: "Дотоод менторшип",
-    body: "Туршлагатай ажилтан шинэ хүнтэй хосолж, эхний зургаан сард дагалдан ажиллана.",
+    title: "Дотоод сургагч багш",
+    body: "Компанийн өөрийн сургагч багш нар мэдлэг, ур чадварын хөрөнгө оруулалтыг ажилтнууддаа хийдэг.",
   },
 ];
 
@@ -31,8 +28,9 @@ export function AcademyProgram() {
   return (
     <section
       id="academy"
-      className="scroll-mt-20 border-t border-border/70 py-20 lg:py-28"
+      className="relative scroll-mt-20 py-20 lg:py-28"
     >
+      <SectionRule />
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
         <Reveal>
           <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
@@ -41,10 +39,10 @@ export function AcademyProgram() {
           <h2 className="mt-5 max-w-3xl text-3xl leading-[1.08] font-semibold tracking-[-0.035em] text-balance sm:text-5xl">
             Ажилдаа сурч, ажил дээрээ өсдөг
           </h2>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground text-pretty">
-            Шунхлай Академи бол ажилтны ур чадварыг системтэй хөгжүүлэх дотоод
-            сургалтын хөтөлбөр. ШТС-ын эрхлэгчээс захирал болтол өссөн замууд
-            энэ байгууллагад бодитоор бий.
+          <p className="mt-6 max-w-3xl text-lg leading-relaxed text-muted-foreground text-pretty">
+            Компанийн үнэт зүйлс алсын хараа руу чиглэсэн мэдлэг, ур чадварыг
+            хөгжүүлэх замаар хүний нөөцийн тасралтгүй залгамж халааг бэлтгэн
+            ажилтанг чадваржуулах бодлого баримтлан ажилладаг.
           </p>
         </Reveal>
 
@@ -53,7 +51,7 @@ export function AcademyProgram() {
         </Reveal>
 
         <ul className="mt-14 grid gap-x-10 gap-y-12 sm:grid-cols-2">
-          {tracks.map((track, index) => (
+          {pillars.map((track, index) => (
             <Reveal
               as="li"
               key={track.title}

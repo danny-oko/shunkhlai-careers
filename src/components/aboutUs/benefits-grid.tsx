@@ -3,6 +3,7 @@ import { HeartPulse } from "lucide-react";
 import { FeatherLattice } from "@/components/brand/feather-lattice";
 import { Reveal } from "@/components/reveal";
 import { benefits } from "@/lib/culture";
+import { SectionRule } from "@/components/brand/section-rule";
 
 /**
  * Хөнгөлөлт, хангамж — on ink, with the mental-health programme pulled out
@@ -14,6 +15,7 @@ export function BenefitsGrid() {
       id="benefits"
       className="relative isolate scroll-mt-20 overflow-hidden bg-ink py-20 text-ink-foreground lg:py-28"
     >
+      <SectionRule />
       <FeatherLattice className="opacity-[0.16]" tone="brand" />
 
       <div className="relative mx-auto max-w-6xl px-6 lg:px-10">
@@ -33,18 +35,19 @@ export function BenefitsGrid() {
             </span>
             <div>
               <h3 className="text-lg font-medium tracking-[-0.015em]">
-                Сэтгэл зүйн эрүүл мэндийг дэмжих хөтөлбөр
+                Сэтгэл зүйн эрүүл мэндээ хамгаалах нь — ажилтны сайн сайхан
+                байдлын үндэс
               </h3>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted text-pretty">
-                Ээлжийн ажил, урт зам, хариуцлагатай ачаа — ажлын ачаалал бодит.
-                Тиймээс ажилтан бүр мэргэжлийн сэтгэл зүйчтэй нууцлалтай уулзах
-                боломжтой.
+                Шунхлай ХХК нь ажилтнуудынхаа сайн сайхан байдал, сэтгэл зүйн
+                эрүүл мэндийг дэмжих чиглэлээр тогтмол сургалт, хөгжлийн
+                хөтөлбөрүүдийг хэрэгжүүлдэг.
               </p>
             </div>
           </div>
         </Reveal>
 
-        <ul className="mt-12 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-12 grid gap-x-10 gap-y-10 sm:grid-cols-2">
           {benefits.map((benefit, index) => (
             <Reveal
               as="li"

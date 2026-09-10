@@ -1,68 +1,115 @@
-import { Reveal } from "@/components/reveal";
+"use client";
+
+import * as React from "react";
+
+import { useScrollProgress } from "@/components/landing/use-scroll-progress";
 import { milestones } from "@/lib/company";
+import { cn } from "@/lib/utils";
+import { SectionRule } from "@/components/brand/section-rule";
 
 /**
- * Бидний түүх — 1993 to today.
+ * Бидний түүх, as a pinned horizontal run.
  *
- * A single rail runs the height of the section with the brand gradient; each
- * milestone lifts in as it reaches the viewport, so the story reads at the
- * pace the visitor scrolls it.
+ * The section is a tall runway with one screen pinned inside it; scrolling
+ * down slides the milestones past sideways. It borrows the landing page's
+ * grammar — a stage held while the scroll drives something across it — so the
+ * two pages read as one site rather than a hero and a document.
+ *
+ * The travel is measured from the track, so the last card lands flush against
+ * the right edge exactly as the runway ends.
  */
 export function HistoryTimeline() {
+  const sectionRef = React.useRef<HTMLElement>(null);
+  const trackRef = React.useRef<HTMLDivElement>(null);
+  const { progress, isReduced } = useScrollProgress(sectionRef);
+  const [travel, setTravel] = React.useState(0);
+
+  React.useEffect(() => {
+    const measure = () => {
+      const track = trackRef.current;
+      if (!track) return;
+      setTravel(Math.max(track.scrollWidth - window.innerWidth, 0));
+    };
+
+    measure();
+    document.fonts?.ready.then(measure).catch(() => {});
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
   return (
     <section
       id="history"
-      className="scroll-mt-20 border-t border-border/70 py-20 lg:py-28"
+      ref={sectionRef}
+      className={cn(
+        "relative scroll-mt-20",
+        isReduced ? "h-auto" : "h-[300svh]",
+      )}
     >
-      <div className="mx-auto max-w-6xl px-6 lg:px-10">
-        <Reveal>
+      <SectionRule />
+
+      <div
+        className={cn(
+          "flex flex-col justify-center overflow-hidden",
+          isReduced ? "relative py-20" : "sticky top-0 h-svh",
+        )}
+      >
+        <div className="mx-auto w-full max-w-6xl px-6 lg:px-10">
           <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
             Бидний түүх · Our story
           </p>
-          <h2 className="mt-5 max-w-3xl text-3xl leading-[1.08] font-semibold tracking-[-0.035em] text-balance sm:text-5xl">
+          <h2 className="mt-5 text-3xl leading-[1.08] font-semibold tracking-[-0.035em] text-balance sm:text-5xl">
             30 гаруй жилийн зам
           </h2>
-        </Reveal>
+        </div>
 
-        <ol className="relative mt-16 pl-8 sm:pl-0">
-          {/* The rail. On desktop it sits in the gutter between the period
-              column and the copy column. */}
-          <span
-            aria-hidden
-            className="absolute top-2 bottom-2 left-[3px] w-px opacity-70 sm:left-[calc(9rem+3px)]"
-            style={{
-              backgroundImage:
-                "linear-gradient(to bottom, var(--brand), var(--brand-2), color-mix(in oklab, var(--brand-2) 15%, transparent))",
-            }}
-          />
-
+        <div
+          ref={trackRef}
+          className={cn(
+            "mt-14 flex w-max items-stretch gap-6 px-6 lg:px-10",
+            isReduced && "no-scrollbar w-full overflow-x-auto",
+          )}
+          style={
+            isReduced
+              ? undefined
+              : { transform: `translate3d(${-progress * travel}px, 0, 0)` }
+          }
+        >
           {milestones.map((milestone, index) => (
-            <Reveal
-              as="li"
+            <article
               key={milestone.period}
-              delay={index * 90}
-              className="relative pb-14 last:pb-0 sm:grid sm:grid-cols-[9rem_1fr] sm:gap-x-10"
+              className="flex w-[78vw] shrink-0 flex-col border-t-2 border-border pt-7 sm:w-[26rem]"
             >
-              <span
-                aria-hidden
-                className="absolute top-1.5 -left-8 size-[9px] rounded-full bg-brand ring-4 ring-background sm:left-[calc(9rem-1px)]"
-              />
-
-              <p className="font-mono text-sm tracking-[0.08em] text-brand tabular-nums">
-                {milestone.period}
-              </p>
-
-              <div className="mt-3 sm:mt-0">
-                <h3 className="text-xl leading-tight font-semibold tracking-[-0.025em]">
-                  {milestone.title}
-                </h3>
-                <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground text-pretty">
-                  {milestone.body}
-                </p>
+              <div className="flex items-baseline gap-4">
+                <span className="font-mono text-sm tracking-[0.08em] text-brand tabular-nums">
+                  {milestone.period}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                  {String(index + 1).padStart(2, "0")} / {milestones.length}
+                </span>
               </div>
-            </Reveal>
+
+              <h3 className="mt-5 text-2xl leading-tight font-semibold tracking-[-0.025em] sm:text-3xl">
+                {milestone.title}
+              </h3>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground text-pretty">
+                {milestone.body}
+              </p>
+            </article>
           ))}
-        </ol>
+        </div>
+
+        <div className="mx-auto mt-12 w-full max-w-6xl px-6 lg:px-10">
+          <div className="h-px w-full bg-border">
+            <div
+              className="h-px origin-left"
+              style={{
+                backgroundImage: "var(--brand-gradient)",
+                transform: `scaleX(${isReduced ? 1 : progress})`,
+              }}
+            />
+          </div>
+        </div>
       </div>
     </section>
   );

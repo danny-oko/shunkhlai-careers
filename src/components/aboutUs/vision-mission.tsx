@@ -2,6 +2,7 @@ import { FeatherLattice } from "@/components/brand/feather-lattice";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { Reveal } from "@/components/reveal";
 import { mission, vision } from "@/lib/company";
+import { SectionRule } from "@/components/brand/section-rule";
 
 const blocks = [vision, mission];
 
@@ -16,11 +17,7 @@ export function VisionMission() {
       className="relative isolate scroll-mt-20 overflow-hidden bg-ink py-20 text-ink-foreground lg:py-28"
     >
       <FeatherLattice className="opacity-[0.16]" tone="brand" />
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-px"
-        style={{ backgroundImage: "var(--brand-gradient)" }}
-      />
+      <SectionRule />
 
       <div className="relative mx-auto max-w-6xl px-6 lg:px-10">
         <div className="grid gap-14 lg:grid-cols-2 lg:gap-20">

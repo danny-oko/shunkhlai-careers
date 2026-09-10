@@ -5,10 +5,12 @@ import { ArcBloom } from "@/components/brand/arc-bloom";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { Reveal } from "@/components/reveal";
 import { Button } from "@/components/ui/button";
+import { SectionRule } from "@/components/brand/section-rule";
 
 export function AboutCta({ roleCount }: { roleCount: number }) {
   return (
-    <section className="relative isolate overflow-hidden border-t border-border/70">
+    <section className="relative isolate overflow-hidden">
+      <SectionRule />
       <ArcBloom className="-z-10" />
 
       <div className="mx-auto max-w-6xl px-6 py-24 lg:px-10 lg:py-32">
