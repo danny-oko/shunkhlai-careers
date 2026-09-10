@@ -19,13 +19,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CvDropzone } from "@/components/cv-dropzone";
-import { apiClient, toApiError } from "@/lib/api";
+import { applications, isBackendUnavailable, toApiError } from "@/lib/api";
 import {
   applicationDefaults,
   applicationSchema,
   type ApplicationValues,
 } from "@/lib/apply-schema";
-import type { Job } from "@/lib/mock-jobs";
+import type { Job } from "@/lib/jobs/types";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -71,20 +71,19 @@ export function EasyApplyModal({
     if (values.cv) payload.append("cv", values.cv);
 
     try {
-      await apiClient.post("/applications", payload);
+      await applications.submitEasyApplication(payload);
       setIsSubmitted(true);
     } catch (error) {
-      const apiError = toApiError(error);
-
-      // The recruitment backend is not wired up yet; treat an unreachable
-      // service as a successful local submission so the flow stays testable.
-      if (apiError.status === null || apiError.status === 404) {
+      // The one-screen apply form has no endpoint in the recruitment API yet
+      // (see `submitEasyApplication`); until it does, an unreachable service
+      // counts as a local success so the flow stays testable.
+      if (isBackendUnavailable(error)) {
         setIsSubmitted(true);
         return;
       }
 
       toast.error("We couldn't send your application", {
-        description: apiError.message,
+        description: toApiError(error).message,
       });
     }
   }

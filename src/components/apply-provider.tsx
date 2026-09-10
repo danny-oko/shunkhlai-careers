@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { Job } from "@/lib/mock-jobs";
+import type { Job } from "@/lib/jobs/types";
 import { EasyApplyModal } from "@/components/easy-apply-modal";
 
 type ApplyContextValue = {

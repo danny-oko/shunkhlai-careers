@@ -1,4 +1,4 @@
-import type { Job } from "@/lib/mock-jobs";
+import type { Job } from "@/lib/jobs/types";
 import { Reveal } from "@/components/reveal";
 
 function Section({

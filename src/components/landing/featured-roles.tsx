@@ -4,10 +4,10 @@ import { ArrowUpRight, MapPin } from "lucide-react";
 import { Reveal } from "@/components/reveal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { jobs } from "@/lib/mock-jobs";
+import type { Job } from "@/lib/jobs/types";
 
 /** Picks one role per department so the shortlist reads as a range, not a list. */
-function pickFeatured(count = 3) {
+function pickFeatured(jobs: Job[], count = 3) {
   const seen = new Set<string>();
   return jobs
     .filter((job) => {
@@ -18,8 +18,8 @@ function pickFeatured(count = 3) {
     .slice(0, count);
 }
 
-export function FeaturedRoles() {
-  const featured = pickFeatured();
+export function FeaturedRoles({ jobs }: { jobs: Job[] }) {
+  const featured = pickFeatured(jobs);
 
   return (
     <section className="border-t border-border/70 py-20 lg:py-28">
@@ -42,7 +42,7 @@ export function FeaturedRoles() {
           {featured.map((job, index) => (
             <Reveal as="li" key={job.id} delay={index * 110}>
               <Link
-                href={`/careers/${job.id}`}
+                href={`/careers/${job.slug}`}
                 className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-card p-6 transition-all duration-500 hover:-translate-y-1 hover:border-brand/40 hover:shadow-[0_18px_40px_-24px_color-mix(in_oklab,var(--brand)_60%,transparent)]"
               >
                 {/* The brandbook кант, revealed along the top edge on hover. */}

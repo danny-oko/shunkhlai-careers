@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Clock, Globe, TrendingUp, Users, Wallet } from "lucide-react";
-import type { Job } from "@/lib/mock-jobs";
+import type { Job } from "@/lib/jobs/types";
 import { ApplyButton } from "@/components/apply-button";
 import { ArcBloom } from "@/components/brand/arc-bloom";
 import { GradientRule } from "@/components/brand/gradient-rule";

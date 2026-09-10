@@ -6,14 +6,12 @@ import { ArrowUpRight, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FilterSection } from "@/components/job-filters";
 import {
-  ALL_DEPARTMENTS,
-  ALL_LOCATIONS,
   getDepartmentOptions,
   getLocationOptions,
   matchesDepartment,
   matchesLocation,
-  type Job,
-} from "@/lib/mock-jobs";
+} from "@/lib/jobs/filters";
+import { ALL_DEPARTMENTS, ALL_LOCATIONS, type Job } from "@/lib/jobs/types";
 
 export function JobBrowser({ jobs }: { jobs: Job[] }) {
   const [location, setLocation] = React.useState(ALL_LOCATIONS);
@@ -127,7 +125,7 @@ export function JobBrowser({ jobs }: { jobs: Job[] }) {
                   className="brand-rise border-b border-border/70"
                 >
                   <Link
-                    href={`/careers/${job.id}`}
+                    href={`/careers/${job.slug}`}
                     className="group relative isolate flex items-center justify-between gap-6 px-6 py-8 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2 sm:px-10 sm:py-10"
                   >
                     {/* Inset panel so the whole card lights up on hover without

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { FilterOption } from "@/lib/mock-jobs";
+import type { FilterOption } from "@/lib/jobs/types";
 
 function FilterPill({
   option,
