@@ -19,12 +19,20 @@ export function hasLiveBackend(): boolean {
  * Where requests actually go.
  *
  * In the browser an empty base means "same origin", which is what reaches the
- * mock routes. On the server there is no origin to be relative to, so
- * server-rendered pages address this app's own port.
+ * mock routes. On the server there is no origin to be relative to: locally the
+ * dev server's own port works, and on a Vercel deployment the only address that
+ * resolves is the deployment URL. Neither can serve a render that happens
+ * before the server is up, which is why server-side job reads bypass HTTP
+ * entirely (see `src/lib/jobs/local.ts`).
  */
 export function resolveBaseUrl(): string {
   if (API_BASE_URL) return API_BASE_URL;
   if (typeof window !== "undefined") return "";
+
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  if (vercelHost) return `https://${vercelHost}`;
+
   return `http://127.0.0.1:${process.env.PORT ?? 3000}`;
 }
 
