@@ -9,7 +9,9 @@ import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin", "cyrillic"],
+  // cyrillic-ext carries U+04E8/04E9 (Ө/ө), which the plain cyrillic subset
+  // omits. Without it every Ө in Mongolian copy falls back to a system face.
+  subsets: ["latin", "cyrillic", "cyrillic-ext"],
   display: "swap",
 });
 

@@ -13,6 +13,7 @@
   --color-brand: var(--brand);
   --color-brand-2: var(--brand-2);
   --color-brand-blue: var(--brand-blue);
+  --color-brand-navy: var(--brand-navy);
   --color-brand-foreground: var(--brand-foreground);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
@@ -47,17 +48,21 @@
      --brand      Pantone 166 C, RGB 234/89/1
      --brand-2    Pantone 151 C, RGB 241/135/0 - the gradient partner
      --brand-blue Reflex Blue C, RGB 0/77/158
-     Together --brand and --brand-2 form the "оngoniy uusalt" dissolve
-     used across every brandbook header. */
+     --brand-navy Deep Navy Blue, RGB 88/85/112
+     Together --brand and --brand-2 form the "ongonii uusalt" dissolve
+     used across every brandbook header. See docs/brand.md. */
   --brand: #ea5901;
   --brand-2: #f18700;
   --brand-blue: #004d9e;
+  --brand-navy: #585570;
   --brand-foreground: oklch(1 0 0);
 
   /* The 60-30-10 split the whole site is built on:
      60% neutral ground (--background / --foreground),
      30% "ink" — Reflex Blue darkened into a panel colour,
      10% orange accent (--brand) on CTAs, numerals and rules only. */
+  /* Not brandbook colours: a navy derived for this site's panels. The
+     brandbook's own dark blue-grey is --brand-navy. */
   --ink: #06203d;
   --ink-2: #0b3466;
   --ink-foreground: oklch(0.985 0 0);
