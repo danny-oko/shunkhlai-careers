@@ -108,6 +108,8 @@
   --brand: #f2660a;
   --brand-2: #f79420;
   --brand-blue: #3d84d6;
+  /* Deep Navy Blue lifted for a dark ground; #585570 is near-invisible here. */
+  --brand-navy: #9c97b8;
   --brand-foreground: oklch(1 0 0);
 
   /* Ink sits below the charcoal page ground in dark mode so the 30% panels
@@ -258,6 +260,15 @@
 }
 
 /* Motto: the gradient dissolve travelling through the type itself. */
+/* The brandbook's orange dissolve (1.3) as a text fill. Static: the gradient
+   is a brand device, not an animation. */
+.brand-dissolve {
+  background-image: var(--brand-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
 .brand-shimmer {
   background-image: linear-gradient(
     100deg,

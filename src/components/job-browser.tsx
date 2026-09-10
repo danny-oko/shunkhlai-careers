@@ -3,12 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { FilterSection } from "@/components/job-filters";
+import { FuelLine } from "@/components/brand/fuel-line";
 import {
   applyFacets,
   companyOptions,
@@ -217,42 +218,46 @@ export function JobBrowser({
               </button>
             </div>
           ) : (
-            /* Keyed on the active facets so the entrance replays whenever the
-               result set changes. */
-            <ul key={`${facets.group}-${facets.company}-${facets.workType}-${facets.openOnly}`}>
-              {visibleJobs.map((job, index) => (
-                <li
-                  key={job.id}
-                  style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
-                  className="brand-rise border-b border-border/70"
-                >
+            <ul>
+              {visibleJobs.map((job) => (
+                <li key={job.id} className="border-b border-border/70">
                   <Link
                     href={`/careers/${job.slug}`}
-                    className="group relative isolate flex items-center justify-between gap-6 px-6 py-8 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2 sm:px-10 sm:py-10"
+                    className="group relative isolate block px-6 pt-8 pb-6 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2 sm:px-10 sm:pt-10 sm:pb-7"
                   >
                     <span
                       aria-hidden
                       className="pointer-events-none absolute inset-x-2 inset-y-2 -z-10 rounded-xl bg-muted/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100 sm:inset-x-4 sm:inset-y-3"
                     />
 
-                    <div className="min-w-0">
-                      <h2 className="flex items-center gap-1.5 text-lg font-medium tracking-[-0.02em] sm:text-xl">
+                    <div className="flex items-baseline justify-between gap-6">
+                      <h2 className="min-w-0 text-lg font-medium tracking-[-0.02em] sm:text-xl">
                         {job.title}
-                        <ArrowUpRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
                       </h2>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {[job.company, job.location, job.workType].filter(Boolean).join(" · ")}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground/80">
-                        {job.positionGroup}
+                      {/* The one fact a candidate decides on. */}
+                      <p
+                        className={cn(
+                          "shrink-0 text-sm tabular-nums",
+                          !job.isOpen && "text-brand-navy",
+                          job.isOpen && job.remainingDays <= 3 && "font-medium text-brand",
+                          job.isOpen && job.remainingDays > 3 && "text-muted-foreground",
+                        )}
+                      >
                         {job.isOpen
-                          ? ` · ${job.remainingDays} хоног үлдсэн`
-                          : " · хугацаа дууссан"}
+                          ? `${job.remainingDays} хоног үлдсэн`
+                          : "Хугацаа дууссан"}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full border border-border/70 px-4 py-2 text-sm font-medium transition-colors group-hover:border-transparent group-hover:bg-foreground group-hover:text-background">
-                      Дэлгэрэнгүй
-                    </span>
+
+                    <p className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                      {[job.company, job.location, job.workType, job.positionGroup]
+                        .filter(Boolean)
+                        .map((detail) => (
+                          <span key={detail}>{detail}</span>
+                        ))}
+                    </p>
+
+                    <FuelLine remainingDays={job.remainingDays} className="mt-6" />
                   </Link>
                 </li>
               ))}
