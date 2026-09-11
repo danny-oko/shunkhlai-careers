@@ -1,48 +1,41 @@
 ---
 name: loop-constraints
 description: >
-  Read loop-constraints.md at the start of every run and enforce every rule.
-  This skill runs BEFORE triage or any action skill. Constraints are binding.
+  Read loop-constraints.md and enforce it. Runs before triage or any action
+  skill on shunkhlai-careers. The rules there are binding.
 user_invocable: true
 ---
 
-# Loop Constraints Enforcer
+# Constraints enforcer
 
-You are the guardrail. Before any other work begins, you MUST:
+Before any other work:
 
-1. Read `loop-constraints.md` from the project root.
-2. Load every rule into your working memory.
-3. Check if `loop-pause-all` is active → exit immediately.
-4. Apply these rules to EVERY action that follows.
+1. Read `loop-constraints.md` from the repo root, in full.
+2. Hold every rule for the rest of the run.
+3. If `loop-pause-all` is set anywhere in it, stop immediately and say so.
 
 ## How to enforce
 
-- Before pushing: re-read the Push & Merge section. If ANY rule blocks it, stop and tell the human.
-- Before editing a file: re-read the Paths section. If the path matches a denylist pattern, escalate.
-- Before proposing a fix: re-read the Code section. Run tests. One fix per run.
-- Before merging: re-read the Push & Merge section. Human must approve.
+- **Before editing a file:** check it against the fenced paths. If it is
+  fenced, stop and ask. Do not edit and apologise afterwards.
+- **Before pushing:** re-read Push & Merge. Pushing without telling the owner
+  breaks a rule. Draft PRs only; never mark ready, never merge.
+- **Before claiming a fix works:** `bun run test`, `bun run lint`,
+  `bun run build`. All three, actually run. A change outside the three tested
+  modules is not tested — say so.
+- **Before calling a branch unmerged:** this repo squash-merges, so
+  `git branch --contains` lies. Compare content: `git diff --stat main..<branch>`.
 
-## Output at start of run
+## When a rule points at a file that no longer exists
 
-Always begin with a one-line confirmation:
+Refactors move things. A rule naming a deleted path is a guard rail
+protecting nothing — it has already happened once here, when PR #4 replaced
+`src/lib/api.ts` with `src/lib/api/`.
 
-```
-Constraints loaded from loop-constraints.md: N rules active.
-```
+Do **not** quietly skip such a rule. Raise it as a High Priority item in
+`STATE.md` so a human repoints it.
 
-If no `loop-constraints.md` exists, say so and proceed with default safety rules from `docs/safety.md`.
+## Scope discipline
 
-## Interaction with other skills
-
-- `loop-triage` — constraints may override triage priority (e.g. "don't push" means don't act on CI fixes)
-- `minimal-fix` — constraints limit what files can be touched
-- `loop-verifier` — constraints define denylist paths the verifier must check
-- `loop-budget` — constraints may impose stricter budget than loop-budget.md
-
-## Default constraints (when no file exists)
-
-If `loop-constraints.md` is absent, enforce these minimums:
-- Never edit `.env`, `.env.*`, `auth/`, `payments/`, `secrets/`, `credentials/`
-- Never auto-merge to main
-- Never disable tests
-- Escalate after 3 failed fix attempts
+One slice, one worktree, one draft PR. If a fix starts pulling in unrelated
+files, stop and report that the slice was too big — do not keep going.
