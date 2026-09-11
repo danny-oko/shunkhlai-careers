@@ -36,7 +36,10 @@ function base(row: JobListRow | JobOrder): Job {
     positionType: (row.postype ?? "").trim(),
     statusId: row.status ?? 0,
     status: (row.statusname ?? "").trim(),
-    postedAt: row.advbegindate ?? row.requestdate ?? "",
+    // `||`, not `??`: the backend sends "" for a date it does not have, and
+    // an empty advert start date must still fall through to the request date
+    // or the row sorts to the bottom of the list forever.
+    postedAt: row.advbegindate || row.requestdate || "",
     closesAt: row.advenddate ?? "",
     remainingDays: row.remainingdays ?? 0,
     isOpen: (row.remainingdays ?? 0) >= 0,
