@@ -6,20 +6,24 @@
 
 ## The one sentence
 
-> By **<DATE — see Open decisions>**, a candidate can find a job on a phone, in
-> Mongolian, and submit an application that reaches the real recruitment
-> backend at `careers.shunkhlai.mn`; and an HR user can sign in at `/admin`
-> and manage the careers content behind it.
+> By **2026-09-15**, a candidate can find a job on a phone, in Mongolian, and
+> submit an application that reaches the real recruitment backend at
+> `careers.shunkhlai.mn`; and an HR user can sign in at `/admin` and manage
+> the careers content behind it.
 
-## Scope — three surfaces, one app
+## Scope — two surfaces, one app
 
 Not a monorepo. Everything lives in this Next.js app router.
 
-| Surface | Routes | State today |
-|---|---|---|
-| Landing | `/`, `/about` | Built, runs on mock data |
-| Careers | `/careers`, `/careers/[id]`, apply flow | Built, runs on mock data |
-| Admin | `/admin/login`, `/admin/**` | **Does not exist yet** |
+| Surface | Routes | Owner | State today |
+|---|---|---|---|
+| Careers | `/careers`, `/careers/[id]`, apply flow | **us** | Built, on mock data |
+| Admin | `/admin/login`, `/admin/**` | **us** | **Does not exist yet** |
+| Landing | `/`, `/about` | a teammate | not our scope |
+
+The landing page is someone else's work. Do not change `/`, `/about`, or
+`src/components/landing/*` and `src/components/aboutUs/*` except where a
+shared token or component we own forces it — and say so when it does.
 
 ## Done means
 
@@ -43,6 +47,9 @@ Each line is true or false. No judgement calls.
 - [ ] HR can create, read, update and delete everything the documented admin
       API allows: company info, recruitment sliders, news, video, internship
       page and its images
+- [ ] Job, department and application-status management is **either** built
+      against real endpoints the company supplies, **or** explicitly deferred
+      in writing — never faked against a mock
 - [ ] An unauthenticated request to any `/admin/**` route redirects to login
 - [ ] Admin screens are responsive; a phone is a legitimate way to use them
 
@@ -93,6 +100,7 @@ never hand-edited — wrap it or pass a className at the call site.
 
 Reported as Noise, however tempting.
 
+- The landing page and `/about` — a teammate owns those
 - Visual polish on pages that already work — hero variants, animation, spacing
 - Candidate `/account/*` beyond what applying requires
 - Test coverage beyond the three covered modules, unless a bug lands on the
@@ -100,17 +108,18 @@ Reported as Noise, however tempting.
 - Further brand extraction; `docs/brand.md` is enough
 - Anything that needs a backend endpoint that does not exist yet
 
-## Open decisions — answer these two first
+## The admin API gap — confirmed, waiting on the company
 
-**1. The date is four days away.**
-The brief says 2026-09-15. Today is 2026-09-11. Landing plus careers plus a
-new admin area plus first contact with a live backend is not four days of
-work. Either this is a demo milestone with a narrower done-list, or the date
-moves. Pick one and write it into the sentence above.
+Both documents have been read end to end:
 
-**2. The admin API does not cover half of what the brief asks for.**
-`Recruitment_API_Endpoint_Reference.docx` documents 117 endpoints. Exactly
-**14** accept an admin login, and all 14 are content management:
+- `Recruitment_API_Endpoint_Reference.docx` — 117 endpoints, of which **14**
+  accept an admin login, all content management
+- `Careers Web API — Үндсэн.postman_collection.json` — **55 endpoints, every
+  one applicant-facing**: register, login, profile, education, languages,
+  skills, experience, family, CV, interested jobs, open jobs, job detail,
+  send application. No admin folder, nothing under `/api/system`.
+
+What an admin can do with what we have been given:
 
 ```
 POST /api/system/saveCompanyInfo        GET /api/system/getCompanyInfo
@@ -122,16 +131,31 @@ POST /api/system/deleteInternshipImage  GET /api/applicant/getPositionsDropdown
 POST /api/system/uploadImage
 ```
 
-There is **no documented endpoint** for:
+Still missing, and needed for the admin half of this goal:
 
-- creating, editing or closing a job posting (recruitment order)
-- departments
-- accepting or declining an application
+1. **Job postings (recruitment orders)** — create, edit, close, delete. We can
+   only read them: `getRecruitmentOrderList`, `getRecruitmentOrderItem`.
+2. **Departments / position groups** — CRUD. We can only read the dropdown.
+3. **Applications** — list per posting, view an applicant, **accept or
+   decline**, move through stages. `SaveHrRecruitmentOrderApp` submits one and
+   `DeleteOrderApp` cancels it; both are the candidate's own actions.
 
-So "HR can manage everything about careers" cannot be built as stated. Either
-those endpoints exist and are missing from the doc, or the backend team has to
-add them. Ask before any admin work starts — building screens against
-endpoints that do not exist is the most expensive possible mistake here.
+### What to ask the company for
+
+The collection is titled **"Үндсэн"** — basic. That wording suggests a second
+collection exists. Ask for it by name, and for these specifically:
+
+- the admin/HR Postman collection, if there is one
+- endpoints to create, update and close a recruitment order
+- an endpoint listing applications for a given recruitment order
+- an endpoint to change an application's status (accept / decline / stage)
+- department and position-group CRUD, if HR is meant to manage those
+- which admin role each endpoint requires, and how the admin token differs
+  from the applicant token in practice
+
+Until these arrive, the admin surface is **login plus content management**,
+and that is what gets built. Do not design screens for endpoints that do not
+exist — a mock admin that cannot be wired up later is worse than no admin.
 
 ## Known risks
 
@@ -146,7 +170,10 @@ endpoints that do not exist is the most expensive possible mistake here.
 
 ## References
 
-- API: `../Recruitment_API_Endpoint_Reference.docx` — 117 endpoints
+- API reference: `../Recruitment_API_Endpoint_Reference.docx` — 117 endpoints
+- Postman: `../Careers Web API — Үндсэн.postman_collection.json` — 55
+  endpoints, applicant-side only. `{{baseUrl}}` is the API origin that
+  `NEXT_PUBLIC_API_URL` must be set to.
 - Brand: `docs/brand.md`, extracted from `../Brandbook s 4.pdf`
 - Conventions: `~/Documents/pinecone-monorepo` — eslint and file structure only
 
