@@ -87,10 +87,13 @@
   silently ignoring it.
 
 ### Verification for this repo
-- There is no test suite yet. "Tests pass" is not available as evidence.
-  Until one exists, a change is only verified if **both** succeed:
+- A change is only verified if **all three** succeed:
+  - `bun run test` (vitest; 51 unit tests over tokens, mapper, apply-schema)
   - `bun run lint`
   - `bun run build`
+- Coverage is deliberately narrow: the transport, the job mapper, and the
+  applicant schema. A change outside those three areas passes `test` without
+  being tested — say so rather than implying it is covered.
 - Never claim a fix works on the strength of reading the diff alone.
 - If a proposed fix cannot be verified by those two commands, downgrade it to a
   report-only finding in `STATE.md` and stop.
