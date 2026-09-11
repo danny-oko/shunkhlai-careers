@@ -13,14 +13,12 @@ export type JobFacets = {
   group: string;
   company: string;
   workType: string;
-  openOnly: boolean;
 };
 
 export const defaultFacets: JobFacets = {
   group: ALL,
   company: ALL,
   workType: ALL,
-  openOnly: true,
 };
 
 function tally(jobs: Job[], pick: (job: Job) => string, allLabel: string): FacetOption[] {
@@ -64,7 +62,11 @@ export function workTypeOptions(jobs: Job[]) {
 }
 
 export function matchesFacets(job: Job, facets: JobFacets): boolean {
-  if (facets.openOnly && !job.isOpen) return false;
+  // Expired adverts are never listed. There is nothing a candidate can do
+  // with a posting they cannot apply to, so this is not a facet to toggle.
+  // The detail page still renders the expired state, for anyone arriving on
+  // an old link.
+  if (!job.isOpen) return false;
   if (facets.group !== ALL && job.positionGroup !== facets.group) return false;
   if (facets.company !== ALL && job.company !== facets.company) return false;
   if (facets.workType !== ALL && job.workType !== facets.workType) return false;
@@ -79,7 +81,6 @@ export function isFiltered(facets: JobFacets): boolean {
   return (
     facets.group !== ALL ||
     facets.company !== ALL ||
-    facets.workType !== ALL ||
-    facets.openOnly !== defaultFacets.openOnly
+    facets.workType !== ALL
   );
 }
