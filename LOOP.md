@@ -1,32 +1,78 @@
-# Loop Configuration — Minimal Triage (Claude Code)
+# Loop configuration — shunkhlai-careers
 
-## Active Loops
+How agents are run against this repo. Companion to `loop-constraints.md`
+(what they may not touch) and `STATE.md` (what they found).
 
-| Pattern | Cadence | Status | Command |
-|---------|---------|--------|---------|
-| Daily Triage | 1d | L1 report-only | `/loop 1d Run $loop-triage` |
+## Level
 
-## Human Gates
+**L1 — report only.** Triage looks and writes notes. It does not edit code,
+open PRs, or comment.
 
-- No auto-fix until L2 checklist complete
-- All high-risk paths: human review required (see docs/safety.md denylist)
+Promotion to L2 (agent proposes changes, human approves each) requires a week
+of L1 reports that were *correct*. Two of the first three findings were false
+positives from squash merges; the counter starts from a clean week.
 
-## Worktrees
+| Level | What the agent may do | Status |
+|---|---|---|
+| L1 | Read, report to `STATE.md` | **current** |
+| L2 | One slice, one worktree, one draft PR | not yet |
+| L3 | Unattended | not planned |
 
-- Use `isolation: worktree` when spawning implementer sub-agents (L2+).
-- One worktree per fix attempt; discard after verifier REJECT.
+## Running it
 
-## Connectors (MCP)
+By hand, which is the only way it runs today:
 
-- MCP optional for L1 report-only loops.
-- For L2+: GitHub MCP to read CI/issues; scope connectors to read + comment only until trusted.
+```bash
+claude "Run loop-triage on this repo. Report-only. Update STATE.md."
+```
+
+Read `STATE.md` afterwards. That is the whole ritual.
+
+Nothing is scheduled. Do not schedule until the reports have earned it.
+
+## The bar
+
+A change is verified only when all three pass, actually run:
+
+```bash
+bun run test && bun run lint && bun run build
+```
+
+**bun, never npm or yarn** — this repo has `bun.lock` and nothing else.
+
+Test coverage is narrow on purpose: `api/core/tokens.ts`, `jobs/mapper.ts`,
+`apply-schema.ts`. A change elsewhere passes the suite without being tested,
+and must be described that way.
+
+## Human gates
+
+- No auto-fix at L1.
+- Draft PRs only. A human marks ready and a human merges.
+- Anything touching auth, tokens, applicant data or the apply flow needs
+  human review even when all three commands pass.
+- The fenced paths in `loop-constraints.md` are never edited without asking.
+
+## Shape of a change
+
+One slice, one worktree, one draft PR:
+
+```bash
+git worktree add ../slice-<name> -b feat/<name> main
+```
+
+The verifier runs in a **separate session** from the implementer. A checker
+that shares context with the maker is theater.
 
 ## Budget
 
-- Max sub-agent spawns per run: 0 (L1)
-- Review STATE.md daily
+- Sub-agent spawns per run at L1: **0**
+- A run that finds nothing should cost nearly nothing — record `no-op` and stop
+- See `loop-budget.md` for caps
 
-## Links
+## Local notes
 
-- Pattern: [daily-triage](../../patterns/daily-triage.md)
-- Checklist: [loop-design-checklist](../../docs/loop-design-checklist.md)
+- Port 3000 is usually the owner's dev server. Next 16 refuses a second
+  `next dev`, so verify on another port: `PORT=3100 bun run start --port 3100`
+- There is no CI. Every check above is run by hand or by an agent.
+- The repo squash-merges: `git branch --contains` reports shipped work as
+  unmerged. Judge branches by `git diff --stat main..<branch>`.

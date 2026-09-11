@@ -1,40 +1,40 @@
 ---
 name: loop-budget
-description: Check token budget and run-log spend before and after a loop run. Enforces early exit when over budget or when there is no actionable work.
+description: Check spend before and after a run on shunkhlai-careers, and exit early when there is no real work to do.
 ---
 
-# Loop Budget Guard
+# Budget guard
 
-Run at the **start** and **end** of every loop iteration.
+Run at the **start** and **end** of every loop run.
 
-## Start of run
+## Start
 
-1. Read `loop-budget.md` for daily caps and kill-switch flags.
-2. Read recent entries in `loop-run-log.md` (last 24h).
-3. Sum `tokens_estimate` for the active pattern today.
-4. If spend ≥ 80% of the pattern's daily cap → **report-only mode** (no sub-agents, no auto-fix).
-5. If spend ≥ 100% or `loop-pause-all` is set → **exit immediately** with a one-line note in STATE.md.
-6. If watchlist/state has no actionable items → **exit in <5k tokens** (do not spawn sub-agents).
+1. Read `loop-budget.md` for caps and kill-switch flags.
+2. Sum `tokens_estimate` in `loop-run-log.md` for today.
+3. At **80%** of the cap → report-only: no sub-agents, no fixes.
+4. At **100%**, or if `loop-pause-all` is set → stop, leave one line in
+   `STATE.md` saying why.
+5. **If `STATE.md` has no actionable item, exit now.** A run that finds
+   nothing should cost almost nothing. Do not go looking for work to justify
+   the run — that is how a loop invents busywork.
 
-## End of run
+## What a run costs here
 
-Append one JSON object to `loop-run-log.md`:
+The whole-repo survey is cheap; the expensive parts are the browser and the
+build. Budget accordingly:
 
-```json
-{
-  "run_id": "<ISO8601>",
-  "pattern": "<pattern-id>",
-  "duration_s": <number>,
-  "items_found": <number>,
-  "actions_taken": <number>,
-  "escalations": <number>,
-  "tokens_estimate": <number>,
-  "outcome": "no-op | report-only | fix-proposed | escalated"
-}
-```
+- `bun run test` + `bun run lint` — seconds, negligible
+- `bun run build` — the slow one, and worth it: it is the only check that
+  catches a type error
+- Browser verification — only for a change that is visibly rendered. Do not
+  start a server to verify a change the browser cannot show.
 
-## Rules
+Sub-agent spawns are the real cost multiplier. At L1 the cap is **0**.
 
-- Never exceed `max sub-agent spawns/run` from `loop-budget.md`.
-- High-cadence patterns (CI Sweeper, PR Babysitter) **must** early-exit when nothing is actionable.
-- On self-throttle, append a line to `loop-budget.md` under **Alerts This Period**.
+## End
+
+Append one entry to `loop-run-log.md` with an honest `tokens_estimate` and an
+`outcome` of `report-only`, `fix-proposed`, `escalated` or `no-op`.
+
+If the run found nothing, `no-op` is the correct and good outcome. Record it
+as such rather than dressing up a quiet day.
