@@ -73,6 +73,8 @@ that shares context with the maker is theater.
 
 - Port 3000 is usually the owner's dev server. Next 16 refuses a second
   `next dev`, so verify on another port: `PORT=3100 bun run start --port 3100`
-- There is no CI. Every check above is run by hand or by an agent.
+- CI runs the three bar commands on every PR and every push to `main`
+  (`.github/workflows/ci.yml`). Triage should read its result rather than
+  re-running the bar itself when a PR is the subject.
 - The repo squash-merges: `git branch --contains` reports shipped work as
   unmerged. Judge branches by `git diff --stat main..<branch>`.
