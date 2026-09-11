@@ -11,6 +11,10 @@ import {
   ORIGIN_URL,
   resolveBaseUrl,
 } from "./config";
+// `request.ts` imports `http` from here in turn. Nothing is read across the
+// cycle at module-evaluation time — `unwrap` is only called inside the
+// interceptor below — so both orders of evaluation are safe.
+import { unwrap } from "./request";
 import {
   type Audience,
   clearSession,
@@ -107,7 +111,12 @@ async function refreshAccessToken(audience: Audience): Promise<string | null> {
       },
     );
 
-    const pair = readTokenPair(response.data);
+    // `response.data` is the whole `{ rettype, retmsg, retdata }` envelope —
+    // this is a bare axios call, so nothing has unwrapped it yet. Handing the
+    // envelope straight to `readTokenPair` found no token at its top level and
+    // threw away a perfectly good refresh. `unwrap` also refuses a non-zero
+    // `rettype`, so a refusal delivered with HTTP 200 cannot yield a token.
+    const pair = readTokenPair(unwrap(response.data));
     if (!pair) return null;
 
     storeSession(pair, audience);
