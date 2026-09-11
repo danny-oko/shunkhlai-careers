@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Agent worktrees. The Agent tool creates these inside the repo, so without
+# this they show up as untracked and one `git add .` commits a second full
+# copy of the project.
+/.claude/worktrees/

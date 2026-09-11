@@ -25,7 +25,17 @@ const GENERATED = [
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  globalIgnores([
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    // Agent worktrees are full copies of this project living inside it.
+    // Without this, `bun run lint` lints the whole repo twice — 12,858
+    // problems the first time this happened. CI never sees it, because CI
+    // checks out fresh, so it only ever breaks locally.
+    ".claude/worktrees/**",
+  ]),
 
   {
     files: ["src/**/*.{ts,tsx}"],
