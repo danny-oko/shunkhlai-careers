@@ -11,7 +11,13 @@ user_invocable: true
 Produce a short, prioritised list of things worth acting on. Write it to
 `STATE.md` and append one JSON entry to `loop-run-log.md`.
 
-Read `loop-constraints.md` first. Its rules bind this run.
+Read `GOAL.md` first, then `loop-constraints.md`. The goal decides what
+counts as important; the constraints decide what you may not touch. Both bind
+this run.
+
+If `GOAL.md` is missing or its date has passed, say so as the first line of
+the report and fall back to "what is broken" — but say that you are doing it,
+because an expired goal makes every priority below it a guess.
 
 ## Gather
 
@@ -56,7 +62,16 @@ Run 1 of this loop got this wrong twice. Do not repeat it.
 
 ## Priorities for this project
 
-High Priority is for things a reasonable person wants to know **today**:
+Rank against `GOAL.md`, not against how interesting the work is:
+
+- **High Priority** — blocks a "Done means" line, or a listed risk is coming
+  true
+- **Watch** — will block one later
+- **Noise** — everything else, *including* anything under "Not this cycle".
+  Work listed there is out of scope by decision, not by oversight: report it
+  as Noise and do not argue for it.
+
+On top of the goal, these are always High Priority:
 
 - `main` failing any of the three verification commands
 - A route 500ing in production (`/careers` has done this before: a server

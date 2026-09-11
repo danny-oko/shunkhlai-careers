@@ -1,7 +1,11 @@
 # Loop configuration — shunkhlai-careers
 
-How agents are run against this repo. Companion to `loop-constraints.md`
-(what they may not touch) and `STATE.md` (what they found).
+How agents are run against this repo. Companion to `GOAL.md` (what we are
+trying to reach), `loop-constraints.md` (what they may not touch) and
+`STATE.md` (what they found).
+
+`GOAL.md` is read first. Without a live goal the loop can only report what is
+broken, which is a weaker filter than what is in the way.
 
 ## Level
 
