@@ -3,12 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FilterSection } from "@/components/job-filters";
+import { FuelLine } from "@/components/brand/fuel-line";
 import {
   applyFacets,
   companyOptions,
@@ -18,7 +25,7 @@ import {
   workTypeOptions,
   type JobFacets,
 } from "@/lib/jobs/filters";
-import type { Job } from "@/lib/jobs/types";
+import { ALL, type Job } from "@/lib/jobs/types";
 import type { JobFilterData } from "@/lib/api/jobs";
 import { cn } from "@/lib/utils";
 import { SectionRule } from "@/components/brand/section-rule";
@@ -73,6 +80,15 @@ export function JobBrowser({
   const hasFacets = isFiltered(facets);
   const hasQuery = Boolean(params.get("jobName") || locationId || salaryLevelId);
 
+  /* One filtering system: the search row borrows the sidebar pill's shape,
+     height and border so the two layers read as the same control set.
+     Applied here rather than in ui/input.tsx and ui/select.tsx, which the
+     shadcn CLI regenerates. */
+  const controlShape =
+    "h-11 rounded-full border-border/70 bg-background shadow-none";
+  /* The trigger sets its own height off data-size, so restate it there. */
+  const triggerShape = cn(controlShape, "w-full px-5 data-[size=default]:h-11");
+
   const filterSections = (
     <>
       <FilterSection
@@ -109,45 +125,57 @@ export function JobBrowser({
       >
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="relative sm:col-span-1">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Албан тушаалаар хайх"
               aria-label="Албан тушаалаар хайх"
-              className="pl-9"
+              className={cn(controlShape, "pl-10")}
             />
           </div>
 
           <Select
-            aria-label="Байршил"
-            value={locationId}
-            onChange={(event) => pushQuery({ locationid: event.target.value })}
+            value={locationId || ALL}
+            onValueChange={(value) =>
+              pushQuery({ locationid: value === ALL ? "" : value })
+            }
           >
-            <option value="">Бүх байршил</option>
-            {(filterData?.location ?? []).map((location) => (
-              <option key={location.entryid} value={location.entryid}>
-                {location.name} — {location.divisionname}
-              </option>
-            ))}
+            <SelectTrigger aria-label="Байршил" className={triggerShape}>
+              <SelectValue placeholder="Бүх байршил" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Бүх байршил</SelectItem>
+              {(filterData?.location ?? []).map((location) => (
+                <SelectItem key={location.entryid} value={String(location.entryid)}>
+                  {location.name} — {location.divisionname}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
 
           <Select
-            aria-label="Цалингийн түвшин"
-            value={salaryLevelId}
-            onChange={(event) => pushQuery({ salaryLevelID: event.target.value })}
+            value={salaryLevelId || ALL}
+            onValueChange={(value) =>
+              pushQuery({ salaryLevelID: value === ALL ? "" : value })
+            }
           >
-            <option value="">Бүх цалингийн түвшин</option>
-            {(filterData?.salarylevel ?? []).map((level) => (
-              <option key={level.key} value={level.key}>
-                {level.text}₮
-              </option>
-            ))}
+            <SelectTrigger aria-label="Цалингийн түвшин" className={triggerShape}>
+              <SelectValue placeholder="Бүх цалингийн түвшин" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Бүх цалингийн түвшин</SelectItem>
+              {(filterData?.salarylevel ?? []).map((level) => (
+                <SelectItem key={level.key} value={String(level.key)}>
+                  {level.text}₮
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
 
         <div className="flex gap-2">
-          <Button type="submit" className="h-9 rounded-full px-5">
+          <Button type="submit" className="h-11 rounded-full px-6">
             Хайх
           </Button>
           {hasQuery || hasFacets ? (
@@ -155,7 +183,7 @@ export function JobBrowser({
               type="button"
               variant="ghost"
               onClick={clearEverything}
-              className="h-9 rounded-full px-4"
+              className="h-11 rounded-full px-5"
             >
               <X className="size-3.5" />
               Цэвэрлэх
@@ -217,42 +245,46 @@ export function JobBrowser({
               </button>
             </div>
           ) : (
-            /* Keyed on the active facets so the entrance replays whenever the
-               result set changes. */
-            <ul key={`${facets.group}-${facets.company}-${facets.workType}-${facets.openOnly}`}>
-              {visibleJobs.map((job, index) => (
-                <li
-                  key={job.id}
-                  style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
-                  className="brand-rise border-b border-border/70"
-                >
+            <ul>
+              {visibleJobs.map((job) => (
+                <li key={job.id} className="border-b border-border/70">
                   <Link
                     href={`/careers/${job.slug}`}
-                    className="group relative isolate flex items-center justify-between gap-6 px-6 py-8 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2 sm:px-10 sm:py-10"
+                    className="group relative isolate block px-6 pt-8 pb-6 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2 sm:px-10 sm:pt-10 sm:pb-7"
                   >
                     <span
                       aria-hidden
                       className="pointer-events-none absolute inset-x-2 inset-y-2 -z-10 rounded-xl bg-muted/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100 sm:inset-x-4 sm:inset-y-3"
                     />
 
-                    <div className="min-w-0">
-                      <h2 className="flex items-center gap-1.5 text-lg font-medium tracking-[-0.02em] sm:text-xl">
+                    <div className="flex items-baseline justify-between gap-6">
+                      <h2 className="min-w-0 text-lg font-medium tracking-[-0.02em] sm:text-xl">
                         {job.title}
-                        <ArrowUpRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
                       </h2>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {[job.company, job.location, job.workType].filter(Boolean).join(" · ")}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground/80">
-                        {job.positionGroup}
+                      {/* The one fact a candidate decides on. */}
+                      <p
+                        className={cn(
+                          "shrink-0 text-sm tabular-nums",
+                          !job.isOpen && "text-brand-navy",
+                          job.isOpen && job.remainingDays <= 3 && "font-medium text-brand",
+                          job.isOpen && job.remainingDays > 3 && "text-muted-foreground",
+                        )}
+                      >
                         {job.isOpen
-                          ? ` · ${job.remainingDays} хоног үлдсэн`
-                          : " · хугацаа дууссан"}
+                          ? `${job.remainingDays} хоног үлдсэн`
+                          : "Хугацаа дууссан"}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full border border-border/70 px-4 py-2 text-sm font-medium transition-colors group-hover:border-transparent group-hover:bg-foreground group-hover:text-background">
-                      Дэлгэрэнгүй
-                    </span>
+
+                    <p className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                      {[job.company, job.location, job.workType, job.positionGroup]
+                        .filter(Boolean)
+                        .map((detail) => (
+                          <span key={detail}>{detail}</span>
+                        ))}
+                    </p>
+
+                    <FuelLine remainingDays={job.remainingDays} className="mt-6" />
                   </Link>
                 </li>
               ))}

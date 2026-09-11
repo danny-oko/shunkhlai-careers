@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Select } from "@/components/ui/native-select";
 import { applications, reference, toApiError } from "@/lib/api";
 import type { JobDetail } from "@/lib/jobs/types";
 
