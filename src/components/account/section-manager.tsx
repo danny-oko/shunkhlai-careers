@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { Select } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { toApiError } from "@/lib/api";
 import type { DropdownOption, SectionEntry, SectionResource } from "@/lib/api";

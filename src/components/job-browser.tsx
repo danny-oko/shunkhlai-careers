@@ -7,7 +7,13 @@ import { Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FilterSection } from "@/components/job-filters";
 import { FuelLine } from "@/components/brand/fuel-line";
 import {
@@ -19,7 +25,7 @@ import {
   workTypeOptions,
   type JobFacets,
 } from "@/lib/jobs/filters";
-import type { Job } from "@/lib/jobs/types";
+import { ALL, type Job } from "@/lib/jobs/types";
 import type { JobFilterData } from "@/lib/api/jobs";
 import { cn } from "@/lib/utils";
 import { SectionRule } from "@/components/brand/section-rule";
@@ -80,6 +86,8 @@ export function JobBrowser({
      shadcn CLI regenerates. */
   const controlShape =
     "h-11 rounded-full border-border/70 bg-background shadow-none";
+  /* The trigger sets its own height off data-size, so restate it there. */
+  const triggerShape = cn(controlShape, "w-full px-5 data-[size=default]:h-11");
 
   const filterSections = (
     <>
@@ -128,31 +136,41 @@ export function JobBrowser({
           </div>
 
           <Select
-            aria-label="Байршил"
-            className={cn(controlShape, "px-5")}
-            value={locationId}
-            onChange={(event) => pushQuery({ locationid: event.target.value })}
+            value={locationId || ALL}
+            onValueChange={(value) =>
+              pushQuery({ locationid: value === ALL ? "" : value })
+            }
           >
-            <option value="">Бүх байршил</option>
-            {(filterData?.location ?? []).map((location) => (
-              <option key={location.entryid} value={location.entryid}>
-                {location.name} — {location.divisionname}
-              </option>
-            ))}
+            <SelectTrigger aria-label="Байршил" className={triggerShape}>
+              <SelectValue placeholder="Бүх байршил" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Бүх байршил</SelectItem>
+              {(filterData?.location ?? []).map((location) => (
+                <SelectItem key={location.entryid} value={String(location.entryid)}>
+                  {location.name} — {location.divisionname}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
 
           <Select
-            aria-label="Цалингийн түвшин"
-            className={cn(controlShape, "px-5")}
-            value={salaryLevelId}
-            onChange={(event) => pushQuery({ salaryLevelID: event.target.value })}
+            value={salaryLevelId || ALL}
+            onValueChange={(value) =>
+              pushQuery({ salaryLevelID: value === ALL ? "" : value })
+            }
           >
-            <option value="">Бүх цалингийн түвшин</option>
-            {(filterData?.salarylevel ?? []).map((level) => (
-              <option key={level.key} value={level.key}>
-                {level.text}₮
-              </option>
-            ))}
+            <SelectTrigger aria-label="Цалингийн түвшин" className={triggerShape}>
+              <SelectValue placeholder="Бүх цалингийн түвшин" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Бүх цалингийн түвшин</SelectItem>
+              {(filterData?.salarylevel ?? []).map((level) => (
+                <SelectItem key={level.key} value={String(level.key)}>
+                  {level.text}₮
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
 

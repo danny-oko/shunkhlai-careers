@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { useDropdown } from "@/components/account/use-dropdown";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
-import { Select } from "@/components/ui/select";
+import { Select } from "@/components/ui/native-select";
 import { applications, reference, toApiError } from "@/lib/api";
 import type { InterestedJobRow } from "@/lib/api/applications";
 
