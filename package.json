@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:strict": "node scripts/lint-changed.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -34,6 +35,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "eslint-plugin-no-secrets": "^2.3.3",
+    "eslint-plugin-unicorn": "^74.0.0",
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
