@@ -15,8 +15,16 @@ Read `loop-constraints.md` first. Its rules bind this run.
 
 ## Gather
 
-There is **no CI in this repo** — no `.github/workflows/`. Nothing reports
-failures on its own, so collect the signal yourself:
+CI runs the three bar commands on every PR and every push to `main`
+(`.github/workflows/ci.yml`), so a red run is now a signal you can read
+rather than reproduce:
+
+```bash
+gh run list --limit 5
+gh pr checks <number>
+```
+
+Collect the rest yourself:
 
 ```bash
 git fetch --prune origin
@@ -26,8 +34,8 @@ git log --oneline origin/main -12
 git status --short
 ```
 
-Then run the verification bar on `main` so the report says whether the
-codebase is currently green:
+If CI is green on `main`, say so and move on. Run the bar locally only when
+CI has not reported — an unpushed branch, or a workflow that did not fire:
 
 ```bash
 bun run test && bun run lint && bun run build
@@ -58,7 +66,7 @@ Run 1 of this loop got this wrong twice. Do not repeat it.
 
 High Priority is for things a reasonable person wants to know **today**:
 
-- `main` failing any of the three verification commands
+- CI red on `main`
 - A route 500ing in production (`/careers` has done this before: a server
   render cannot reach this app's own mock routes over HTTP — see
   `src/lib/jobs/local.ts`)

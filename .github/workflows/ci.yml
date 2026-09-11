@@ -1,0 +1,49 @@
+# The verification bar, enforced.
+#
+# These are the same three commands `loop-constraints.md` requires before any
+# change is called verified. Running them here means a PR cannot claim to be
+# green on someone's word — and `main` stops depending on whoever last
+# remembered to check.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push supersedes the run in flight for the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Matches "packageManager" in package.json. This project uses bun,
+          # not npm: `npm install` here would generate a second lockfile.
+          bun-version: 1.3.14
+
+      # --frozen-lockfile fails rather than silently resolving a different
+      # tree than the one committed.
+      - run: bun install --frozen-lockfile
+
+      # Ordered cheapest-first so an obvious break reports in seconds.
+      # Each step runs even if an earlier one failed, so one push gives the
+      # whole picture instead of one error at a time.
+      - name: Tests
+        run: bun run test
+
+      - name: Lint
+        if: '!cancelled()'
+        run: bun run lint
+
+      - name: Build
+        if: '!cancelled()'
+        run: bun run build
