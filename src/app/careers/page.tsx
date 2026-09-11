@@ -37,7 +37,7 @@ export default async function CareersPage({ searchParams }: PageProps<"/careers"
     <main className="flex-1 pt-16">
       <CareersHero roleCount={openCount} />
 
-      <div className="mx-auto w-full max-w-6xl">
+      <div id="jobs" className="mx-auto w-full max-w-6xl scroll-mt-16">
         <JobBrowser jobs={jobs} filterData={filterData} />
       </div>
     </main>
