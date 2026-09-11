@@ -39,11 +39,15 @@ function storage(): Storage | null {
 }
 
 export function readAccessToken(audience: Audience = "applicant"): string | null {
-  return storage()?.getItem(KEYS[audience].access) ?? null;
+  return readKey(KEYS[audience].access);
 }
 
 export function readRefreshToken(audience: Audience = "applicant"): string | null {
-  return storage()?.getItem(KEYS[audience].refresh) ?? null;
+  return readKey(KEYS[audience].refresh);
+}
+
+function readKey(key: string): string | null {
+  return storage()?.getItem(key) ?? null;
 }
 
 export function storeSession(pair: TokenPair, audience: Audience = "applicant"): void {
@@ -51,10 +55,17 @@ export function storeSession(pair: TokenPair, audience: Audience = "applicant"):
   if (!store) return;
 
   store.setItem(KEYS[audience].access, pair.accessToken);
-  if (pair.refreshToken) {
-    store.setItem(KEYS[audience].refresh, pair.refreshToken);
-  }
+  writeIfPresent(store, KEYS[audience].refresh, pair.refreshToken);
   notify(audience);
+}
+
+/**
+ * A refresh can answer with a new access token and no new refresh token.
+ * Writing the null over the stored one would end the session at the refresh
+ * after that, so an absent value leaves what is already there alone.
+ */
+function writeIfPresent(store: Storage, key: string, value: string | null): void {
+  if (value) store.setItem(key, value);
 }
 
 export function clearSession(audience: Audience = "applicant"): void {
@@ -85,19 +96,29 @@ function notify(audience: Audience) {
  *
  * `SaveHrAppUser` answers with `retdata.access_token` / `retdata.refresh_token`
  * (see the collection's own test script, which stores exactly these).
+ *
+ * The argument is `retdata`, never the envelope around it. Stripping the
+ * envelope — and refusing a non-zero `rettype` while doing so — is `unwrap()`'s
+ * job in `request.ts`; every caller goes through it first.
  */
 export function readTokenPair(retdata: unknown): TokenPair | null {
-  if (typeof retdata !== "object" || retdata === null) return null;
-  const record = retdata as Record<string, unknown>;
+  const record = asRecord(retdata);
+  if (!record) return null;
 
-  const accessToken = pickString(record, "access_token") ?? pickString(record, "accessToken");
+  const accessToken = pickEither(record, "access_token", "accessToken");
   if (!accessToken) return null;
 
-  return {
-    accessToken,
-    refreshToken:
-      pickString(record, "refresh_token") ?? pickString(record, "refreshToken") ?? null,
-  };
+  return { accessToken, refreshToken: pickEither(record, "refresh_token", "refreshToken") };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null) return null;
+  return value as Record<string, unknown>;
+}
+
+/** The service spells these snake_case; some payloads use camelCase. */
+function pickEither(record: Record<string, unknown>, snake: string, camel: string): string | null {
+  return pickString(record, snake) ?? pickString(record, camel);
 }
 
 function pickString(record: Record<string, unknown>, key: string): string | null {
