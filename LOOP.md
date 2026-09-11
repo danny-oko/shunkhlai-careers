@@ -67,9 +67,43 @@ git worktree add ../slice-<name> -b feat/<name> main
 The verifier runs in a **separate session** from the implementer. A checker
 that shares context with the maker is theater.
 
+## Three roles
+
+Not a hierarchy — a split of responsibility. Each role has its own context, and
+that separation is the whole point.
+
+| Role | Who | Job |
+|---|---|---|
+| Orchestrator | the session you are talking to | reads `GOAL.md`, picks the slice, spawns, reports back |
+| Implementer | `.claude/agents/loop-implementer.md`, own worktree | one slice, nothing else |
+| Verifier | `.claude/agents/loop-verifier.md`, separate session | runs the bar, tries to reject |
+
+Rules that make it worth the cost:
+
+- **The orchestrator never verifies a slice it wrote.** If it implemented,
+  a separate verifier checks. Marking your own homework is the failure this
+  split exists to prevent.
+- **The implementer never pushes, opens a PR, or merges.** It hands back a
+  branch.
+- **The verifier never fixes anything.** It describes the problem and stops.
+  A checker that also repairs has stopped being a checker.
+- Slices that touch the same files do not run in parallel. Independent ones
+  may.
+
+### What this is not
+
+A manager agent coordinating worker agents. Every spawn starts cold and
+re-derives context the orchestrator already holds, so for one repository and
+one developer the coordination costs more than it returns. Spawn a second
+agent when you need **independent judgement**, not to divide labour.
+
 ## Budget
 
-- Sub-agent spawns per run at L1: **0**
+- Sub-agent spawns per triage run at L1: **0** — a report-only survey needs no
+  help. The three-role split above is for implementation slices, and using it
+  is an L2 decision made deliberately, not drifted into.
+- Implementation slice: one implementer, one verifier. If a slice seems to need
+  more, it is scoped too large.
 - A run that finds nothing should cost nearly nothing — record `no-op` and stop
 - See `loop-budget.md` for caps
 
