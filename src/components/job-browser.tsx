@@ -187,17 +187,6 @@ export function JobBrowser({
         >
           <div className="lg:sticky lg:top-16">
             {filterSections}
-            <label className="flex cursor-pointer items-center gap-3 px-6 py-5 text-sm">
-              <input
-                type="checkbox"
-                checked={facets.openOnly}
-                onChange={(event) =>
-                  setFacets((current) => ({ ...current, openOnly: event.target.checked }))
-                }
-                className="accent-[var(--brand)] size-4"
-              />
-              Зөвхөн нээлттэй зар
-            </label>
           </div>
         </aside>
 
@@ -219,7 +208,7 @@ export function JobBrowser({
           ) : (
             /* Keyed on the active facets so the entrance replays whenever the
                result set changes. */
-            <ul key={`${facets.group}-${facets.company}-${facets.workType}-${facets.openOnly}`}>
+            <ul key={`${facets.group}-${facets.company}-${facets.workType}`}>
               {visibleJobs.map((job, index) => (
                 <li
                   key={job.id}
