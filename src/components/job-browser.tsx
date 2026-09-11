@@ -74,6 +74,13 @@ export function JobBrowser({
   const hasFacets = isFiltered(facets);
   const hasQuery = Boolean(params.get("jobName") || locationId || salaryLevelId);
 
+  /* One filtering system: the search row borrows the sidebar pill's shape,
+     height and border so the two layers read as the same control set.
+     Applied here rather than in ui/input.tsx and ui/select.tsx, which the
+     shadcn CLI regenerates. */
+  const controlShape =
+    "h-11 rounded-full border-border/70 bg-background shadow-none";
+
   const filterSections = (
     <>
       <FilterSection
@@ -110,18 +117,19 @@ export function JobBrowser({
       >
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="relative sm:col-span-1">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Албан тушаалаар хайх"
               aria-label="Албан тушаалаар хайх"
-              className="pl-9"
+              className={cn(controlShape, "pl-10")}
             />
           </div>
 
           <Select
             aria-label="Байршил"
+            className={cn(controlShape, "px-5")}
             value={locationId}
             onChange={(event) => pushQuery({ locationid: event.target.value })}
           >
@@ -135,6 +143,7 @@ export function JobBrowser({
 
           <Select
             aria-label="Цалингийн түвшин"
+            className={cn(controlShape, "px-5")}
             value={salaryLevelId}
             onChange={(event) => pushQuery({ salaryLevelID: event.target.value })}
           >
@@ -148,7 +157,7 @@ export function JobBrowser({
         </div>
 
         <div className="flex gap-2">
-          <Button type="submit" className="h-9 rounded-full px-5">
+          <Button type="submit" className="h-11 rounded-full px-6">
             Хайх
           </Button>
           {hasQuery || hasFacets ? (
@@ -156,7 +165,7 @@ export function JobBrowser({
               type="button"
               variant="ghost"
               onClick={clearEverything}
-              className="h-9 rounded-full px-4"
+              className="h-11 rounded-full px-5"
             >
               <X className="size-3.5" />
               Цэвэрлэх

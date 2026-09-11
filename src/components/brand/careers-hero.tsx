@@ -1,46 +1,40 @@
 import { FeatherLattice } from "@/components/brand/feather-lattice";
-import { GradientRule } from "@/components/brand/gradient-rule";
 import { Rise } from "@/components/brand/rise";
 
 /**
- * The page opens in Mongolian, because the people reading it work in
- * Mongolian. The slogan (brandbook p.4) carries the brand voice; it is set
- * in the specified orange dissolve but held still — the only motion here is
- * the one entrance.
+ * A short band, not a landing hero. People arrive here to find a job, so the
+ * page spends its vertical space on the list and lets the headline share a
+ * row with the slogan instead of stacking under it.
+ *
+ * The slogan is set in flat brand orange rather than the dissolve: the
+ * brandbook permits collapsing the gradient to a single colour (1.4.1), and
+ * on this page the gradient is reserved for the fuel lines, where it carries
+ * information rather than decorating.
  */
 export function CareersHero({ roleCount }: { roleCount: number }) {
   return (
-    <section className="relative isolate overflow-hidden">
+    <section className="relative isolate overflow-hidden border-b border-border/70">
       <FeatherLattice
-        className="-z-10 opacity-40 [mask-image:radial-gradient(ellipse_70%_60%_at_50%_35%,black_20%,transparent_100%)]"
+        className="-z-10 opacity-25 [mask-image:radial-gradient(ellipse_70%_70%_at_50%_40%,black_10%,transparent_100%)]"
         tone="brand"
       />
 
-      <div className="mx-auto max-w-6xl px-6 pt-20 pb-16 sm:pt-28 lg:px-10">
-        <Rise>
-          <h1 className="max-w-3xl text-4xl leading-[1.04] font-semibold tracking-[-0.035em] text-balance sm:text-6xl">
-            Нээлттэй ажлын байр
-          </h1>
-        </Rise>
+      <div className="mx-auto max-w-6xl px-6 pt-12 pb-10 sm:pt-16 lg:px-10">
+        <Rise className="flex flex-col gap-x-10 gap-y-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-3xl leading-[1.05] font-semibold tracking-[-0.03em] text-balance sm:text-5xl">
+              Нээлттэй ажлын байр
+            </h1>
+            <p className="mt-3 text-base text-muted-foreground">
+              <span className="font-medium text-foreground tabular-nums">
+                {roleCount}
+              </span>{" "}
+              ажлын байр нээлттэй байна.
+            </p>
+          </div>
 
-        <Rise delay={110} className="mt-7">
-          <p className="brand-dissolve max-w-2xl text-xl leading-[1.3] font-semibold tracking-[-0.015em] text-balance sm:text-2xl">
+          <p className="text-brand max-w-xs text-base leading-snug font-medium text-pretty md:text-right">
             Хөгжлийн төлөөх хөдөлгүүр бүрийг тэжээнэ
-          </p>
-        </Rise>
-
-        <Rise delay={200} className="mt-9">
-          <GradientRule className="max-w-[7rem] rounded-full" />
-        </Rise>
-
-        <Rise delay={280}>
-          <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted-foreground text-pretty">
-            Шунхлай нь Монголын эрчим хүч, тээвэр, дижитал дэд бүтцийг
-            бүтээдэг.{" "}
-            <span className="font-medium text-foreground tabular-nums">
-              Одоо {roleCount} ажлын байр нээлттэй
-            </span>{" "}
-            байна.
           </p>
         </Rise>
       </div>
