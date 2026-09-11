@@ -6,7 +6,6 @@ import { LoaderLogo } from "@/components/landing/loader-logo";
 import { LoaderTicker } from "@/components/landing/loader-ticker";
 import { MongoliaMap } from "@/components/landing/mongolia-map";
 import { useReducedMotion } from "@/components/landing/use-scroll-progress";
-import { careerFields, provinces } from "@/lib/company";
 import { cn } from "@/lib/utils";
 
 /** The count and the province names share this run and finish together. */
@@ -27,10 +26,20 @@ type Phase = "counting" | "naming" | "flying" | "done";
  * map, the panels sweep the screen away behind it, and it flies into the
  * header's brand where the page takes over.
  *
+ * `provinces` and `groups` are the recruitment system's own location and
+ * position-group lists, handed down from the page. Either can arrive empty if
+ * the API is unreachable, and the screen simply drops that line.
+ *
  * Page scrolling is held for the ~3.9s this takes and released on the way
  * out, including if the component is unmounted early.
  */
-export function SiteLoader() {
+export function SiteLoader({
+  provinces,
+  groups,
+}: {
+  provinces: string[];
+  groups: string[];
+}) {
   const isReduced = useReducedMotion();
   const [progress, setProgress] = React.useState(0);
   const [phase, setPhase] = React.useState<Phase>("counting");
@@ -83,8 +92,8 @@ export function SiteLoader() {
   const isFlying = phase === "flying";
   const count = Math.round(progress * 100);
   const province = Math.min(
-    Math.round(progress * (provinces.length - 1)),
-    provinces.length - 1,
+    Math.round(progress * Math.max(provinces.length - 1, 0)),
+    Math.max(provinces.length - 1, 0),
   );
 
   return (
@@ -122,11 +131,13 @@ export function SiteLoader() {
               <span className="font-mono text-5xl leading-none font-medium tabular-nums sm:text-7xl">
                 {String(count).padStart(3, "0")}
               </span>
-              <LoaderTicker
-                items={provinces}
-                index={province}
-                className="text-muted-foreground"
-              />
+              {provinces.length > 0 && (
+                <LoaderTicker
+                  items={provinces}
+                  index={province}
+                  className="text-muted-foreground"
+                />
+              )}
             </div>
 
             {/* Takes the same centre once the two readouts have finished. */}
@@ -144,11 +155,13 @@ export function SiteLoader() {
           className="flex justify-end transition-opacity duration-300"
           style={{ opacity: isCounting ? 1 : 0 }}
         >
-          <LoaderTicker
-            items={careerFields.map((field) => field.name)}
-            intervalMs={520}
-            className="text-muted-foreground"
-          />
+          {groups.length > 0 && (
+            <LoaderTicker
+              items={groups}
+              intervalMs={520}
+              className="text-muted-foreground"
+            />
+          )}
         </div>
       </div>
     </div>

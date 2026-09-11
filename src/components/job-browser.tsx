@@ -21,6 +21,7 @@ import {
 import type { Job } from "@/lib/jobs/types";
 import type { JobFilterData } from "@/lib/api/jobs";
 import { cn } from "@/lib/utils";
+import { SectionRule } from "@/components/brand/section-rule";
 
 /**
  * Two filter layers, matching what the API actually supports.
@@ -97,7 +98,8 @@ export function JobBrowser({
   );
 
   return (
-    <div className="border-t border-border/70">
+    <div className="relative">
+      <SectionRule />
       <form
         className="grid gap-3 border-b border-border/70 px-6 py-5 sm:grid-cols-[minmax(0,1fr)_auto] lg:px-10"
         onSubmit={(event) => {

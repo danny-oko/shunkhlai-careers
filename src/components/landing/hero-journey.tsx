@@ -2,92 +2,112 @@
 
 import * as React from "react";
 
-import { Tanker } from "@/components/landing/tanker";
+import { RoadScene } from "@/components/landing/road-scene";
+import { StatementLayer } from "@/components/landing/statement-layer";
 import { useScrollProgress } from "@/components/landing/use-scroll-progress";
 import { useScrollSpeed } from "@/components/landing/use-scroll-speed";
 import { cn } from "@/lib/utils";
-
-/** Degrees of wheel rotation across the whole run. */
-const WHEEL_TURN = 2900;
-
-const legs = [
-  { at: 0, title: "Агуулахаас замд", note: "8 агуулах · тээврийн флот" },
-  { at: 0.38, title: "21 аймгийн зам дээр", note: "Улаанбаатараас алслагдсан сум хүртэл" },
-  { at: 0.72, title: "99+ станцад хүрнэ", note: "Өдөр бүр, цаг агаараас үл хамааран" },
-];
+import { SectionRule } from "@/components/brand/section-rule";
 
 /**
- * The road leg of the hero: a tanker held in the middle of a pinned stage
- * while the world is pulled past it, so scrolling reads as driving.
+ * The runway, in shares of its own length. The three overlap on purpose: the
+ * tanker is already on its way in while the sentence is still dissolving, and
+ * the instruments arrive last, so nothing in the scene changes hands abruptly.
  *
- * Everything moves off one scroll position — the wheels, the road markings,
- * the type behind — and the gauge in the corner reports how fast the reader
- * is actually scrolling.
+ * The shares are small because the section is long: at 520svh the opening
+ * takes about a screen of scroll and everything after it is the drive. They
+ * were tuned against a 320svh section, and lengthening that stretched the
+ * opening along with the run — which left the ink band empty far too long.
+ */
+const STATEMENT_OUT = [0, 0.16] as const;
+const TANKER_IN = [0.05, 0.22] as const;
+const INSTRUMENTS_IN = [0.15, 0.26] as const;
+
+const clamp = (value: number) => Math.min(Math.max(value, 0), 1);
+
+/** Position within a sub-range of the runway, 0 to 1. */
+const ramp = (value: number, [from, to]: readonly [number, number]) =>
+  clamp((value - from) / (to - from));
+
+/** Gentle at both ends — nothing starts or stops with a jolt. */
+const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+/** Fast off the mark, settling in — how something arriving comes to rest. */
+const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+
+/**
+ * The sentence, then the road — one pinned stage for both.
+ *
+ * The screen opens filled by the statement. Scrolling softens and dissolves
+ * it while the tanker is already driving in from the left behind it; the
+ * ground clears last, the instruments fade up, and the run proper begins with
+ * the chain of cards streaming in along the bottom.
+ *
+ * Keeping both in one stage is what lets the tanker arrive *over* the type
+ * rather than after it.
  */
 export function HeroJourney() {
   const sectionRef = React.useRef<HTMLElement>(null);
+  const stageRef = React.useRef<HTMLDivElement>(null);
   const { progress, isReduced } = useScrollProgress(sectionRef);
-  const kmh = useScrollSpeed(!isReduced && progress > 0 && progress < 1);
+  const [isShown, setIsShown] = React.useState(false);
 
-  const leg = legs.reduce((found, item) => (progress >= item.at ? item : found), legs[0]);
+  React.useEffect(() => {
+    // Watch the stage, not the section. The section is 520svh, so a
+    // share-of-the-element threshold on it is unusable — 20% is more than a
+    // screen and never fires, and 0 fires a screen early, while the sentence
+    // is still a sliver at the bottom and the swing plays unseen. The stage
+    // is exactly one viewport tall, so 0.9 means "filling the screen now".
+    const element = stageRef.current;
+    if (!element || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setIsShown(true);
+        observer.disconnect();
+      },
+      { threshold: 0.9 },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const enter = isReduced ? 1 : easeOut(ramp(progress, TANKER_IN));
+  const exit = isReduced ? 0 : easeInOutSine(ramp(progress, STATEMENT_OUT));
+  const instruments = isReduced ? 1 : ramp(progress, INSTRUMENTS_IN);
+  const drive = isReduced
+    ? 0.35
+    : clamp((progress - TANKER_IN[1]) / (1 - TANKER_IN[1]));
+  const kmh = useScrollSpeed(!isReduced && enter > 0.9 && drive < 1);
 
   return (
     <section
       ref={sectionRef}
-      aria-label="Шунхлайн тээврийн сүлжээ"
-      className={cn("relative", isReduced ? "h-svh" : "h-[260svh]")}
+      data-statement-shown={isShown}
+      className={cn("relative", isReduced ? "h-auto" : "h-[520svh]")}
     >
-      <div className="sticky top-0 h-svh overflow-hidden">
-        {/* Campaign lockup, dragged across behind everything else. */}
-        <div
-          aria-hidden
-          className="absolute top-[38%] left-0 text-[19vw] leading-none font-semibold tracking-[-0.04em] whitespace-nowrap text-foreground/[0.055]"
-          style={{ transform: `translate3d(${18 - progress * 150}vw, -50%, 0)` }}
-        >
-          ХӨДӨЛМӨР ХӨГЖЛИЙН ХӨДӨЛГҮҮР
-        </div>
+      <SectionRule />
+      <h1 className="sr-only">Хөдөлгүүр бүрийн ард хүн байдаг</h1>
 
-        {/* Anchored to the road, then nudged down by the gap the viewBox
-            leaves below the tyres, so the wheels sit on the surface. */}
-        <div className="absolute inset-x-0 bottom-[24%] translate-y-[10.5%]">
-          <Tanker
-            className="mx-auto w-[86vw] max-w-4xl drop-shadow-[0_24px_40px_rgb(0_0_0/12%)]"
-            wheelAngle={progress * WHEEL_TURN}
-          />
-        </div>
-
-        {/* Road. The markings are one repeating gradient, slid left. */}
-        <div className="absolute inset-x-0 bottom-0 h-[24%] bg-ink">
-          <div
-            aria-hidden
-            className="absolute top-1/2 left-0 h-[4px] w-[500%] -translate-y-1/2"
-            style={{
-              transform: `translate3d(${-progress * 320}%, -50%, 0)`,
-              backgroundImage:
-                "repeating-linear-gradient(90deg, color-mix(in oklab, var(--ink-muted) 55%, transparent) 0 72px, transparent 72px 156px)",
-            }}
-          />
-        </div>
-
-        {/* Gauge and leg, laid out like an instrument panel. */}
-        <div className="absolute inset-x-0 top-0 flex items-start justify-between px-6 pt-24 font-mono text-xs tracking-[0.12em] uppercase lg:px-10">
-          <span className="tabular-nums">{kmh} км/ц</span>
-          <span className="text-muted-foreground">
-            {Math.round(progress * 100)}%
-          </span>
-        </div>
-
-        <div className="absolute inset-x-0 bottom-0 px-6 pb-8 text-ink-foreground lg:px-10 lg:pb-10">
-          <div key={leg.title} className="brand-word-in">
-            <p className="text-2xl font-semibold tracking-[-0.03em] sm:text-4xl">
-              {leg.title}
-            </p>
-            <p className="mt-2 font-mono text-xs tracking-[0.1em] text-ink-muted uppercase">
-              {leg.note}
-            </p>
-          </div>
-        </div>
+      <div
+        ref={stageRef}
+        className={cn(
+          "overflow-hidden",
+          isReduced ? "relative h-svh" : "sticky top-0 h-svh",
+        )}
+      >
+        <RoadScene enter={enter} drive={drive} kmh={kmh} fade={instruments} />
+        <StatementLayer exit={exit} />
       </div>
+
+      {/* Under reduced motion the two never overlap: the sentence holds one
+          screen and the road stands still on the next. */}
+      {isReduced && (
+        <div className="relative h-svh overflow-hidden">
+          <RoadScene enter={1} drive={drive} kmh={0} />
+        </div>
+      )}
     </section>
   );
 }

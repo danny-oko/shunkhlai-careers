@@ -1,5 +1,6 @@
 import { Reveal } from "@/components/reveal";
 import { values } from "@/lib/company";
+import { SectionRule } from "@/components/brand/section-rule";
 
 /**
  * Үнэт зүйл — brandbook p.3, with a line of context under each one.
@@ -11,8 +12,9 @@ export function CoreValues() {
   return (
     <section
       id="values"
-      className="scroll-mt-20 border-t border-border/70 py-20 lg:py-28"
+      className="relative scroll-mt-20 py-20 lg:py-28"
     >
+      <SectionRule />
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
         <Reveal>
           <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">

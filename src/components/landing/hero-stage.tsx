@@ -45,7 +45,7 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
     <section
       ref={sectionRef}
       aria-label="Шунхлай — Хөдөлмөр хөгжлийн хөдөлгүүр"
-      className={cn("relative", isReduced ? "h-svh" : "h-[210svh]")}
+      className={cn("relative", isReduced ? "h-svh" : "h-[150svh]")}
     >
       <div className="sticky top-0 h-svh overflow-hidden">
         <div
@@ -74,9 +74,10 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
                 // The hero footage is the page's largest paintable element.
                 priority={index === 0}
                 sizes="100vw"
-                // Portrait phones letterbox the landscape poster against the
-                // ink ground rather than cropping the campaign lockup off it.
-                className="brand-kenburns object-contain object-top sm:object-cover sm:object-center"
+                // Filled at every size. Letterboxing phones kept the campaign
+                // lockup whole but left most of a portrait screen empty, which
+                // read as dead space rather than as design.
+                className="brand-kenburns object-cover object-center"
               />
             </div>
           ))}

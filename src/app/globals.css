@@ -323,12 +323,8 @@
   }
 }
 
-/* Only from `sm` up. Below that the hero frame is portrait and the poster is
-   letterboxed with object-contain, where a zoom would push it out of frame. */
-@media (min-width: 40rem) {
-  .brand-kenburns {
-    animation: brand-kenburns 16s ease-in-out infinite alternate;
-  }
+.brand-kenburns {
+  animation: brand-kenburns 16s ease-in-out infinite alternate;
 }
 
 /* Continuous horizontal rail. The track renders its children twice, so
@@ -420,4 +416,40 @@
 
 .loader-panel-out {
   animation: loader-panel-out 900ms cubic-bezier(0.76, 0, 0.24, 1) both;
+}
+
+/* -------------------------------------------------------------------------
+   Statement screen
+   Each line swings in on a skew and straightens as it brightens, one after
+   the next. Hidden until the screen is scrolled to, so the sequence is never
+   missed by arriving mid-way through it.
+   ---------------------------------------------------------------------- */
+
+@keyframes statement-line-in {
+  from {
+    opacity: 0;
+    transform: skewY(7deg) translateY(0.32em) scaleY(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.statement-line {
+  opacity: 0;
+  transform-origin: left center;
+}
+
+[data-statement-shown="true"] .statement-line {
+  animation: statement-line-in 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statement-line {
+    opacity: 1;
+  }
+  [data-statement-shown="true"] .statement-line {
+    animation: none;
+  }
 }

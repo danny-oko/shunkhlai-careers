@@ -3,12 +3,7 @@ import type { Metadata } from "next";
 import { SiteLoader } from "@/components/landing/site-loader";
 import { HeroStage } from "@/components/landing/hero-stage";
 import { HeroJourney } from "@/components/landing/hero-journey";
-import { CompanyStats } from "@/components/landing/company-stats";
-import { RoleSpectrum } from "@/components/landing/role-spectrum";
-import { FeaturedRoles } from "@/components/landing/featured-roles";
-import { AcademyVoices } from "@/components/landing/academy-voices";
-import { JourneyCta } from "@/components/landing/journey-cta";
-import { listJobsSafe } from "@/lib/jobs";
+import { getFilterData, listJobsSafe } from "@/lib/jobs";
 
 /**
  * Postings are read with axios, which Next cannot see the way it sees `fetch`,
@@ -33,19 +28,21 @@ export const metadata: Metadata = {
 };
 
 export default async function LandingPage() {
-  const jobs = await listJobsSafe();
+  const [jobs, filters] = await Promise.all([listJobsSafe(), getFilterData()]);
   const roleCount = jobs.length;
+
+  // Both lists are the recruitment system's own, so anything added there
+  // shows up in the opening screen without a code change.
+  const groups = (filters?.hrposgroup ?? []).map((group) => group.name);
+  const provinces = [
+    ...new Set((filters?.location ?? []).map((site) => site.divisionname)),
+  ];
 
   return (
     <main className="flex-1">
-      <SiteLoader />
+      <SiteLoader provinces={provinces} groups={groups} />
       <HeroStage roleCount={roleCount} />
       <HeroJourney />
-      <CompanyStats />
-      <RoleSpectrum />
-      <FeaturedRoles jobs={jobs} />
-      <AcademyVoices />
-      <JourneyCta roleCount={roleCount} />
     </main>
   );
 }

@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
  *
  * It lives in the lower half of the frame on purpose: the campaign posters
  * carry their own lockup across the top, so nothing here ever lands on it.
+ * The page's headline is not here — it has a screen of its own, in
+ * <StatementScreen>, straight after this one.
  */
 export function HeroOverlay({
   slide,
@@ -26,23 +28,15 @@ export function HeroOverlay({
   return (
     <div className="absolute inset-x-0 bottom-0 text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 pb-10 sm:pb-14 lg:px-10 lg:pb-16">
-        <div>
-          <p className="text-[0.75rem] font-medium tracking-[0.16em] uppercase opacity-80 sm:text-[0.8125rem]">
-            Шунхлай ХХК · Careers
-          </p>
-
-          <h1 className="mt-4 max-w-4xl text-[2.1rem] leading-[0.98] font-semibold tracking-[-0.045em] text-balance [text-shadow:0_2px_24px_rgb(0_0_0/45%)] sm:text-6xl lg:text-7xl">
-            Хөдөлгүүр бүрийн ард{" "}
-            <span className="text-brand-2">хүн</span> байдаг
-          </h1>
-
-          <p
-            key={slide.word}
-            className="brand-word-in mt-5 text-base font-medium tracking-[-0.01em] opacity-90 sm:text-lg"
-          >
-            Хөдөлмөр {slide.word} хөдөлгүүр · {slide.caption}
-          </p>
-        </div>
+        <p
+          key={slide.word}
+          className="brand-word-in text-lg font-semibold tracking-[-0.02em] [text-shadow:0_2px_24px_rgb(0_0_0/45%)] sm:text-3xl"
+        >
+          Хөдөлмөр {slide.word} хөдөлгүүр
+          <span className="mt-1 block text-sm font-medium opacity-75 sm:text-base">
+            {slide.caption} · {slide.captionEn}
+          </span>
+        </p>
 
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="flex flex-wrap items-center gap-3">

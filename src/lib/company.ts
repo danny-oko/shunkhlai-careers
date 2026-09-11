@@ -1,9 +1,8 @@
 /**
  * Company facts shown across the landing and About pages.
  *
- * Everything here comes from the careers brief (Shunkhlai_Careers_Brief_Plan).
- * Copy marked TODO(HR) is a placeholder the HR team still has to sign off on —
- * the brief puts final wording and imagery on their side.
+ * Wording is HR's own, from Shunkhlai_Content_Plan.docx. Anything still
+ * awaiting them is marked TODO(HR) with what is outstanding.
  */
 
 export type Stat = {
@@ -15,12 +14,17 @@ export type Stat = {
   labelEn: string;
 };
 
+/**
+ * Content plan 1.2 — the four figures HR published, in their order.
+ *
+ * Unreferenced at the moment: the landing page's statistics section was taken
+ * down to be rebuilt. Kept because this is HR's published copy, not scaffolding.
+ */
 export const stats: Stat[] = [
   { value: 30, suffix: "+", label: "жилийн туршлага", labelEn: "years of operation" },
   { value: 21, label: "аймагт салбартай", labelEn: "provinces covered" },
   { value: 99, suffix: "+", label: "шатахуун түгээх станц", labelEn: "fuel stations" },
-  { value: 8, label: "агуулах", labelEn: "storage depots" },
-  { value: 1, label: "итгэмжлэгдсэн лаборатори", labelEn: "accredited laboratory" },
+  { value: 8, label: "бүсийн агуулах", labelEn: "regional depots" },
 ];
 
 export type Milestone = {
@@ -30,51 +34,49 @@ export type Milestone = {
   body: string;
 };
 
-/** TODO(HR): confirm the exact years behind the decade-level entries. */
+/** Content plan 2.1 — HR's own history text, broken into the rail's stops. */
 export const milestones: Milestone[] = [
   {
     period: "1993",
-    title: "Эхлэл — авто засвар үйлчилгээ",
-    body: "Шунхлай ХХК авто засвар, үйлчилгээний жижиг багаар үйл ажиллагаагаа эхлүүлж, машин техникийн ард ажилладаг хүмүүсийн соёлыг тэр цагаас өвлөн авсан.",
+    title: "Зах зээлийн эхэн үед",
+    body: "Монгол Улс зах зээлийн эдийн засагт шилжиж, салбар бүрт хувийн хэвшил бий болж байх үед үүсгэн байгуулагдсан компаниудын нэг нь Шунхлай ХХК юм. Авто засварын үйлчилгээгээр үйл ажиллагаагаа эхлүүлсэн.",
   },
   {
-    period: "1990-ээд",
-    title: "Газрын тосны салбар руу",
-    body: "Засварын үйлчилгээнээс газрын тосны бүтээгдэхүүний импорт, худалдаа руу шилжиж, өнөөгийн үндсэн бизнесийн суурийг тавьсан.",
-  },
-  {
-    period: "2000-аад",
-    title: "ШТС-ын сүлжээ",
-    body: "Улаанбаатар хотод шатахуун түгээх станцын сүлжээгээ өргөжүүлж, жижиглэн худалдааны стандарт, үйлчилгээний соёлоо тогтоосон.",
-  },
-  {
-    period: "2010-аад",
-    title: "Улс даяар",
-    body: "Орон нутгийн салбар, агуулахын сүлжээ, өөрийн тээврийн флотыг байгуулж, нийслэлээс гадуур найдвартай хангамжийг бий болгосон.",
+    period: "Удалгүй",
+    title: "Газрын тосны салбарт",
+    body: "Газрын тосны салбарт орж, хэрэглэгчдэд илүү боломж, шударга өрсөлдөөнийг бий болгосон.",
   },
   {
     period: "Өнөөдөр",
-    title: "Хөдөлмөр — хөгжлийн хөдөлгүүр",
-    body: "21 аймагт 99 гаруй ШТС, 8 агуулах, тээврийн флот, улсын итгэмжлэгдсэн чанарын шинжилгээний лабораторитойгоор Монгол улсын хөдөлгүүр бүрийг тэжээж байна.",
+    title: "Импортоос борлуулалт хүртэл",
+    body: "Улаанбаатар болон 21 аймагт 100 гаруй шатахуун түгээх станц, 8 бүсийн агуулах, өөрийн авто тээврийн бааз, улсын итгэмжлэгдсэн лабораторитойгоор газрын тосны бүтээгдэхүүний импорт, хадгалалт, тээвэрлэлт, борлуулалтын чиглэлээр ажиллаж байна.",
+  },
+  {
+    period: "Стандарт",
+    title: "Олон улсын гэрчилгээ",
+    body: "ISO 9001:2015 (Чанар), ISO 14001:2015 (Байгаль орчин), ISO 45001:2018 (Хөдөлмөрийн эрүүл мэнд, аюулгүй байдал) стандартуудыг үйл ажиллагаандаа нэвтрүүлсэн.",
   },
 ];
 
+/** Content plan 2.2. */
 export const vision = {
   label: "Алсын хараа",
   labelEn: "Vision",
-  /** TODO(HR): replace with the approved vision statement. */
-  statement: "Монгол улсын эрчим хүчний хангамжийн хамгийн найдвартай түнш байх.",
+  statement:
+    "Шунхлай нь нийгмийн хариуцлагыг дээд зэргээр хангасан, ногоон хөгжлийг дэмжигч, Азийн жишигт хүрсэн үйлчилгээтэй компани болно.",
   body: "Бид зөвхөн шатахуун нийлүүлдэггүй. Аймаг бүрийн зам, тээвэр, үйлдвэрлэл, гэр бүлийн өдөр тутмын хөдөлгөөнийг тасралтгүй байлгах дэд бүтцийг бүтээж, найдвартай ажиллуулдаг.",
 };
 
+/** Content plan 2.3. The motto is the brandbook's "Уриа". */
 export const mission = {
   label: "Эрхэм зорилго",
   labelEn: "Mission",
   statement: "Бид хүнийг дээдэлж, эрчимтэй хөгжлийг бүтээнэ.",
+  motto: "Хөгжлийн төлөөх хөдөлгүүр бүрийг тэжээнэ.",
   body: "Хөрөнгө оруулалтын хамгийн том хэсэг нь хүн. Тиймээс бид ажилтан бүрийн ур чадвар, эрүүл мэнд, карьерын өсөлтөд тогтвортой хөрөнгө оруулдаг.",
 };
 
-/** Brandbook p.3 — "ҮНЭТ ЗҮЙЛ". */
+/** Content plan 2.4, matching brandbook p.3 — "ҮНЭТ ЗҮЙЛ". */
 export const values = [
   {
     mn: "Хэрэглэгчээ дээдлэх",
@@ -101,51 +103,4 @@ export const values = [
     en: "Be accountable",
     body: "Аюулгүй байдал, чанарын стандартыг хэн ч харахгүй байхад ижил түвшинд баримтална.",
   },
-];
-
-/** The 21 aimags, plus the capital. Used by the opening loader's ticker. */
-export const provinces = [
-  "Улаанбаатар",
-  "Архангай",
-  "Баян-Өлгий",
-  "Баянхонгор",
-  "Булган",
-  "Говь-Алтай",
-  "Говьсүмбэр",
-  "Дархан-Уул",
-  "Дорноговь",
-  "Дорнод",
-  "Дундговь",
-  "Завхан",
-  "Орхон",
-  "Өвөрхангай",
-  "Өмнөговь",
-  "Сүхбаатар",
-  "Сэлэнгэ",
-  "Төв",
-  "Увс",
-  "Ховд",
-  "Хөвсгөл",
-  "Хэнтий",
-];
-
-export type CareerField = {
-  name: string;
-  nameEn: string;
-  blurb: string;
-};
-
-/**
- * The brief's central message: Shunkhlai is not only fuel-station staff.
- * These are the professional tracks the company actually hires into.
- */
-export const careerFields: CareerField[] = [
-  { name: "Хүний нөөц", nameEn: "People & HR", blurb: "Сонгон шалгаруулалт, сургалт, ажилтны туршлага" },
-  { name: "Санхүү", nameEn: "Finance", blurb: "Санхүүгийн шинжилгээ, төсөв, тайлагнал" },
-  { name: "Чанарын хяналт", nameEn: "Quality control", blurb: "Улсын итгэмжлэгдсэн химийн лаборатори" },
-  { name: "Логистик, тээвэр", nameEn: "Logistics", blurb: "Флотын удирдлага, маршрут, агуулахын үйл ажиллагаа" },
-  { name: "Борлуулалт", nameEn: "Sales", blurb: "Корпорацийн харилцагч, гэрээ, хангамж" },
-  { name: "Маркетинг", nameEn: "Marketing", blurb: "Брэнд, кампанит ажил, хэрэглэгчийн судалгаа" },
-  { name: "Мэдээллийн технологи", nameEn: "Technology", blurb: "Дотоод систем, дата, дижитал бүтээгдэхүүн" },
-  { name: "Захиргаа", nameEn: "Administration", blurb: "Хууль, эрсдэл, аж ахуй, дотоод үйл ажиллагаа" },
 ];

@@ -2,6 +2,7 @@ import Image from "next/image";
 
 import { Reveal } from "@/components/reveal";
 import { stories } from "@/lib/culture";
+import { SectionRule } from "@/components/brand/section-rule";
 
 /**
  * Ажилтны түүх — the full poster set, laid out rather than railed.
@@ -16,8 +17,9 @@ export function LifeGallery() {
   return (
     <section
       id="life"
-      className="scroll-mt-20 border-t border-border/70 py-20 lg:py-28"
+      className="relative scroll-mt-20 py-20 lg:py-28"
     >
+      <SectionRule />
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
         <Reveal>
           <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
