@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DotWordmark } from "@/components/brand/dot-wordmark";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { SectionRule } from "@/components/brand/section-rule";
 
@@ -111,6 +112,28 @@ export function SiteFooter() {
             Капитал Хаус, Чингисийн өргөн чөлөө 48/1, Улаанбаатар-36
           </p>
         </div>
+      </div>
+
+      {/* Same container as everything above it, so the mark starts and ends on
+          the same line as the columns and the copyright rather than running to
+          the edge of the window. Faint enough to sit under that line without
+          competing with it — it is the same name, said quietly.
+
+          Two cuts, because the whole drawing scales with its box and the dots
+          go with it. On a phone the eleven-glyph version would be set so small
+          that the grid closes up into a smear, so the narrow one drops the ХХК
+          — fewer letters, larger type — and coarsens the screen to match. */}
+      <div className="mx-auto max-w-6xl px-6 pb-6 lg:px-10">
+        <DotWordmark
+          text="ШУНХЛАЙ"
+          id="dot-wordmark-screen-sm"
+          pitch={0.04}
+          className="block w-full text-foreground/[0.11] sm:hidden"
+        />
+        <DotWordmark
+          text="ШУНХЛАЙ ХХК"
+          className="hidden w-full text-foreground/[0.11] sm:block"
+        />
       </div>
     </footer>
   );

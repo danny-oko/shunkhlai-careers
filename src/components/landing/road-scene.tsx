@@ -69,12 +69,48 @@ function useTravel(ref: React.RefObject<HTMLElement | null>) {
   return size;
 }
 
-/** How far into its own reveal an item at `index` is, 0 to 1. */
-function reveal(drive: number, index: number, step = 0.06, span = 0.16) {
-  const t = Math.min(Math.max((drive - index * step) / span, 0), 1);
+const clamp = (value: number) => Math.min(Math.max(value, 0), 1);
+
+/**
+ * The schedule the instruments arrive on, in shares of the drive.
+ *
+ * Eight slots — four figures, then the five cards overlapping the last of
+ * them — with the last slot finishing where the map does. The map plants its
+ * final pin at 0.93 of the run, and the two landing together is the point:
+ * on the old step the cards were all in by 0.52, which left the whole second
+ * half of the section as a finished caption sitting over a map still
+ * unfolding behind it.
+ */
+const TEXT_END = 0.93;
+const TEXT_SPAN = 0.24;
+const TEXT_SLOTS = 8;
+const TEXT_STEP = (TEXT_END - TEXT_SPAN) / (TEXT_SLOTS - 1);
+
+/**
+ * How far into its own arrival the item in slot `index` is.
+ *
+ * Two readings of the same share: `shown` is eased, so the item arrives
+ * quickly and settles, while `t` is left linear for the glint to ride — an
+ * eased sweep spends most of its length parked at the far edge and the light
+ * appears to stall halfway across.
+ */
+function reveal(drive: number, index: number, settled = false) {
+  const t = settled ? 1 : clamp((drive - index * TEXT_STEP) / TEXT_SPAN);
   // easeOutCubic — it arrives quickly and settles rather than gliding in.
-  return 1 - Math.pow(1 - t, 3);
+  return { t, shown: 1 - Math.pow(1 - t, 3) };
 }
+
+/**
+ * The two custom properties `.gleam-in` reads, as strings: React appends
+ * `px` to bare numbers on some properties, and a unitless share is what the
+ * calc() in the stylesheet needs. The heat is a bell over the sweep, so the
+ * glow is brightest with the band mid-word.
+ */
+const gleam = (t: number) =>
+  ({
+    "--gleam": t.toFixed(3),
+    "--gleam-heat": Math.sin(t * Math.PI).toFixed(3),
+  }) as React.CSSProperties;
 
 /**
  * A tanker held in the middle of the frame while the world is pulled past it,
@@ -90,12 +126,16 @@ export function RoadScene({
   drive,
   kmh,
   fade = 1,
+  settled = false,
 }: {
   /** 0 while the tanker is still off the left edge, 1 once it has arrived. */
   enter: number;
   drive: number;
   kmh: number;
   fade?: number;
+  /** Show every figure and card at once — `drive` is frozen part-way under
+      reduced motion, and the late slots would never come up otherwise. */
+  settled?: boolean;
 }) {
   const lineRef = React.useRef<HTMLDivElement>(null);
   const truckRef = React.useRef<HTMLDivElement>(null);
@@ -161,7 +201,7 @@ export function RoadScene({
         />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 h-[40%] overflow-hidden bg-ink text-ink-foreground">
+      <div className="absolute inset-x-0 bottom-0 h-[40%] overflow-hidden bg-ink text-ink-foreground [--gleam-base:var(--ink-foreground)] [--gleam-sheen:var(--sheen-cool)]">
         {/* Road markings. Scrolled by moving the repeating gradient itself
             rather than by translating the element: a translated element is
             finite and runs out, which left the dashes stopping mid-screen. */}
@@ -180,21 +220,22 @@ export function RoadScene({
           style={{ opacity: fade }}
         >
           {stats.map((stat, index) => {
-            const shown = reveal(drive, index, 0.07, 0.18);
+            const { t, shown } = reveal(drive, index, settled);
             return (
               <div
                 key={stat.label}
                 className="text-center"
                 style={{
+                  ...gleam(t),
                   opacity: shown,
                   transform: `translate3d(0, ${(1 - shown) * 14}px, 0)`,
                 }}
               >
-                <span className="text-3xl leading-none font-semibold tracking-[-0.04em] text-brand-2 tabular-nums sm:text-5xl">
+                <span className="gleam-in text-3xl leading-none font-semibold tracking-[-0.04em] tabular-nums [--gleam-base:var(--brand-2)] sm:text-5xl">
                   {stat.value}
                   {stat.suffix}
                 </span>
-                <span className="mt-2 block text-sm font-medium tracking-[-0.01em]">
+                <span className="gleam-in mt-2 block text-sm font-medium tracking-[-0.01em]">
                   {stat.label}
                 </span>
               </div>
@@ -207,20 +248,23 @@ export function RoadScene({
           style={{ opacity: fade }}
         >
           {chain.map((link, index) => {
-            const shown = reveal(drive, index + 2);
+            // Slot 3 onwards: the chain starts under the last of the figures,
+            // so the two groups read as one run rather than two.
+            const { t, shown } = reveal(drive, index + 3, settled);
             return (
               <article
                 key={link.title}
                 className="w-64 shrink-0 border-l border-white/12 px-6 pt-5 pb-6 lg:w-auto lg:px-7"
                 style={{
+                  ...gleam(t),
                   opacity: shown,
                   transform: `translate3d(${(shown - 1) * 40}px, 0, 0)`,
                 }}
               >
-                <h3 className="text-base font-semibold tracking-[-0.025em] lg:text-xl">
+                <h3 className="gleam-in text-base font-semibold tracking-[-0.025em] lg:text-xl">
                   {link.title}
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted text-pretty">
+                <p className="gleam-in mt-2 text-sm leading-relaxed text-pretty [--gleam-base:var(--ink-muted)]">
                   {link.body}
                 </p>
               </article>

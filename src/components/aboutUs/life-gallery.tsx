@@ -1,89 +1,151 @@
+"use client";
+
+import * as React from "react";
 import Image from "next/image";
 
 import { Reveal } from "@/components/reveal";
 import { stories } from "@/lib/culture";
 import { SectionRule } from "@/components/brand/section-rule";
+import { cn } from "@/lib/utils";
 
 /**
- * Ажилтны түүх — the full poster set, laid out rather than railed.
+ * The heading already says "Бидний хамгийн…", so a claim that opens with
+ * Хамгийн says it twice. One of the four does. It is the client's own copy and
+ * still has to read whole wherever else it is used, so the word is dropped
+ * here for display rather than edited out of culture.ts.
+ */
+const LEAD_IN = /^Хамгийн\s+/;
+
+function claim(headline: string) {
+  const rest = headline.replace(LEAD_IN, "");
+  if (rest === headline) return headline;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+/**
+ * Ажилтны түүх — the four records, read as one list rather than four cards.
  *
- * The one 16:9 poster leads the section at full width; the 3:4 posters follow
- * in a grid. Nothing is cropped, so the client's artwork stays intact.
+ * The headlines stack at display size with only the pointed-at one inked in;
+ * the rest hold their place in grey, so the list reads as a set of claims the
+ * company is making and the eye is told which one is being answered. The
+ * poster for that record stands alongside and changes with it.
+ *
+ * A grid of four cards said the same thing with none of the weight: four equal
+ * things, none of them the subject. This has a subject at all times.
  */
 export function LifeGallery() {
-  const lead = stories.find((story) => story.shape === "wide");
-  const portraits = stories.filter((story) => story.shape === "portrait");
+  const [active, setActive] = React.useState(0);
 
   return (
-    <section
-      id="life"
-      className="relative scroll-mt-20 py-20 lg:py-28"
-    >
+    <section id="life" className="relative scroll-mt-20 py-20 lg:py-28">
       <SectionRule />
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
-        <Reveal>
-          <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            Ажилтны түүх · Life at Shunkhlai
-          </p>
-          <h2 className="mt-5 max-w-3xl text-3xl leading-[1.08] font-semibold tracking-[-0.035em] text-balance sm:text-5xl">
-            Дээд амжилтууд хүнээр хэмжигддэг
-          </h2>
-        </Reveal>
+        {/* Centred, not top-aligned: the poster belongs to the list as a
+            whole, not to whichever claim happens to be first. The heading sits
+            inside the left column rather than over both, which is what makes
+            the two columns close enough in height for centring to read as
+            centring — over the top it left the poster taller by half a screen
+            and the list pushed down into the middle of nowhere. */}
+        <div className="grid items-center gap-12 lg:grid-cols-[1.4fr_1fr] lg:gap-16">
+          <Reveal>
+            <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+              Ажилтны түүх · Life at Shunkhlai
+            </p>
+            <h2 className="mt-5 text-xl font-semibold tracking-[-0.02em] sm:text-2xl">
+              Бидний хамгийн…
+            </h2>
 
-        {lead && (
-          <Reveal delay={120} className="mt-12">
+            <ul className="mt-10">
+              {stories.map((item, index) => (
+                <li key={item.src} className="border-b border-border last:border-b-0">
+                  {/* Hover is the gesture the design is built around, but it is
+                      not the only one: focus does the same thing so the list
+                      can be tabbed, and click so it works on a touch screen,
+                      where there is no hover to give. */}
+                  <button
+                    type="button"
+                    onMouseEnter={() => setActive(index)}
+                    onFocus={() => setActive(index)}
+                    onClick={() => setActive(index)}
+                    // The visible text is the claim; the name behind it is only
+                    // drawn beside the poster, so it is spelled out here rather
+                    // than left to whoever cannot see which poster is up.
+                    aria-label={`${claim(item.headline)} — ${item.name}, ${item.role}`}
+                    className={cn(
+                      "block w-full py-5 text-left text-3xl leading-[1.05] font-semibold tracking-[-0.04em] text-balance transition-colors duration-300 outline-none sm:text-[2.75rem] motion-reduce:transition-none",
+                      "focus-visible:text-brand",
+                      index === active ? "text-foreground" : "text-foreground/20",
+                    )}
+                  >
+                    {claim(item.headline)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Reveal>
+
+          <Reveal delay={120}>
+            {/* One frame at the shape three of the four posters were drawn in,
+                and the fourth cropped into it. Letting the box change shape
+                instead left that one poster sitting alone at a size nothing
+                else on the page shared, and reserving the tallest shape for it
+                only moved the problem into the empty space underneath.
+
+                Cropping it costs nothing here: what falls outside the 4:5 is
+                the headline and the paragraph printed into the artwork, and
+                both of those are already on this page as live text — the claim
+                in the list, the paragraph in the caption. Three of the four are
+                already 4:5, so for them the cover is not a crop at all. */}
             <figure>
-              <div className="overflow-hidden rounded-2xl bg-muted">
-                <Image
-                  src={lead.src}
-                  alt={lead.alt}
-                  width={1920}
-                  height={1006}
-                  sizes="(max-width: 1024px) 100vw, 72rem"
-                  className="h-auto w-full"
-                />
+              <div className="relative aspect-[1080/1350] overflow-hidden rounded-2xl bg-muted">
+                {stories.map((item, index) => (
+                  <Image
+                    key={item.src}
+                    src={item.src}
+                    alt={index === active ? item.alt : ""}
+                    aria-hidden={index !== active}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 24rem"
+                    style={{ objectPosition: item.focus }}
+                    className={cn(
+                      "object-cover transition-opacity duration-500 ease-out motion-reduce:transition-none",
+                      index === active ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                ))}
               </div>
-              <figcaption className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="text-base font-medium tracking-[-0.01em]">
-                  {lead.name}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {lead.role}
-                </span>
+
+              {/* Stacked for the same reason the posters are: the four records
+                  do not run to the same length, and letting the caption set
+                  its own height moved the row — and the list opposite it —
+                  by a line every time the pointer crossed a shorter one. All
+                  four are laid over each other, so the block is as tall as the
+                  longest of them whichever one is showing. */}
+              <figcaption className="mt-6 grid">
+                {stories.map((item, index) => (
+                  <div
+                    key={item.src}
+                    aria-hidden={index !== active}
+                    className={cn(
+                      "[grid-area:1/1] transition-opacity duration-300 ease-out motion-reduce:transition-none",
+                      index === active ? "opacity-100" : "opacity-0",
+                    )}
+                  >
+                    <p className="text-base font-medium tracking-[-0.01em]">
+                      {item.name}
+                    </p>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      {item.role}
+                    </p>
+                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground text-pretty">
+                      {item.highlight}
+                    </p>
+                  </div>
+                ))}
               </figcaption>
             </figure>
           </Reveal>
-        )}
-
-        <ul className="mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {portraits.map((story, index) => (
-            <Reveal as="li" key={story.src} delay={index * 100}>
-              <figure className="group">
-                <div className="overflow-hidden rounded-2xl bg-muted">
-                  <Image
-                    src={story.src}
-                    alt={story.alt}
-                    width={1080}
-                    height={1350}
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 22rem"
-                    className="h-auto w-full transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-                  />
-                </div>
-                <figcaption className="mt-5">
-                  <p className="text-base font-medium tracking-[-0.01em]">
-                    {story.name}
-                  </p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {story.role}
-                  </p>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground text-pretty">
-                    {story.highlight}
-                  </p>
-                </figcaption>
-              </figure>
-            </Reveal>
-          ))}
-        </ul>
+        </div>
       </div>
     </section>
   );

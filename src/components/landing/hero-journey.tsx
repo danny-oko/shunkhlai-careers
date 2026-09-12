@@ -97,7 +97,13 @@ export function HeroJourney() {
           isReduced ? "relative h-svh" : "sticky top-0 h-svh",
         )}
       >
-        <RoadScene enter={enter} drive={drive} kmh={kmh} fade={instruments} />
+        <RoadScene
+          enter={enter}
+          drive={drive}
+          kmh={kmh}
+          fade={instruments}
+          settled={isReduced}
+        />
         <StatementLayer exit={exit} />
       </div>
 
@@ -105,7 +111,7 @@ export function HeroJourney() {
           screen and the road stands still on the next. */}
       {isReduced && (
         <div className="relative h-svh overflow-hidden">
-          <RoadScene enter={1} drive={drive} kmh={0} />
+          <RoadScene enter={1} drive={drive} kmh={0} settled />
         </div>
       )}
     </section>

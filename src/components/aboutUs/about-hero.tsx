@@ -4,18 +4,24 @@ import * as React from "react";
 
 import { FeatherLattice } from "@/components/brand/feather-lattice";
 import { GradientRule } from "@/components/brand/gradient-rule";
+import { SectionRail } from "@/components/aboutUs/section-rail";
 
 /** One line per swing, as on the landing page's statement screen. */
 const LINES = ["Авто засварын", "багаас улс даяарх", "сүлжээ хүртэл"];
 
+/**
+ * The five in the middle all now live in one section, as its tabs. The links
+ * still carry their own hashes: CultureSection keeps an anchor for each, and
+ * opens on whichever one was asked for.
+ */
 const anchors = [
-  { href: "#history", label: "Бидний түүх" },
-  { href: "#vision", label: "Алсын хараа" },
-  { href: "#values", label: "Үнэт зүйл" },
-  { href: "#academy", label: "Сургалт, хөгжил" },
-  { href: "#benefits", label: "Хөнгөлөлт, хангамж" },
-  { href: "#clubs", label: "Хобби клубууд" },
-  { href: "#life", label: "Ажилтны түүх" },
+  { key: "history", href: "#history", label: "Бидний түүх" },
+  { key: "vision", href: "#vision", label: "Алсын хараа" },
+  { key: "values", href: "#values", label: "Үнэт зүйл" },
+  { key: "academy", href: "#academy", label: "Сургалт, хөгжил" },
+  { key: "benefits", href: "#benefits", label: "Хөнгөлөлт, хангамж" },
+  { key: "clubs", href: "#clubs", label: "Хобби клубууд" },
+  { key: "life", href: "#life", label: "Ажилтны түүх" },
 ];
 
 /**
@@ -83,21 +89,12 @@ export function AboutHero() {
           </p>
         </div>
 
-        <ul
-          className="statement-line mt-12 flex flex-wrap gap-2"
+        <SectionRail
+          items={anchors}
+          label="Хуудасны хэсгүүд"
+          className="statement-line mt-12"
           style={{ animationDelay: "760ms" }}
-        >
-          {anchors.map((anchor) => (
-            <li key={anchor.href}>
-              <a
-                href={anchor.href}
-                className="inline-flex h-9 items-center rounded-full border border-white/15 px-4 text-sm text-ink-muted transition-colors hover:border-brand/50 hover:text-ink-foreground"
-              >
-                {anchor.label}
-              </a>
-            </li>
-          ))}
-        </ul>
+        />
       </div>
     </section>
   );

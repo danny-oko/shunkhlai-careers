@@ -74,6 +74,13 @@
     var(--brand) 100%
   );
 
+  /* The two colours a travelling glint can be. Which one is used is decided
+     by the ground it crosses, not by the theme: brand orange on the white
+     page, and a blue-white on the navy ink panels, where orange on navy
+     reads as a smudge rather than as light. */
+  --sheen-warm: var(--brand);
+  --sheen-cool: color-mix(in oklab, var(--brand-blue) 35%, white);
+
   --app-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
@@ -456,5 +463,47 @@
   }
   [data-statement-shown="true"] .statement-line {
     animation: none;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Gleam-in
+   A band of light travelling through a line of type as it arrives.
+
+   Its position is read from --gleam (0 to 1, the element's own share of its
+   reveal), so the light is driven by the scroll rather than by a clock: stop
+   scrolling and it stops with you. --gleam-heat is a bell over the same
+   share, and carries the glow that peaks as the band crosses the middle.
+
+   Nothing here is declared as a plain default: --gleam-base and
+   --gleam-sheen are read with fallbacks so a container can set them once for
+   everything inside it. A declaration on this rule would beat that.
+   ---------------------------------------------------------------------- */
+.gleam-in {
+  background-image: linear-gradient(
+    100deg,
+    var(--gleam-base, var(--foreground)) 0 44%,
+    var(--gleam-sheen, var(--sheen-warm)) 50%,
+    var(--gleam-base, var(--foreground)) 56% 100%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  /* 300% wide, so the band at the middle of the image is off the element at
+     both ends of the sweep: it enters at 0 and has left again by 1. */
+  background-position-x: calc((1 - var(--gleam, 1)) * 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 calc(var(--gleam-heat, 0) * 18px)
+    color-mix(in oklab, var(--gleam-sheen, var(--sheen-warm)) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gleam-in {
+    background-image: none;
+    color: var(--gleam-base, var(--foreground));
+    -webkit-text-fill-color: currentColor;
+    text-shadow: none;
   }
 }

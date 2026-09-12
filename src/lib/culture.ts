@@ -9,8 +9,14 @@
 
 export type Story = {
   src: string;
-  /** 3:4 poster or 16:9 banner — decides how the card is laid out. */
+  /** 3:4 poster or 16:9 banner — the shape the artwork was delivered in. */
   shape: "portrait" | "wide";
+  /**
+   * `object-position` for the one asset that is not already the 4:5 the
+   * gallery frames everything at, so the crop keeps the person rather than
+   * splitting the difference with whatever is beside them.
+   */
+  focus?: string;
   name: string;
   role: string;
   headline: string;
@@ -26,7 +32,7 @@ export const stories: Story[] = [
     shape: "portrait",
     name: "Г. Батжаргал",
     role: "Цэнэглэх машины жолооч",
-    headline: "Монгол улсыг 36 удаа бүтэн тойрсон хүн",
+    headline: "Монгол улсыг олон тойрсон хүн",
     highlight: "2018 оноос хойш 250,000 км зам туулж, 2,158,000 литр ачаа тээвэрлэсэн.",
     alt: "Цэнэглэх машины жолооч Г. Батжаргал автоцистерн машины дэргэд зогсож байна",
   },
@@ -51,6 +57,11 @@ export const stories: Story[] = [
   {
     src: "/brand/story-station-operator.jpg",
     shape: "wide",
+    // At 4:5 only 42% of this 1920-wide frame survives. 30% is the furthest
+    // right the window can sit and still clear the headline printed into the
+    // artwork — past it a sliver of the type shows at the edge and reads as a
+    // botched crop — while still holding her whole.
+    focus: "30% center",
     name: "Л. Баярмаа",
     role: "ШТС-16-ийн нефть хангамжийн оператор",
     headline: "Дээд амжилт тогтоосон эмэгтэй",
