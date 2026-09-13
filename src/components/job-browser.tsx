@@ -3,11 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { FilterSection } from "@/components/job-filters";
 import {
   applyFacets,
@@ -15,10 +12,12 @@ import {
   defaultFacets,
   groupOptions,
   isFiltered,
+  locationOptions,
+  salaryOptions,
   workTypeOptions,
   type JobFacets,
 } from "@/lib/jobs/filters";
-import type { Job } from "@/lib/jobs/types";
+import { ALL, type Job } from "@/lib/jobs/types";
 import type { JobFilterData } from "@/lib/api/jobs";
 import { cn } from "@/lib/utils";
 import { SectionRule } from "@/components/brand/section-rule";
@@ -30,6 +29,9 @@ import { SectionRule } from "@/components/brand/section-rule";
  * `getRecruitmentOrderList` through the URL, so results stay linkable and
  * server-rendered. Position group, company and work type are refined over the
  * rows already on the page.
+ *
+ * Which side of that line a filter falls on is an implementation detail to the
+ * candidate, so both layers are the same pills in the same rail.
  */
 export function JobBrowser({
   jobs,
@@ -43,7 +45,6 @@ export function JobBrowser({
 
   const [facets, setFacets] = React.useState<JobFacets>(defaultFacets);
   const [isPanelOpen, setIsPanelOpen] = React.useState(false);
-  const [search, setSearch] = React.useState(params.get("jobName") ?? "");
 
   const locationId = params.get("locationid") ?? "";
   const salaryLevelId = params.get("salaryLevelID") ?? "";
@@ -52,6 +53,8 @@ export function JobBrowser({
   const groups = React.useMemo(() => groupOptions(jobs), [jobs]);
   const companies = React.useMemo(() => companyOptions(jobs), [jobs]);
   const workTypes = React.useMemo(() => workTypeOptions(jobs), [jobs]);
+  const locations = React.useMemo(() => locationOptions(filterData), [filterData]);
+  const salaryLevels = React.useMemo(() => salaryOptions(filterData), [filterData]);
 
   /** Server-side filters live in the URL. */
   function pushQuery(next: Record<string, string>) {
@@ -66,12 +69,10 @@ export function JobBrowser({
 
   function clearEverything() {
     setFacets(defaultFacets);
-    setSearch("");
     router.push("/careers");
   }
 
   const hasFacets = isFiltered(facets);
-  const hasQuery = Boolean(params.get("jobName") || locationId || salaryLevelId);
 
   const filterSections = (
     <>
@@ -81,6 +82,20 @@ export function JobBrowser({
         value={facets.group}
         onChange={(value) => setFacets((current) => ({ ...current, group: value }))}
         defaultOpen
+      />
+      <FilterSection
+        title="Байршил"
+        options={locations}
+        value={locationId || ALL}
+        onChange={(value) => pushQuery({ locationid: value === ALL ? "" : value })}
+      />
+      <FilterSection
+        title="Цалингийн түвшин"
+        options={salaryLevels}
+        value={salaryLevelId || ALL}
+        onChange={(value) =>
+          pushQuery({ salaryLevelID: value === ALL ? "" : value })
+        }
       />
       <FilterSection
         title="Компани"
@@ -100,69 +115,6 @@ export function JobBrowser({
   return (
     <div className="relative">
       <SectionRule />
-      <form
-        className="grid gap-3 border-b border-border/70 px-6 py-5 sm:grid-cols-[minmax(0,1fr)_auto] lg:px-10"
-        onSubmit={(event) => {
-          event.preventDefault();
-          pushQuery({ jobName: search.trim() });
-        }}
-      >
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="relative sm:col-span-1">
-            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Албан тушаалаар хайх"
-              aria-label="Албан тушаалаар хайх"
-              className="pl-9"
-            />
-          </div>
-
-          <Select
-            aria-label="Байршил"
-            value={locationId}
-            onChange={(event) => pushQuery({ locationid: event.target.value })}
-          >
-            <option value="">Бүх байршил</option>
-            {(filterData?.location ?? []).map((location) => (
-              <option key={location.entryid} value={location.entryid}>
-                {location.name} — {location.divisionname}
-              </option>
-            ))}
-          </Select>
-
-          <Select
-            aria-label="Цалингийн түвшин"
-            value={salaryLevelId}
-            onChange={(event) => pushQuery({ salaryLevelID: event.target.value })}
-          >
-            <option value="">Бүх цалингийн түвшин</option>
-            {(filterData?.salarylevel ?? []).map((level) => (
-              <option key={level.key} value={level.key}>
-                {level.text}₮
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="flex gap-2">
-          <Button type="submit" className="h-9 rounded-full px-5">
-            Хайх
-          </Button>
-          {hasQuery || hasFacets ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={clearEverything}
-              className="h-9 rounded-full px-4"
-            >
-              <X className="size-3.5" />
-              Цэвэрлэх
-            </Button>
-          ) : null}
-        </div>
-      </form>
 
       {/* Mobile: the facet tree collapses behind a single toggle. */}
       <div className="border-b border-border/70 px-6 py-4 lg:hidden">
@@ -174,7 +126,9 @@ export function JobBrowser({
         >
           <SlidersHorizontal className="size-3.5" />
           Шүүлтүүр
-          {hasFacets ? <span className="size-1.5 rounded-full bg-primary" /> : null}
+          {hasFacets || locationId || salaryLevelId ? (
+            <span className="size-1.5 rounded-full bg-primary" />
+          ) : null}
         </button>
       </div>
 
