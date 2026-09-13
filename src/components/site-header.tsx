@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Menu, User, X } from "lucide-react";
 
+import { BrandMark } from "@/components/brand/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { displayName, useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
@@ -55,13 +56,9 @@ export function SiteHeader() {
           id={SITE_BRAND_ID}
           className="group flex items-center gap-2.5"
         >
-          <span
-            aria-hidden
-            className="h-5 w-1.5 rounded-full"
-            style={{ backgroundImage: "var(--brand-gradient)" }}
-          />
+          <BrandMark className="h-6" sizes="72px" priority />
           <span className="text-sm font-semibold tracking-[-0.01em]">
-            Шунхлай <span className="opacity-60">Careers</span>
+            Шунхлай
           </span>
         </Link>
 

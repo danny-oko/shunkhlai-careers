@@ -30,10 +30,19 @@ const WHEEL_ENTRY = (1700 / WHEEL_CIRCUMFERENCE) * 360;
  * business: import, storage, haulage, retail, with the lab over all of it.
  */
 const chain = [
-  { title: "Импорт", body: "Газрын тосны бүтээгдэхүүнийг улсын хилээр оруулж ирнэ." },
+  {
+    title: "Импорт",
+    body: "Газрын тосны бүтээгдэхүүнийг улсын хилээр оруулж ирнэ.",
+  },
   { title: "Хадгалалт", body: "8 бүсийн агуулахад стандартын дагуу хадгална." },
-  { title: "Тээвэрлэлт", body: "Өөрийн авто тээврийн бааз 21 аймаг руу хүргэнэ." },
-  { title: "Борлуулалт", body: "100 гаруй шатахуун түгээх станцаар хэрэглэгчдэд хүрнэ." },
+  {
+    title: "Тээвэрлэлт",
+    body: "Өөрийн авто тээврийн бааз 21 аймаг руу хүргэнэ.",
+  },
+  {
+    title: "Борлуулалт",
+    body: "100 гаруй шатахуун түгээх станцаар хэрэглэгчдэд хүрнэ.",
+  },
   {
     title: "Чанарын хяналт",
     body: "Улсын итгэмжлэгдсэн лаборатори бүтээгдэхүүнийг баталгаажуулна.",
@@ -58,7 +67,10 @@ function useTravel(ref: React.RefObject<HTMLElement | null>) {
 
   React.useEffect(() => {
     const measure = () =>
-      setSize({ track: ref.current?.scrollWidth ?? 0, view: window.innerWidth });
+      setSize({
+        track: ref.current?.scrollWidth ?? 0,
+        view: window.innerWidth,
+      });
 
     measure();
     document.fonts?.ready.then(measure).catch(() => {});
@@ -137,6 +149,29 @@ export function RoadScene({
       reduced motion, and the late slots would never come up otherwise. */
   settled?: boolean;
 }) {
+  // How far the chain of cards has been swiped, for the affordance under it.
+  // Below `lg` the chain is a scrolling strip with its scrollbar hidden, which
+  // left nothing at all to say it could be moved: on a phone you saw two cards
+  // and no reason to think there were five.
+  const chainRef = React.useRef<HTMLDivElement>(null);
+  const [swipe, setSwipe] = React.useState({ at: 0, seen: 0, all: 0 });
+
+  const onChainScroll = () => {
+    const strip = chainRef.current;
+    if (!strip) return;
+    setSwipe({
+      at: strip.scrollLeft,
+      seen: strip.clientWidth,
+      all: strip.scrollWidth,
+    });
+  };
+
+  React.useEffect(onChainScroll, []);
+
+  const runway = Math.max(swipe.all - swipe.seen, 0);
+  const swiped = runway > 0 ? swipe.at / runway : 0;
+  const thumb = swipe.all > 0 ? swipe.seen / swipe.all : 1;
+
   const lineRef = React.useRef<HTMLDivElement>(null);
   const truckRef = React.useRef<HTMLDivElement>(null);
   const line = useTravel(lineRef);
@@ -169,7 +204,7 @@ export function RoadScene({
           visibility: line.track && truckBox ? "visible" : "hidden",
         }}
       >
-        Улаанбаатараас алслагдсан сум хүртэл
+        Монгол улсын алслагдсан сум хүртэл
       </div>
 
       {/* Sized to sit whole inside the dark band above the road. Width alone
@@ -231,7 +266,14 @@ export function RoadScene({
                   transform: `translate3d(0, ${(1 - shown) * 14}px, 0)`,
                 }}
               >
-                <span className="gleam-in text-3xl leading-none font-semibold tracking-[-0.04em] tabular-nums [--gleam-base:var(--brand-2)] sm:text-5xl">
+                {/* The brand orange, and its own lighter orange for the light that
+                    travels through it. The band's sheen is the cool blue-white
+                    every other line here takes, and over orange that is what
+                    was turning the figures to tan — the sweep never fully left
+                    them, so the colour they settled on was orange mixed with a
+                    blue. Warm sheen on warm base keeps the whole sweep inside
+                    the orange. */}
+                <span className="gleam-in text-3xl leading-none font-semibold tracking-[-0.04em] tabular-nums [--gleam-base:var(--brand)] [--gleam-sheen:var(--brand-2)] sm:text-5xl">
                   {stat.value}
                   {stat.suffix}
                 </span>
@@ -244,8 +286,16 @@ export function RoadScene({
         </div>
 
         <div
-          className="no-scrollbar absolute inset-x-0 bottom-0 flex overflow-x-auto transition-opacity duration-500 lg:grid lg:grid-cols-5 lg:overflow-visible"
+          className="absolute inset-x-0 bottom-0 transition-opacity duration-500"
           style={{ opacity: fade }}
+        >
+        <div
+          ref={chainRef}
+          onScroll={onChainScroll}
+          // Same line as everything else on the page: on a narrow screen the
+          // strip starts at the gutter and scrolls off the right, and from lg
+          // the five sit inside the container the header and footer use.
+          className="no-scrollbar mx-auto flex max-w-6xl overflow-x-auto pl-(--page-gutter) lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-10"
         >
           {chain.map((link, index) => {
             // Slot 3 onwards: the chain starts under the last of the figures,
@@ -254,14 +304,20 @@ export function RoadScene({
             return (
               <article
                 key={link.title}
-                className="w-64 shrink-0 border-l border-white/12 px-6 pt-5 pb-6 lg:w-auto lg:px-7"
+                // The first card is the one that has to sit on the page's line, so it
+                // gives up the indent and the rule its neighbours carry; the
+                // strip's own padding is what puts it there.
+                className="w-64 shrink-0 border-l border-white/12 pt-5 pr-6 pb-6 pl-5 first:border-l-0 first:pl-0 lg:w-auto lg:px-6 lg:first:pl-0"
                 style={{
                   ...gleam(t),
                   opacity: shown,
                   transform: `translate3d(${(shown - 1) * 40}px, 0, 0)`,
                 }}
               >
-                <h3 className="gleam-in text-base font-semibold tracking-[-0.025em] lg:text-xl">
+                {/* The step up waits for xl. At lg the five columns are 189px wide and
+                    "Чанарын хяналт" measures 159 at 20px, which wrapped that one
+                    title and left the row uneven. */}
+                <h3 className="gleam-in text-base font-semibold tracking-[-0.025em] xl:text-xl">
                   {link.title}
                 </h3>
                 <p className="gleam-in mt-2 text-sm leading-relaxed text-pretty [--gleam-base:var(--ink-muted)]">
@@ -270,6 +326,34 @@ export function RoadScene({
               </article>
             );
           })}
+        </div>
+
+          {/* Three things say the strip moves, and only on the screens where
+              it does: the ink fades in over the right-hand edge while there is
+              more to come, a bar under it shows how much of the run has been
+              covered, and the bar is live, so the first swipe is answered. */}
+          {runway > 0 && (
+            <>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-linear-to-l from-ink to-transparent transition-opacity duration-300 lg:hidden"
+                style={{ opacity: 1 - swiped }}
+              />
+              <div
+                aria-hidden
+                className="mx-6 mt-1 mb-4 h-px overflow-hidden rounded-full bg-white/15 lg:hidden"
+              >
+                <div
+                  className="h-px rounded-full transition-transform duration-150 ease-out"
+                  style={{
+                    width: `${Math.max(thumb * 100, 12)}%`,
+                    backgroundImage: "var(--brand-gradient)",
+                    transform: `translateX(${(swiped * (100 / Math.max(thumb, 0.12) - 100)).toFixed(1)}%)`,
+                  }}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 

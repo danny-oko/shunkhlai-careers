@@ -127,7 +127,7 @@ export function JobBrowser({
             <option value="">Бүх байршил</option>
             {(filterData?.location ?? []).map((location) => (
               <option key={location.entryid} value={location.entryid}>
-                {location.name} — {location.divisionname}
+                {location.name} - {location.divisionname}
               </option>
             ))}
           </Select>

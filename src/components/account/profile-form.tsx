@@ -200,7 +200,7 @@ export function ProfileForm() {
             value={values.maritalstatus}
             onChange={(event) => set("maritalstatus", event.target.value)}
           >
-            <option value="">— Сонгох —</option>
+            <option value="">- Сонгох -</option>
             {MARITAL_STATUSES.map((status) => (
               <option key={status.value} value={status.value}>
                 {status.label}
@@ -218,7 +218,7 @@ export function ProfileForm() {
             disabled={countries.isLoading}
             onChange={(event) => set("countryid", event.target.value)}
           >
-            <option value="">{countries.isLoading ? "Ачаалж байна…" : "— Сонгох —"}</option>
+            <option value="">{countries.isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
             {countries.options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -233,7 +233,7 @@ export function ProfileForm() {
             disabled={!values.countryid || divisions.isLoading}
             onChange={(event) => set("divisionid", event.target.value)}
           >
-            <option value="">{divisions.isLoading ? "Ачаалж байна…" : "— Сонгох —"}</option>
+            <option value="">{divisions.isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
             {divisions.options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -248,7 +248,7 @@ export function ProfileForm() {
             disabled={!values.divisionid || districts.isLoading}
             onChange={(event) => set("districtid", event.target.value)}
           >
-            <option value="">{districts.isLoading ? "Ачаалж байна…" : "— Сонгох —"}</option>
+            <option value="">{districts.isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
             {districts.options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -285,7 +285,7 @@ export function ProfileForm() {
               disabled={relatives.isLoading}
               onChange={(event) => set("relativeid", event.target.value)}
             >
-              <option value="">— Сонгох —</option>
+              <option value="">- Сонгох -</option>
               {relatives.options.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -318,7 +318,7 @@ export function ProfileForm() {
               disabled={relatives.isLoading}
               onChange={(event) => set("relativeid2", event.target.value)}
             >
-              <option value="">— Сонгох —</option>
+              <option value="">- Сонгох -</option>
               {relatives.options.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}

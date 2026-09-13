@@ -88,7 +88,7 @@ function SelectField({
       aria-busy={isLoading}
       onChange={(event) => onChange(event.target.value)}
     >
-      <option value="">{isLoading ? "Ачаалж байна…" : "— Сонгох —"}</option>
+      <option value="">{isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}

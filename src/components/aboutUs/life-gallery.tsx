@@ -37,7 +37,10 @@ export function LifeGallery() {
   const [active, setActive] = React.useState(0);
 
   return (
-    <section id="life" className="relative scroll-mt-20 py-20 lg:py-28">
+    <section
+      id="life"
+      className="relative scroll-mt-20 bg-ink py-20 text-ink-foreground lg:py-28"
+    >
       <SectionRule />
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
         {/* Centred, not top-aligned: the poster belongs to the list as a
@@ -48,7 +51,7 @@ export function LifeGallery() {
             and the list pushed down into the middle of nowhere. */}
         <div className="grid items-center gap-12 lg:grid-cols-[1.4fr_1fr] lg:gap-16">
           <Reveal>
-            <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+            <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-ink-muted uppercase">
               Ажилтны түүх · Life at Shunkhlai
             </p>
             <h2 className="mt-5 text-xl font-semibold tracking-[-0.02em] sm:text-2xl">
@@ -57,7 +60,7 @@ export function LifeGallery() {
 
             <ul className="mt-10">
               {stories.map((item, index) => (
-                <li key={item.src} className="border-b border-border last:border-b-0">
+                <li key={item.src} className="border-b border-white/12 last:border-b-0">
                   {/* Hover is the gesture the design is built around, but it is
                       not the only one: focus does the same thing so the list
                       can be tabbed, and click so it works on a touch screen,
@@ -70,11 +73,11 @@ export function LifeGallery() {
                     // The visible text is the claim; the name behind it is only
                     // drawn beside the poster, so it is spelled out here rather
                     // than left to whoever cannot see which poster is up.
-                    aria-label={`${claim(item.headline)} — ${item.name}, ${item.role}`}
+                    aria-label={`${claim(item.headline)} - ${item.name}, ${item.role}`}
                     className={cn(
-                      "block w-full py-5 text-left text-3xl leading-[1.05] font-semibold tracking-[-0.04em] text-balance transition-colors duration-300 outline-none sm:text-[2.75rem] motion-reduce:transition-none",
+                      "block w-full py-4 text-left text-xl leading-[1.15] font-semibold tracking-[-0.03em] text-balance transition-colors duration-300 outline-none sm:text-[1.625rem] motion-reduce:transition-none",
                       "focus-visible:text-brand",
-                      index === active ? "text-foreground" : "text-foreground/20",
+                      index === active ? "text-ink-foreground" : "text-ink-foreground/30",
                     )}
                   >
                     {claim(item.headline)}
@@ -97,7 +100,7 @@ export function LifeGallery() {
                 in the list, the paragraph in the caption. Three of the four are
                 already 4:5, so for them the cover is not a crop at all. */}
             <figure>
-              <div className="relative aspect-[1080/1350] overflow-hidden rounded-2xl bg-muted">
+              <div className="relative aspect-[1080/1350] overflow-hidden rounded-2xl bg-white/5">
                 {stories.map((item, index) => (
                   <Image
                     key={item.src}
@@ -134,10 +137,10 @@ export function LifeGallery() {
                     <p className="text-base font-medium tracking-[-0.01em]">
                       {item.name}
                     </p>
-                    <p className="mt-0.5 text-sm text-muted-foreground">
+                    <p className="mt-0.5 text-sm text-ink-muted">
                       {item.role}
                     </p>
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground text-pretty">
+                    <p className="mt-3 text-sm leading-relaxed text-ink-muted text-pretty">
                       {item.highlight}
                     </p>
                   </div>

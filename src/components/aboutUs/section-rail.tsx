@@ -43,6 +43,19 @@ export function SectionRail({
   const scrollerRef = React.useRef<HTMLDivElement>(null);
   const trackRef = React.useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = React.useState<number | null>(null);
+  // How much of the track is still off the right-hand edge, for the fade that
+  // says so. Its scrollbar is hidden, so without this a narrow screen shows
+  // two stops and no sign there is a third.
+  const [unseen, setUnseen] = React.useState(0);
+
+  const onScroll = () => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const runway = scroller.scrollWidth - scroller.clientWidth;
+    setUnseen(runway <= 0 ? 0 : 1 - scroller.scrollLeft / runway);
+  };
+
+  React.useEffect(onScroll, []);
   const [box, setBox] = React.useState<{ left: number; width: number } | null>(
     null,
   );
@@ -134,15 +147,17 @@ export function SectionRail({
 
   const stopClass = (index: number) =>
     `relative inline-flex h-9 items-center rounded-full px-4 text-sm whitespace-nowrap transition-colors duration-300 outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-reduce:transition-none ${
-      lit === index ? "text-brand-foreground" : "text-ink-muted"
+      lit === index ? "text-brand-foreground" : "text-muted-foreground"
     }`;
 
   return (
     // Bleeds to the window edge on a narrow screen so the track scrolls rather
     // than breaking over three lines, which would undo the one-object read.
+    <div className={`relative ${className ?? ""}`}>
     <div
       ref={scrollerRef}
-      className={`no-scrollbar -mx-6 overflow-x-auto px-6 lg:mx-0 lg:px-0 ${className ?? ""}`}
+      onScroll={onScroll}
+      className="no-scrollbar -mx-6 overflow-x-auto px-6 lg:mx-0 lg:px-0"
       style={style}
     >
       <div
@@ -156,7 +171,7 @@ export function SectionRail({
         // the control inside it, so the same marker answers the keyboard.
         onFocus={(event) => stopAt(event.target)}
         onBlur={() => setHovered(null)}
-        className="relative inline-flex w-max rounded-full border border-white/15 p-1"
+        className="relative inline-flex w-max rounded-full border border-border p-1"
       >
         <span
           aria-hidden
@@ -199,6 +214,14 @@ export function SectionRail({
           ),
         )}
       </div>
+    </div>
+
+      {/* Only while there is something to scroll to. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 -right-6 w-12 bg-linear-to-l from-background to-transparent transition-opacity duration-300 lg:hidden"
+        style={{ opacity: unseen }}
+      />
     </div>
   );
 }

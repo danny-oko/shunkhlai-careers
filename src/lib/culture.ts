@@ -81,9 +81,9 @@ export type AcademyVoice = {
 /**
  * Shunkhlai Academy — ажилтнуудын зөвлөгөө.
  *
- * Unreferenced at the moment: the landing page's Academy rail was taken down
- * to be rebuilt. Kept because it indexes the posters in public/brand and holds
- * their transcribed quotes, which the artwork alone does not give back.
+ * Read by <AcademyVoices> on the About page. The transcribed quotes are what
+ * the artwork alone cannot give back: they carry the posters into the alt text
+ * and into the dialog, where the words can be read at a readable size.
  */
 export const academyVoices: AcademyVoice[] = [
   {

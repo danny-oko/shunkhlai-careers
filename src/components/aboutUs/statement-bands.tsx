@@ -1,0 +1,442 @@
+"use client";
+
+import * as React from "react";
+import Image from "next/image";
+
+import { FeatherLattice } from "@/components/brand/feather-lattice";
+import { SectionRule } from "@/components/brand/section-rule";
+import { useScrollProgress } from "@/components/landing/use-scroll-progress";
+import { mission, values, vision } from "@/lib/company";
+import { cn } from "@/lib/utils";
+
+type Step = {
+  id: string;
+  word: string;
+  image: string;
+  /** The two statements carry a sentence; the values carry their five names. */
+  statement?: string;
+  list?: string[];
+};
+
+/**
+ * TODO(HR): the three grounds are placeholders — flat brand-coloured fields
+ * with nothing in them, standing in until real photography arrives. Replace
+ * the files in `public/brand`, keeping the names, and nothing here changes.
+ */
+const STEPS: Step[] = [
+  {
+    id: "mission",
+    word: mission.label,
+    statement: mission.statement,
+    image: "/brand/statement-bg-1.jpg",
+  },
+  {
+    id: "vision",
+    word: vision.label,
+    statement: vision.statement,
+    image: "/brand/statement-bg-2.jpg",
+  },
+  {
+    id: "values",
+    word: "Үнэт зүйл",
+    list: values.map((value) => value.mn),
+    image: "/brand/statement-bg-3.jpg",
+  },
+];
+
+/** Height of one word in the roller. The slack keeps descenders off the line. */
+const SLOT = "1.25em";
+
+/**
+ * Share of a step spent standing on the line while the word and the sentence
+ * are read in; the rest is spent travelling up to make room for the next.
+ */
+const HOLD = 0.55;
+/** Share of a step over which the word fills in from the left. */
+const SWEEP = 0.5;
+
+const clamp = (value: number) => Math.min(Math.max(value, 0), 1);
+
+/**
+ * The two custom properties `.gleam-in` reads: a band of light travelling
+ * through the type as it arrives, driven by the scroll rather than a clock.
+ * The sheen is the cool one — the page's own rule is that orange on navy
+ * reads as a smudge and only a blue-white reads as light.
+ */
+const gleam = (t: number) =>
+  ({
+    "--gleam": t.toFixed(3),
+    "--gleam-heat": Math.sin(t * Math.PI).toFixed(3),
+  }) as React.CSSProperties;
+
+// The floor is what a 320px screen needs: at 1.85rem the word plus the kicker
+// beside it came to 328 of the 272px such a window gives, and the row wrapped
+// the word onto its own line, away from the hairline it is supposed to cross.
+const WORD_SIZE = "text-[clamp(1.35rem,6.5vw,3.5rem)]";
+/**
+ * Type for the big word. The cap is low for the length of the Mongolian —
+ * "Эрхэм зорилго" is thirteen characters where the reference's "MISSION" is
+ * seven, and at the reference's size it would run into the sentence beside it.
+ */
+const WORD = `${WORD_SIZE} w-fit leading-none font-semibold tracking-[-0.04em] whitespace-nowrap uppercase`;
+
+/** How much of the ground each neighbouring step still owns, 1 at its own. */
+const near = (position: number, index: number) =>
+  clamp(1 - Math.abs(position - index));
+
+/**
+ * One setting for both kinds of statement, so a sentence and a value read at
+ * the same size in the same measure and start on the same edge. The values
+ * carried numerals until the two were asked to match exactly: in the line they
+ * pushed the values in by the width of the number, and hung outside it they
+ * needed a gutter wider than the gap the column now sits on.
+ */
+const SAYING = "text-xl leading-[1.3] font-semibold tracking-tight sm:text-2xl";
+
+function Statement({ step }: { step: Step }) {
+  if (!step.list) {
+    return <p className={cn(SAYING, "text-balance")}>{step.statement}</p>;
+  }
+
+  return (
+    <ul className="space-y-3">
+      {step.list.map((line) => (
+        <li key={line} className={cn(SAYING, "text-pretty")}>
+          {line}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The words stacked in one column, moved up by one slot per step.
+ *
+ * Drawn three times over the two windows: ghosted above the line, ghosted
+ * again below it, and a lit copy over that one clipped to however much of the
+ * word has been swept in. All three take the same position, so a word crossing
+ * the line always meets itself on it.
+ *
+ * The words are set to the right of the column — they all end on one vertical
+ * line, which is the edge they change on and the edge the sentence is measured
+ * from. The sweep still fills each word from its own left, so it is read in
+ * the order it is written.
+ *
+ * The travel is a percentage of the roller's own height, not a pixel count, so
+ * it stays exactly one word per step at every type size with nothing measured.
+ */
+function Roller({
+  position,
+  sweep,
+  heading,
+  className,
+}: {
+  position: number;
+  /** How much of each word is lit. Omitted for the ghost copies. */
+  sweep?: (index: number) => number;
+  heading?: boolean;
+  className: string;
+}) {
+  const Tag = heading ? "h2" : "span";
+
+  return (
+    <div
+      className={cn("absolute right-0", className)}
+      style={{
+        transform: `translate3d(0, ${(-position * 100) / STEPS.length}%, 0)`,
+      }}
+    >
+      {STEPS.map((step, index) => (
+        <Tag
+          key={step.id}
+          className={cn(WORD, "ml-auto flex items-center")}
+          style={{
+            height: SLOT,
+            clipPath: sweep
+              ? `inset(0 ${(1 - sweep(index)) * 100}% 0 0)`
+              : undefined,
+          }}
+        >
+          {/* The light rides on the inside: `.gleam-in` paints through the
+              text with background-clip, which wants a plain box, and the slot
+              above it is a flex box that has to stay one. */}
+          <span
+            className={sweep ? "gleam-in" : undefined}
+            style={sweep ? gleam(sweep(index)) : undefined}
+          >
+            {step.word}
+          </span>
+        </Tag>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Эрхэм зорилго, алсын хараа, үнэт зүйл — one screen, scrolled through.
+ *
+ * The section is three screens tall and its contents are pinned for all of
+ * them, so a screen of scrolling moves the piece on by one statement rather
+ * than moving the page. A hairline runs across the middle of the window and
+ * the subject rides up through it.
+ *
+ * Each step is two beats, as the reference's are. The word arrives on the line
+ * and stands there while it fills in from the left and the sentence beside it
+ * is drawn in behind a soft edge; only then does it travel up and the next one
+ * arrive. Reaching the line and being read are separate movements — run as one,
+ * the word is gone before the sentence has been finished.
+ *
+ * Both sides of the line are clipped to exactly one word, so the line always
+ * has one word above it and one below and nothing queues behind either. The
+ * words change in place rather than piling up.
+ *
+ * The sentence sits beside the word on a wide screen, as in the reference, and
+ * drops underneath it below `xl` — side by side, the Mongolian is long enough
+ * that the two would meet in the middle.
+ *
+ * Under reduced motion the runway is dropped and the three are laid out as
+ * three plain screens instead.
+ *
+ * Anchors: the vision and the values were tabs of the culture section below
+ * and are linked by those hashes from the hero rail and the site footer, so
+ * each step carries a landing point at the scroll position that shows it.
+ */
+export function StatementBands() {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const { progress, isReduced } = useScrollProgress(ref);
+
+  // Where we are in the run, in steps. Held just inside the last one so the
+  // closing word does not travel off the line at the very bottom.
+  const run = Math.min(progress * STEPS.length, STEPS.length - 0.0001);
+  const current = Math.floor(run);
+  const local = run - current;
+
+  // Stands on the line for the first beat of the step, then moves up.
+  const position = Math.min(
+    current + clamp((local - HOLD) / (1 - HOLD)),
+    STEPS.length - 1,
+  );
+
+  // What is being read is whatever is nearest the line, not whichever step the
+  // scroll is technically in: for the last quarter of a step the next word has
+  // already travelled up to the line, and keying off the step would leave the
+  // sentence of the one before it sitting beside the new word.
+  const lead = Math.round(position);
+  const sweep = (index: number) =>
+    index < lead ? 1 : index > lead ? 0 : clamp((run - lead) / SWEEP);
+
+  // The line is one draw across the whole run, not one per word: it sets off
+  // with the first word and is finished only once the last sentence is, so it
+  // reads as the three being written together rather than as three separate
+  // strokes. DRAWN_BY is the point in the run the closing sweep ends at —
+  // past it there is still scroll left, and the line would otherwise sit
+  // unfinished through the end of the section.
+  const draw = clamp(run / (STEPS.length - 1 + SWEEP));
+
+  // One gap on either side of the word. The sentence is held inside the row
+  // rather than allowed to run past its right edge, which is what would happen
+  // on a narrow window behind the longest of the three words.
+  if (isReduced) {
+    return (
+      <section className="relative isolate">
+        <SectionRule />
+        {STEPS.map((step) => (
+          <article
+            key={step.id}
+            id={step.id}
+            className="relative isolate flex min-h-[70svh] scroll-mt-16 flex-col justify-center overflow-hidden px-6 py-20 text-ink-foreground lg:px-10"
+          >
+            <Image
+              src={step.image}
+              alt=""
+              aria-hidden
+              fill
+              sizes="100vw"
+              className="-z-20 object-cover"
+            />
+            <div aria-hidden className="absolute inset-0 -z-10 bg-ink/55" />
+        {/* The brandbook's feather ground. The placeholder photographs are flat
+            fields of colour, and over a flat field flat type reads as a slide
+            rather than a screen. */}
+        <FeatherLattice className="-z-10 opacity-[0.18]" tone="brand" />
+
+            <div className="mx-auto w-full max-w-6xl">
+              <p className="text-[0.6875rem] font-medium tracking-[0.16em] text-white/55 uppercase">
+                Бидний
+              </p>
+              <h2 className={cn(WORD, "mt-4")}>{step.word}</h2>
+              <div className="mt-8 max-w-md">
+                <Statement step={step} />
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
+    );
+  }
+
+  return (
+    <section ref={ref} className="relative isolate h-[300svh]">
+      {/* On the section, not the pinned screen — inside, it would sit at the
+          top of the window for the whole three screens of the run. */}
+      <SectionRule />
+
+      {/* One landing point per step, at the scroll position that shows it. */}
+      {STEPS.map((step, index) => (
+        <span
+          key={step.id}
+          id={step.id}
+          aria-hidden
+          className="absolute inset-x-0 block h-0"
+          style={{ top: `${(index * 100) / STEPS.length}%` }}
+        />
+      ))}
+
+      {/* Ink under the grounds, so a photograph that has not arrived yet leaves
+          the type on the colour it was drawn for rather than on the page. */}
+      <div
+        className="sticky top-0 h-svh overflow-hidden bg-ink text-ink-foreground"
+        style={
+          {
+            // What the type settles to once the light has passed: not the flat
+            // white it was, but that white carrying a little of the sheen, so
+            // the screen keeps a colour of its own at rest.
+            "--gleam-base":
+              "color-mix(in oklab, var(--sheen-cool) 30%, var(--ink-foreground))",
+            "--gleam-sheen": "var(--sheen-cool)",
+          } as React.CSSProperties
+        }
+      >
+        {STEPS.map((step, index) => (
+          <Image
+            key={step.id}
+            src={step.image}
+            alt=""
+            aria-hidden
+            fill
+            priority={index === 0}
+            sizes="100vw"
+            className="-z-20 object-cover"
+            style={{ opacity: near(position, index) }}
+          />
+        ))}
+        <div aria-hidden className="absolute inset-0 -z-10 bg-ink/55" />
+        {/* The brandbook's feather ground. The placeholder photographs are flat
+            fields of colour, and over a flat field flat type reads as a slide
+            rather than a screen. */}
+        <FeatherLattice className="-z-10 opacity-[0.18]" tone="brand" />
+
+        {/* The line the words cross. */}
+        <div
+          aria-hidden
+          // Not the brand gradient: the section rules above and below it are
+          // already that orange, and a third orange rule across the middle read
+          // as the page having been ruled twice by mistake.
+          className="absolute inset-x-0 top-1/2 h-px bg-white/25"
+          style={{ transform: `scaleX(${draw})`, transformOrigin: "left" }}
+        />
+
+        <div className="absolute inset-0 mx-auto max-w-6xl px-6 lg:px-10">
+          {/* One row across the line, laid out rather than placed: the kicker,
+              the column the words run in, and the sentence. The gap is the flex
+              gap. Placing the three by hand needed the word's width, and a
+              width can only be had by measuring — which left the row sitting in
+              its unmeasured places whenever the measurement did not land, the
+              kicker underneath the word. */}
+          <div className="absolute inset-x-6 top-1/2 flex flex-wrap items-start gap-x-8 lg:inset-x-10">
+            <p
+              aria-hidden
+              className="mt-[0.9em] shrink-0 text-[0.6875rem] font-medium tracking-[0.16em] text-white/55 uppercase"
+            >
+              Бидний
+            </p>
+
+            <div className={cn(WORD_SIZE, "relative shrink-0")}>
+              {/* All three words in one grid cell, so the column is as wide as
+                  the widest of them and never changes width. Sized to the word
+                  at the line instead, the column breathed in and out by the
+                  157px between the longest word and the shortest, and took the
+                  sentence with it — the reader was following a column that
+                  would not stand still. Fixed, the words change on one edge and
+                  the sentence beside them never moves. */}
+              <span
+                aria-hidden
+                className="invisible grid justify-items-end"
+                style={{ height: SLOT }}
+              >
+                {STEPS.map((step) => (
+                  <span
+                    key={step.id}
+                    className={cn(WORD, "col-start-1 row-start-1")}
+                  >
+                    {step.word}
+                  </span>
+                ))}
+              </span>
+
+              {/* Above the line: the word just read, and only that one. The
+                  window matches the one below it, so the line has a word on
+                  either side of it and the pair sits square on it; given the
+                  whole half-screen the words already read stacked up above it
+                  instead, and the piece read as a list growing off the top
+                  rather than as one word handing over to the next. A screen
+                  wide because the words it carries are not all as wide as this
+                  column, and a word must not be cut off at its edge; it hangs
+                  off the column's right edge, which is the edge the words are
+                  set to. */}
+              <div
+                aria-hidden
+                className="absolute right-0 bottom-full h-[1.25em] w-screen overflow-hidden"
+              >
+                <Roller position={position} className="top-full text-white/25" />
+              </div>
+
+              {/* Below the line: the word being read, and only that one. */}
+              <div className="absolute top-0 right-0 h-[1.25em] w-screen overflow-hidden">
+                {/* The unlit bed the swept copy is drawn over. Same words, so
+                    it is kept away from assistive tech. */}
+                <div aria-hidden className="absolute inset-0">
+                  <Roller position={position} className="top-0 text-white/25" />
+                </div>
+                <Roller
+                  position={position}
+                  sweep={sweep}
+                  heading
+                  className="top-0 text-white"
+                />
+              </div>
+            </div>
+
+            {/* Level with the word, not under it: 8px is where the sentence's
+                capitals land on the word's, worked from Geist's own metrics —
+                cap 0.71em on a 1.30em content box, the word at its 56px ceiling
+                centred in a 1.25em slot, the sentence at 24px on 1.3 leading.
+                `basis-full` drops it onto its own line below `xl`, where the
+                Mongolian is long enough that the two would meet in the middle. */}
+            <div className="relative mt-20 max-w-md basis-full xl:mt-2 xl:basis-0 xl:grow">
+              {STEPS.map((step, index) => (
+                <div
+                  key={step.id}
+                  inert={index !== lead}
+                  className={cn(
+                    "gleam-in transition-opacity duration-300 ease-out",
+                    index > 0 && "absolute inset-x-0 top-0",
+                  )}
+                  style={{
+                    ...gleam(sweep(index)),
+                    opacity: index === lead ? 1 : 0,
+                    // Drawn in behind a soft edge, in reading order, over the
+                    // same beat the word is swept in on.
+                    maskImage: `linear-gradient(105deg, #000 ${sweep(index) * 180 - 70}%, transparent ${sweep(index) * 180 - 20}%)`,
+                  }}
+                >
+                  <Statement step={step} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

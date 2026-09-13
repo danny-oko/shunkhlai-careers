@@ -168,6 +168,37 @@
   html::-webkit-scrollbar {
     display: none;
   }
+
+  /* The page's own vertical line.
+     Every section is `mx-auto max-w-6xl px-6 lg:px-10`, so its content starts
+     this far in from the window: the side padding while the window is narrower
+     than the container, and the padding plus the leftover margin once it is
+     wider. The full-bleed runs — the chain of cards under the tanker, the
+     history track — cannot use the container because they have to overflow it,
+     so they take this instead and start on the same line the header's wordmark
+     and the footer's columns do. */
+  :root {
+    --page-gutter: max(1.5rem, calc((100vw - 72rem) / 2 + 1.5rem));
+  }
+  @media (width >= 64rem) {
+    :root {
+      --page-gutter: max(2.5rem, calc((100vw - 72rem) / 2 + 2.5rem));
+    }
+  }
+
+  /* Anything that can be pressed says so.
+
+     Tailwind v3 used to put this on buttons for you; v4 leaves the browser's
+     own `cursor: default` in place, so every button on the site — the nav, the
+     theme toggle, the tab rails, every form — was showing the arrow. Links get
+     it from the browser already; these are the ones that do not. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
   /* Tight kerning + optical sizing for display type */
   h1,
   h2,
@@ -506,4 +537,62 @@
     -webkit-text-fill-color: currentColor;
     text-shadow: none;
   }
+}
+
+/* ----------------------------------------------------------------------
+   Cursor ring
+   The styling half of <CursorRing>. The component only moves the two
+   elements and sets three data attributes; what those mean is here, so the
+   look can be changed without touching the frame loop.
+
+   `data-cursor-ring` goes on <html> once the component is running, and that
+   is the only thing that takes the native cursor away: with no JavaScript,
+   or on a touch screen, or with motion turned down, the attribute is never
+   set and the arrow stays exactly as it was.
+   ---------------------------------------------------------------------- */
+@media (pointer: fine) {
+  :root[data-cursor-ring="on"],
+  :root[data-cursor-ring="on"] * {
+    cursor: none;
+  }
+
+  /* Except where a caret is the point: a field with no I-beam is a field you
+     cannot tell you are about to type in. */
+  :root[data-cursor-ring="on"] :is(input, textarea, [contenteditable]) {
+    cursor: auto;
+  }
+}
+
+.cursor-ring-circle {
+  opacity: 0;
+  transition:
+    opacity 200ms ease-out,
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease-out,
+    background-color 220ms ease-out;
+  will-change: transform;
+}
+.cursor-ring-circle[data-seen="yes"] {
+  opacity: 1;
+}
+/* Open over anything pressable, and take the brand with it. */
+.cursor-ring-circle[data-over="yes"] {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-color: var(--brand);
+  background-color: color-mix(in oklab, var(--brand) 10%, transparent);
+}
+
+.cursor-ring-dot {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  will-change: transform;
+}
+.cursor-ring-dot[data-seen="yes"] {
+  opacity: 1;
+}
+/* The field's own caret is enough; two marks in one place is one too many. */
+.cursor-ring-dot[data-over="typing"] {
+  opacity: 0;
 }

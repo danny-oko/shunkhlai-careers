@@ -44,7 +44,7 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
   return (
     <section
       ref={sectionRef}
-      aria-label="Шунхлай — Хөдөлмөр хөгжлийн хөдөлгүүр"
+      aria-label="Шунхлай - Хөдөлмөр хөгжлийн хөдөлгүүр"
       className={cn("relative", isReduced ? "h-svh" : "h-[150svh]")}
     >
       <div className="sticky top-0 h-svh overflow-hidden">

@@ -138,7 +138,7 @@ export function JobHeader({ job }: { job: JobDetail }) {
                 "text-muted-foreground",
               )}
             >
-              Энэ зарын хугацаа дууссан байна — {job.status}
+              Энэ зарын хугацаа дууссан байна - {job.status}
             </p>
           )}
         </Rise>
