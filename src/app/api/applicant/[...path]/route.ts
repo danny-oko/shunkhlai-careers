@@ -7,6 +7,7 @@ import {
   completion,
   createAccount,
   defaultCountry,
+  dropdownRows,
   dropdowns,
   filterData,
   findAccount,
@@ -78,22 +79,12 @@ function num(value: string | null, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-/** Dropdowns share one handler: filter by `search`, honour `ids` and `lfr`. */
+/**
+ * Dropdowns share one handler: the parent id the list hangs off, `search`,
+ * `ids` and `lfr`, all applied together by `dropdownRows`.
+ */
 function dropdown(name: string, url: URL) {
-  const rows = dropdowns[name] ?? [];
-  const search = (url.searchParams.get("search") ?? "").trim().toLowerCase();
-  const ids = url.searchParams.getAll("ids").filter(Boolean);
-  const lfr = url.searchParams.get("lfr") === "true";
-
-  let result = rows;
-  if (ids.length > 0) {
-    result = rows.filter((row) => ids.includes(String(row.key)));
-  } else if (search) {
-    result = rows.filter((row) => String(row.text).toLowerCase().includes(search));
-  }
-  if (lfr) result = result.slice(0, 5);
-
-  return ok(result.map((row, index) => ({ row_index: index + 1, ...row })));
+  return ok(dropdownRows(name, url.searchParams));
 }
 
 async function readJson(request: Request): Promise<unknown> {
