@@ -22,13 +22,24 @@ const educationFields: FieldDef[] = [
     load: () => reference.countries(),
   },
   {
+    name: "divisionid",
+    label: "Хот, аймаг",
+    type: "select",
+    deps: ["countryid"],
+    depsRequired: true,
+    load: (values) => reference.divisions({ countryid: Number(values.countryid) || 0 }),
+  },
+  {
     name: "universityid",
     label: "Сургууль",
-    type: "select",
+    type: "combobox",
     required: true,
     deps: ["countryid"],
-    load: (values) =>
-      reference.universities({ countryid: Number(values.countryid) || 0 }),
+    hint: "Улсаа сонгосны дараа тухайн улсын сургуулиуд гарч ирнэ.",
+    // `countryid: 0` is the collection's own "every country", so the list is
+    // usable before a country is chosen rather than empty.
+    load: (values, query) =>
+      reference.universities({ ...query, countryid: Number(values.countryid) || 0 }),
   },
   {
     name: "universitynametext",
@@ -38,8 +49,8 @@ const educationFields: FieldDef[] = [
   {
     name: "professionid",
     label: "Мэргэжил",
-    type: "select",
-    load: () => reference.professions(),
+    type: "combobox",
+    load: (_values, query) => reference.professions(query),
   },
   {
     name: "educationlevelid",
@@ -102,11 +113,14 @@ const skillFields: FieldDef[] = [
     load: () => reference.computerSkills(),
   },
   {
+    // Every skill has its own levels — `skillcompid` is заавал here, so this
+    // list means nothing until a skill is chosen.
     name: "levelid",
     label: "Эзэмшсэн түвшин",
     type: "select",
     required: true,
     deps: ["skillcompid"],
+    depsRequired: true,
     load: (values) =>
       reference.computerSkillLevels({ skillcompid: Number(values.skillcompid) || 0 }),
   },

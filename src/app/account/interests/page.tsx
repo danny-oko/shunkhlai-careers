@@ -4,37 +4,45 @@ import * as React from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { AsyncCombobox } from "@/components/account/async-combobox";
 import { useDropdown } from "@/components/account/use-dropdown";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { applications, reference, toApiError } from "@/lib/api";
+import type { DropdownOption, DropdownQuery } from "@/lib/api";
 import type { InterestedJobRow } from "@/lib/api/applications";
 
 /**
  * Interested roles — a standing request to be told when a matching vacancy
  * opens. A group alone is enough; the position narrows it.
  *
- * `getPositionsDropdown` rows carry `posgroupid` and `depid`, so the position
- * list is filtered client-side by the chosen group and the department id is
- * taken from the position rather than asked for separately.
+ * `getPositionsDropdown` is the one dependent list the backend does not filter:
+ * it takes no group parameter, so the 501 rows are narrowed here, on each row's
+ * own `posgroupid`, and the department id is read off the chosen row rather
+ * than asked for separately. `posgroupid` arrives as a number and `depid` as a
+ * string, so both sides of the comparison are stringified and `depid` is never
+ * coerced on its way into the save.
+ *
+ * Nothing is fetched before a group is chosen — the whole list would be thrown
+ * away by the filter anyway.
  */
 export default function InterestsPage() {
   const [isAdding, setIsAdding] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [group, setGroup] = React.useState("");
   const [position, setPosition] = React.useState("");
+  const [chosen, setChosen] = React.useState<DropdownOption | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const groups = useDropdown(() => reference.positionGroups(), []);
-  const positions = useDropdown(() => reference.positions(), []);
 
-  const visiblePositions = React.useMemo(
-    () =>
-      group
-        ? positions.options.filter((option) => String(option.raw.posgroupid) === group)
-        : positions.options,
-    [positions.options, group],
+  const loadPositions = React.useCallback(
+    async (query: DropdownQuery) => {
+      const rows = await reference.positions(query);
+      return rows.filter((row) => String(row.raw.posgroupid) === group);
+    },
+    [group],
   );
 
   const [token, setToken] = React.useState(0);
@@ -78,7 +86,6 @@ export default function InterestsPage() {
     setError(null);
     setIsSaving(true);
     try {
-      const chosen = visiblePositions.find((option) => option.value === position);
       await applications.saveInterest({
         entryid: 0,
         posgroupid: Number(group),
@@ -89,6 +96,7 @@ export default function InterestsPage() {
       setIsAdding(false);
       setGroup("");
       setPosition("");
+      setChosen(null);
       await reload();
     } catch (saveError) {
       setError(toApiError(saveError).message);
@@ -144,6 +152,7 @@ export default function InterestsPage() {
                 onChange={(event) => {
                   setGroup(event.target.value);
                   setPosition("");
+                  setChosen(null);
                 }}
               >
                 <option value="">{groups.isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
@@ -160,19 +169,19 @@ export default function InterestsPage() {
               htmlFor="position"
               hint="Заавал биш - бүлгээр нь бүртгүүлж болно."
             >
-              <Select
+              <AsyncCombobox
                 id="position"
                 value={position}
-                disabled={positions.isLoading}
-                onChange={(event) => setPosition(event.target.value)}
-              >
-                <option value="">- Бүх албан тушаал -</option>
-                {visiblePositions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
+                disabled={!group}
+                reloadKey={group}
+                placeholder={group ? "Бичиж хайх" : "Эхлээд бүлгээ сонгоно уу"}
+                emptyText="Энэ бүлэгт тохирох албан тушаал олдсонгүй."
+                load={loadPositions}
+                onChange={(next, option) => {
+                  setPosition(next);
+                  setChosen(option);
+                }}
+              />
             </Field>
           </div>
 
