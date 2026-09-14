@@ -3,11 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUpRight, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { FilterSection } from "@/components/job-filters";
 import {
   applyFacets,
@@ -15,10 +12,12 @@ import {
   defaultFacets,
   groupOptions,
   isFiltered,
+  locationOptions,
+  salaryOptions,
   workTypeOptions,
   type JobFacets,
 } from "@/lib/jobs/filters";
-import type { Job } from "@/lib/jobs/types";
+import { ALL, type Job } from "@/lib/jobs/types";
 import type { JobFilterData } from "@/lib/api/jobs";
 import { cn } from "@/lib/utils";
 import { SectionRule } from "@/components/brand/section-rule";
@@ -30,6 +29,9 @@ import { SectionRule } from "@/components/brand/section-rule";
  * `getRecruitmentOrderList` through the URL, so results stay linkable and
  * server-rendered. Position group, company and work type are refined over the
  * rows already on the page.
+ *
+ * Which side of that line a filter falls on is an implementation detail to the
+ * candidate, so both layers are the same pills in the same rail.
  */
 export function JobBrowser({
   jobs,
@@ -43,7 +45,6 @@ export function JobBrowser({
 
   const [facets, setFacets] = React.useState<JobFacets>(defaultFacets);
   const [isPanelOpen, setIsPanelOpen] = React.useState(false);
-  const [search, setSearch] = React.useState(params.get("jobName") ?? "");
 
   const locationId = params.get("locationid") ?? "";
   const salaryLevelId = params.get("salaryLevelID") ?? "";
@@ -52,6 +53,8 @@ export function JobBrowser({
   const groups = React.useMemo(() => groupOptions(jobs), [jobs]);
   const companies = React.useMemo(() => companyOptions(jobs), [jobs]);
   const workTypes = React.useMemo(() => workTypeOptions(jobs), [jobs]);
+  const locations = React.useMemo(() => locationOptions(filterData), [filterData]);
+  const salaryLevels = React.useMemo(() => salaryOptions(filterData), [filterData]);
 
   /** Server-side filters live in the URL. */
   function pushQuery(next: Record<string, string>) {
@@ -66,12 +69,10 @@ export function JobBrowser({
 
   function clearEverything() {
     setFacets(defaultFacets);
-    setSearch("");
     router.push("/careers");
   }
 
   const hasFacets = isFiltered(facets);
-  const hasQuery = Boolean(params.get("jobName") || locationId || salaryLevelId);
 
   const filterSections = (
     <>
@@ -81,6 +82,20 @@ export function JobBrowser({
         value={facets.group}
         onChange={(value) => setFacets((current) => ({ ...current, group: value }))}
         defaultOpen
+      />
+      <FilterSection
+        title="Байршил"
+        options={locations}
+        value={locationId || ALL}
+        onChange={(value) => pushQuery({ locationid: value === ALL ? "" : value })}
+      />
+      <FilterSection
+        title="Цалингийн түвшин"
+        options={salaryLevels}
+        value={salaryLevelId || ALL}
+        onChange={(value) =>
+          pushQuery({ salaryLevelID: value === ALL ? "" : value })
+        }
       />
       <FilterSection
         title="Компани"
@@ -174,7 +189,9 @@ export function JobBrowser({
         >
           <SlidersHorizontal className="size-3.5" />
           Шүүлтүүр
-          {hasFacets ? <span className="size-1.5 rounded-full bg-primary" /> : null}
+          {hasFacets || locationId || salaryLevelId ? (
+            <span className="size-1.5 rounded-full bg-primary" />
+          ) : null}
         </button>
       </div>
 
