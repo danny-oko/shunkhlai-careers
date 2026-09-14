@@ -47,7 +47,9 @@ export type JobDetail = Job & {
 export type FacetOption = {
   value: string;
   label: string;
-  count: number;
+  /** Absent on the server-side lists: the page only holds the rows for the
+      current selection, so there is no honest number to show. */
+  count?: number;
 };
 
 export const ALL = "all";

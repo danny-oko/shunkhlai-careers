@@ -1,3 +1,5 @@
+import type { JobFilterData } from "@/lib/api/jobs";
+
 import { ALL, type FacetOption, type Job } from "./types";
 
 /**
@@ -59,6 +61,33 @@ export function companyOptions(jobs: Job[]) {
 
 export function workTypeOptions(jobs: Job[]) {
   return tally(jobs, (job) => job.workType, "Бүх төрөл");
+}
+
+/**
+ * The two lists the API filters on, in the same shape as the tallied ones so
+ * they render as the same pills. The values are the ids the query string
+ * carries, with `ALL` standing in for "no filter" — no counts, because the
+ * page only ever holds the rows for the current selection.
+ */
+
+export function locationOptions(filterData: JobFilterData | null): FacetOption[] {
+  return [
+    { value: ALL, label: "Бүх байршил" },
+    ...(filterData?.location ?? []).map((location) => ({
+      value: String(location.entryid),
+      label: [location.name, location.divisionname].filter(Boolean).join(" — "),
+    })),
+  ];
+}
+
+export function salaryOptions(filterData: JobFilterData | null): FacetOption[] {
+  return [
+    { value: ALL, label: "Бүх цалингийн түвшин" },
+    ...(filterData?.salarylevel ?? []).map((level) => ({
+      value: String(level.key),
+      label: `${level.text}₮`,
+    })),
+  ];
 }
 
 export function matchesFacets(job: Job, facets: JobFacets): boolean {
