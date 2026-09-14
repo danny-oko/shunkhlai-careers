@@ -254,6 +254,11 @@ function useScatter({
       !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!wanted) return;
 
+    // A one-shot capability probe, not a render-driven update: `matchMedia` is
+    // unavailable during SSR, so this cannot be lazy initial state, and the
+    // answer is read once rather than subscribed to. The cascading render the
+    // rule guards against is the single mount that turns the canvas on.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     return () => setMounted(false);
   }, [frameRef]);
