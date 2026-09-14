@@ -146,7 +146,7 @@ export default function InterestsPage() {
                   setPosition("");
                 }}
               >
-                <option value="">{groups.isLoading ? "Ачаалж байна…" : "— Сонгох —"}</option>
+                <option value="">{groups.isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
                 {groups.options.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -158,7 +158,7 @@ export default function InterestsPage() {
             <Field
               label="Албан тушаал"
               htmlFor="position"
-              hint="Заавал биш — бүлгээр нь бүртгүүлж болно."
+              hint="Заавал биш - бүлгээр нь бүртгүүлж болно."
             >
               <Select
                 id="position"
@@ -166,7 +166,7 @@ export default function InterestsPage() {
                 disabled={positions.isLoading}
                 onChange={(event) => setPosition(event.target.value)}
               >
-                <option value="">— Бүх албан тушаал —</option>
+                <option value="">- Бүх албан тушаал -</option>
                 {visiblePositions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}

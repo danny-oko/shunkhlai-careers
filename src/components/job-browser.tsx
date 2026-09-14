@@ -115,6 +115,69 @@ export function JobBrowser({
   return (
     <div className="relative">
       <SectionRule />
+      <form
+        className="grid gap-3 border-b border-border/70 px-6 py-5 sm:grid-cols-[minmax(0,1fr)_auto] lg:px-10"
+        onSubmit={(event) => {
+          event.preventDefault();
+          pushQuery({ jobName: search.trim() });
+        }}
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="relative sm:col-span-1">
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Албан тушаалаар хайх"
+              aria-label="Албан тушаалаар хайх"
+              className="pl-9"
+            />
+          </div>
+
+          <Select
+            aria-label="Байршил"
+            value={locationId}
+            onChange={(event) => pushQuery({ locationid: event.target.value })}
+          >
+            <option value="">Бүх байршил</option>
+            {(filterData?.location ?? []).map((location) => (
+              <option key={location.entryid} value={location.entryid}>
+                {location.name} - {location.divisionname}
+              </option>
+            ))}
+          </Select>
+
+          <Select
+            aria-label="Цалингийн түвшин"
+            value={salaryLevelId}
+            onChange={(event) => pushQuery({ salaryLevelID: event.target.value })}
+          >
+            <option value="">Бүх цалингийн түвшин</option>
+            {(filterData?.salarylevel ?? []).map((level) => (
+              <option key={level.key} value={level.key}>
+                {level.text}₮
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="flex gap-2">
+          <Button type="submit" className="h-9 rounded-full px-5">
+            Хайх
+          </Button>
+          {hasQuery || hasFacets ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={clearEverything}
+              className="h-9 rounded-full px-4"
+            >
+              <X className="size-3.5" />
+              Цэвэрлэх
+            </Button>
+          ) : null}
+        </div>
+      </form>
 
       {/* Mobile: the facet tree collapses behind a single toggle. */}
       <div className="border-b border-border/70 px-6 py-4 lg:hidden">

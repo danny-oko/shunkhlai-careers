@@ -74,6 +74,13 @@
     var(--brand) 100%
   );
 
+  /* The two colours a travelling glint can be. Which one is used is decided
+     by the ground it crosses, not by the theme: brand orange on the white
+     page, and a blue-white on the navy ink panels, where orange on navy
+     reads as a smudge rather than as light. */
+  --sheen-warm: var(--brand);
+  --sheen-cool: color-mix(in oklab, var(--brand-blue) 35%, white);
+
   --app-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
@@ -160,6 +167,37 @@
   }
   html::-webkit-scrollbar {
     display: none;
+  }
+
+  /* The page's own vertical line.
+     Every section is `mx-auto max-w-6xl px-6 lg:px-10`, so its content starts
+     this far in from the window: the side padding while the window is narrower
+     than the container, and the padding plus the leftover margin once it is
+     wider. The full-bleed runs — the chain of cards under the tanker, the
+     history track — cannot use the container because they have to overflow it,
+     so they take this instead and start on the same line the header's wordmark
+     and the footer's columns do. */
+  :root {
+    --page-gutter: max(1.5rem, calc((100vw - 72rem) / 2 + 1.5rem));
+  }
+  @media (width >= 64rem) {
+    :root {
+      --page-gutter: max(2.5rem, calc((100vw - 72rem) / 2 + 2.5rem));
+    }
+  }
+
+  /* Anything that can be pressed says so.
+
+     Tailwind v3 used to put this on buttons for you; v4 leaves the browser's
+     own `cursor: default` in place, so every button on the site — the nav, the
+     theme toggle, the tab rails, every form — was showing the arrow. Links get
+     it from the browser already; these are the ones that do not. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
   }
   /* Tight kerning + optical sizing for display type */
   h1,
@@ -457,4 +495,104 @@
   [data-statement-shown="true"] .statement-line {
     animation: none;
   }
+}
+
+/* -------------------------------------------------------------------------
+   Gleam-in
+   A band of light travelling through a line of type as it arrives.
+
+   Its position is read from --gleam (0 to 1, the element's own share of its
+   reveal), so the light is driven by the scroll rather than by a clock: stop
+   scrolling and it stops with you. --gleam-heat is a bell over the same
+   share, and carries the glow that peaks as the band crosses the middle.
+
+   Nothing here is declared as a plain default: --gleam-base and
+   --gleam-sheen are read with fallbacks so a container can set them once for
+   everything inside it. A declaration on this rule would beat that.
+   ---------------------------------------------------------------------- */
+.gleam-in {
+  background-image: linear-gradient(
+    100deg,
+    var(--gleam-base, var(--foreground)) 0 44%,
+    var(--gleam-sheen, var(--sheen-warm)) 50%,
+    var(--gleam-base, var(--foreground)) 56% 100%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  /* 300% wide, so the band at the middle of the image is off the element at
+     both ends of the sweep: it enters at 0 and has left again by 1. */
+  background-position-x: calc((1 - var(--gleam, 1)) * 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 calc(var(--gleam-heat, 0) * 18px)
+    color-mix(in oklab, var(--gleam-sheen, var(--sheen-warm)) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gleam-in {
+    background-image: none;
+    color: var(--gleam-base, var(--foreground));
+    -webkit-text-fill-color: currentColor;
+    text-shadow: none;
+  }
+}
+
+/* ----------------------------------------------------------------------
+   Cursor ring
+   The styling half of <CursorRing>. The component only moves the two
+   elements and sets three data attributes; what those mean is here, so the
+   look can be changed without touching the frame loop.
+
+   `data-cursor-ring` goes on <html> once the component is running, and that
+   is the only thing that takes the native cursor away: with no JavaScript,
+   or on a touch screen, or with motion turned down, the attribute is never
+   set and the arrow stays exactly as it was.
+   ---------------------------------------------------------------------- */
+@media (pointer: fine) {
+  :root[data-cursor-ring="on"],
+  :root[data-cursor-ring="on"] * {
+    cursor: none;
+  }
+
+  /* Except where a caret is the point: a field with no I-beam is a field you
+     cannot tell you are about to type in. */
+  :root[data-cursor-ring="on"] :is(input, textarea, [contenteditable]) {
+    cursor: auto;
+  }
+}
+
+.cursor-ring-circle {
+  opacity: 0;
+  transition:
+    opacity 200ms ease-out,
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease-out,
+    background-color 220ms ease-out;
+  will-change: transform;
+}
+.cursor-ring-circle[data-seen="yes"] {
+  opacity: 1;
+}
+/* Open over anything pressable, and take the brand with it. */
+.cursor-ring-circle[data-over="yes"] {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-color: var(--brand);
+  background-color: color-mix(in oklab, var(--brand) 10%, transparent);
+}
+
+.cursor-ring-dot {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  will-change: transform;
+}
+.cursor-ring-dot[data-seen="yes"] {
+  opacity: 1;
+}
+/* The field's own caret is enough; two marks in one place is one too many. */
+.cursor-ring-dot[data-over="typing"] {
+  opacity: 0;
 }

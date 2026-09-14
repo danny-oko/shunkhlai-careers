@@ -210,7 +210,7 @@ export function ApplyDialog({
                   disabled={sources.isLoading}
                   onChange={(event) => setRecsourceid(event.target.value)}
                 >
-                  <option value="">{sources.isLoading ? "Ачаалж байна…" : "— Сонгох —"}</option>
+                  <option value="">{sources.isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
                   {sources.options.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}

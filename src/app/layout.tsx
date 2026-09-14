@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "@/components/auth/session-provider";
+import { CursorRing } from "@/components/cursor-ring";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
@@ -25,8 +26,8 @@ export const metadata: Metadata = {
   // Absolute base for Open Graph images. Update if the site moves.
   metadataBase: new URL("https://careers.shunkhlai.mn"),
   title: {
-    default: "Шунхлай ХХК — Careers",
-    template: "%s — Шунхлай Careers",
+    default: "Шунхлай ХХК - Careers",
+    template: "%s - Шунхлай Careers",
   },
   description:
     "Шунхлай ХХК-ийн карьерын сайт. Хүний нөөц, санхүү, лаборатори, логистик, борлуулалт, маркетинг, мэдээллийн технологийн нээлттэй ажлын байр.",
@@ -54,6 +55,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             {children}
             <SiteFooter />
             <Toaster position="bottom-right" />
+            <CursorRing />
           </SessionProvider>
         </ThemeProvider>
       </body>

@@ -49,7 +49,7 @@ export default function ExperiencePage() {
           row.jobname,
           [row.fromdate, row.isworking === "Y" ? "одоо" : row.todate]
             .filter(Boolean)
-            .join(" — "),
+            .join(" - "),
         ]
           .filter(Boolean)
           .join(" · ")

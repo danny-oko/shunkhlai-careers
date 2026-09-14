@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { BrandMark } from "@/components/brand/brand-logo";
 import { SITE_BRAND_ID } from "@/components/site-header";
 
 type Flight = { dx: number; dy: number; scale: number };
@@ -63,9 +64,10 @@ export function LoaderLogo({
           opacity: visible ? 1 : 0,
         }}
       >
-        <span
-          className="h-9 w-2 rounded-full sm:h-11 sm:w-2.5"
-          style={{ backgroundImage: "var(--brand-gradient)" }}
+        <BrandMark
+          className="h-9 sm:h-11"
+          sizes="(min-width: 640px) 132px, 108px"
+          priority
         />
         <span className="text-3xl font-semibold tracking-[-0.04em] whitespace-nowrap sm:text-5xl">
           Шунхлай <span className="opacity-55">ХХК</span>

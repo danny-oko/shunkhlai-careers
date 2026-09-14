@@ -48,7 +48,7 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
 
     const regno = values.regno.trim().toUpperCase();
     if (!REGNO_PATTERN.test(regno)) {
-      setError("Регистрийн дугаараа шалгана уу — жишээ нь УБ99010101.");
+      setError("Регистрийн дугаараа шалгана уу - жишээ нь УБ99010101.");
       return;
     }
     if (!values.mobilephone.trim()) {
@@ -137,7 +137,7 @@ export function AuthForm({ mode }: { mode: "signin" | "signup" }) {
         required
         hint={
           isSignUp
-            ? "Энэ дугаар таны анхны нууц үг болно — дараа нь солих боломжтой."
+            ? "Энэ дугаар таны анхны нууц үг болно - дараа нь солих боломжтой."
             : "Анхны нууц үг нь бүртгүүлэхэд ашигласан утасны дугаар."
         }
       >
