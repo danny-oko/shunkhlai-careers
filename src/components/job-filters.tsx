@@ -14,12 +14,15 @@ function FilterPill({
   isSelected: boolean;
   onSelect: (value: string) => void;
 }) {
+  // The rail is narrow and some location names are long, so the label
+  // truncates - `title` keeps the whole of it reachable.
   return (
     <button
       type="button"
       role="radio"
       aria-checked={isSelected}
       onClick={() => onSelect(option.value)}
+      title={option.label}
       className={cn(
         "flex w-full items-center gap-2 rounded-full border px-4 py-2.5 text-left text-sm transition-colors",
         "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
@@ -29,14 +32,16 @@ function FilterPill({
       )}
     >
       <span className="truncate">{option.label}</span>
-      <span
-        className={cn(
-          "ml-auto text-xs tabular-nums",
-          isSelected ? "text-background/60" : "text-muted-foreground/70",
-        )}
-      >
-        {option.count}
-      </span>
+      {typeof option.count === "number" && (
+        <span
+          className={cn(
+            "ml-auto text-xs tabular-nums",
+            isSelected ? "text-background/60" : "text-muted-foreground/70",
+          )}
+        >
+          {option.count}
+        </span>
+      )}
     </button>
   );
 }

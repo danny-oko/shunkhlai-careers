@@ -22,7 +22,10 @@ export type ApplicationInput = {
 
 /** One row of `getRecruitmenRequestList` (note: no `t` in "Recruitmen"). */
 export type ApplicationRow = {
+  /** The request's own id — this is what `withdraw` deletes. */
   entryid: number;
+  /** The posting the request was sent to, i.e. an `entryid` from the job list. */
+  recruitmentorderid?: number | string;
   posname: string;
   companyname: string;
   locname: string;

@@ -3,11 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, User, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 import { BrandMark } from "@/components/brand/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { displayName, useSession } from "@/components/auth/session-provider";
+import { ProfileMenu } from "@/components/auth/profile-menu";
+import { useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +30,7 @@ const links = [
  */
 export function SiteHeader() {
   const pathname = usePathname();
-  const { status, profile, signOut } = useSession();
+  const { status } = useSession();
   const isAuthenticated = status === "authenticated";
   const [isScrolled, setIsScrolled] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
@@ -42,6 +43,8 @@ export function SiteHeader() {
   }, []);
 
   const isLifted = isScrolled || isOpen;
+  const isCareers =
+    pathname === "/careers" || pathname.startsWith("/careers/");
 
   return (
     <header
@@ -92,49 +95,29 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-1.5">
-          <ThemeToggle />
-
           {isAuthenticated ? (
+            <ProfileMenu />
+          ) : (
             <>
+              <ThemeToggle />
               <Button
                 asChild
                 variant="ghost"
                 className="hidden h-9 rounded-full px-3 sm:inline-flex"
               >
-                <Link href="/account">
-                  <User className="size-4" />
-                  <span className="max-w-[10rem] truncate">
-                    {displayName(profile) || "Миний анкет"}
-                  </span>
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Гарах"
-                onClick={signOut}
-                className="hidden rounded-full sm:inline-flex"
-              >
-                <LogOut className="size-4" />
+                <Link href="/login">Нэвтрэх</Link>
               </Button>
             </>
-          ) : (
-            <Button
-              asChild
-              variant="ghost"
-              className="hidden h-9 rounded-full px-3 sm:inline-flex"
-            >
-              <Link href="/login">Нэвтрэх</Link>
-            </Button>
           )}
 
-          <Button
-            asChild
-            className="hidden h-9 rounded-full px-4 sm:inline-flex"
-          >
-            <Link href="/careers">Ажлын байр үзэх</Link>
-          </Button>
+          {!isCareers && (
+            <Button
+              asChild
+              className="hidden h-9 rounded-full px-4 sm:inline-flex"
+            >
+              <Link href="/careers">Ажлын байр үзэх</Link>
+            </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
@@ -161,27 +144,7 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
-          {isAuthenticated ? (
-            <>
-              <Link
-                href="/account"
-                onClick={() => setIsOpen(false)}
-                className="block border-b border-border/50 py-3.5 text-base"
-              >
-                Миний анкет
-              </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  signOut();
-                }}
-                className="block w-full py-3.5 text-left text-base"
-              >
-                Гарах
-              </button>
-            </>
-          ) : (
+          {!isAuthenticated && (
             <Link
               href="/login"
               onClick={() => setIsOpen(false)}
