@@ -178,23 +178,34 @@ export function JobBrowser({
                       className="pointer-events-none absolute inset-x-2 inset-y-2 -z-10 rounded-xl bg-muted/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100 sm:inset-x-4 sm:inset-y-3"
                     />
 
+                    {/* Work type and position group are both sidebar facets, so
+                        repeating them per row restates the filter the reader
+                        just used. What is left is identity on the left and the
+                        one thing that expires on the right. */}
                     <div className="min-w-0">
                       <h2 className="flex items-center gap-1.5 text-lg font-medium tracking-[-0.02em] sm:text-xl">
                         {job.title}
                         <ArrowUpRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
                       </h2>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {[job.company, job.location, job.workType].filter(Boolean).join(" · ")}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground/80">
-                        {job.positionGroup}
-                        {job.isOpen
-                          ? ` · ${job.remainingDays} хоног үлдсэн`
-                          : " · хугацаа дууссан"}
+                        {[job.company, job.location].filter(Boolean).join(" · ")}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full border border-border/70 px-4 py-2 text-sm font-medium transition-colors group-hover:border-transparent group-hover:bg-foreground group-hover:text-background">
-                      Дэлгэрэнгүй
+                    {/* "үлдсэн" is dropped under `sm`: at 390px the full phrase
+                        takes enough width to wrap the job title beside it. */}
+                    <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+                      {job.isOpen ? (
+                        <>
+                          <span className="text-foreground font-medium">
+                            {job.remainingDays}
+                          </span>{" "}
+                          хоног<span className="hidden sm:inline"> үлдсэн</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">Хугацаа </span>дууссан
+                        </>
+                      )}
                     </span>
                   </Link>
                 </li>

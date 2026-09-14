@@ -24,7 +24,7 @@ function FilterPill({
       onClick={() => onSelect(option.value)}
       title={option.label}
       className={cn(
-        "flex w-full items-center gap-2 rounded-full border px-4 py-2.5 text-left text-sm transition-colors",
+        "flex w-full items-center gap-2 rounded-full border px-3.5 py-2 text-left text-[0.8125rem] transition-colors",
         "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
         isSelected
           ? "border-transparent bg-foreground font-medium text-background"
@@ -95,7 +95,7 @@ export function FilterSection({
           <div
             role="radiogroup"
             aria-label={title}
-            className="flex flex-col gap-2 px-6 pb-6"
+            className="flex flex-col gap-1.5 px-6 pb-6"
           >
             {options.map((option) => (
               <FilterPill
