@@ -1,12 +1,19 @@
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
 import { defaultCountry, dropdowns, filterData, listRow, postings } from "./data";
 
 /**
- * In-memory state for the mock backend.
+ * State for the mock backend: in memory, mirrored to disk in development.
  *
- * It lives on `globalThis` so hot reloads in development do not sign the user
- * out mid-session. Nothing here is persistent — restarting the dev server
- * resets every account, application and CV row, which is exactly what you want
- * from a stand-in for a service that is not wired up yet.
+ * It lives on `globalThis` so hot reloads do not sign the user out mid-session,
+ * and it is written to `.mock-data/db.json` after every mutating request so a
+ * dev-server restart does not either. An account registered against the mock
+ * survives a restart, and so do the tokens already issued to it — a browser
+ * holding one stays signed in.
+ *
+ * Development only. A deployed instance has a read-only filesystem, and its
+ * accounts belong to the real service rather than here.
  */
 
 export type Row = Record<string, unknown>;
@@ -41,14 +48,72 @@ type Db = {
 
 const globalRef = globalThis as typeof globalThis & { __careersMockDb?: Db };
 
-export const db: Db =
-  globalRef.__careersMockDb ??
-  (globalRef.__careersMockDb = {
-    accounts: new Map(),
-    sessions: new Map(),
-    nextAccountId: 1,
-    nextEntryId: 1000,
-  });
+/* --- persistence (development only) ------------------------------------- */
+
+/** Off in production: the filesystem there is read-only. */
+const persists = process.env.NODE_ENV !== "production";
+
+const dbFile = join(process.cwd(), ".mock-data", "db.json");
+
+/** `Map`s do not survive `JSON.stringify`, so they travel as entry arrays. */
+type PersistedDb = {
+  accounts: [string, Account][];
+  sessions: [string, string][];
+  nextAccountId: number;
+  nextEntryId: number;
+};
+
+function emptyDb(): Db {
+  return { accounts: new Map(), sessions: new Map(), nextAccountId: 1, nextEntryId: 1000 };
+}
+
+function loadDb(): Db {
+  if (!persists) return emptyDb();
+  try {
+    const saved = JSON.parse(readFileSync(dbFile, "utf8")) as PersistedDb;
+    return {
+      accounts: new Map(saved.accounts),
+      sessions: new Map(saved.sessions),
+      nextAccountId: Number(saved.nextAccountId) || 1,
+      nextEntryId: Number(saved.nextEntryId) || 1000,
+    };
+  } catch {
+    // No file yet, or one left by an older shape. Start clean rather than
+    // taking the server down over a dev scratch file.
+    return emptyDb();
+  }
+}
+
+/**
+ * Writes the whole store. Called once per mutating request from the route
+ * handler, which edits account objects in place — there is no narrower hook
+ * that catches every edit.
+ *
+ * An uploaded CV is held as base64, so this file grows with the CVs in it.
+ * Delete `.mock-data/` to reset.
+ */
+export function saveDb(): void {
+  if (!persists) return;
+  try {
+    mkdirSync(dirname(dbFile), { recursive: true });
+    const saved: PersistedDb = {
+      accounts: [...db.accounts],
+      sessions: [...db.sessions],
+      nextAccountId: db.nextAccountId,
+      nextEntryId: db.nextEntryId,
+    };
+    // Through a temp file: a half-written db.json is unreadable on restart,
+    // which would lose every account rather than the one request that failed.
+    const pending = `${dbFile}.tmp`;
+    writeFileSync(pending, JSON.stringify(saved), "utf8");
+    renameSync(pending, dbFile);
+  } catch {
+    // Persistence is a convenience. A full disk, a read-only mount or a
+    // sandboxed CI checkout must not turn into a failed request.
+  }
+}
+
+export const db: Db = globalRef.__careersMockDb ?? (globalRef.__careersMockDb = loadDb());
 
 export function nextEntryId(): number {
   db.nextEntryId += 1;

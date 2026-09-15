@@ -15,6 +15,7 @@ import {
   jobList,
   labelFor,
   removeRow,
+  saveDb,
   upsert,
 } from "@/server/mock/store";
 
@@ -26,8 +27,9 @@ import {
  * cannot tell the two apart. Set `NEXT_PUBLIC_API_URL` and every call goes to
  * the real origin instead; these routes simply stop being reached.
  *
- * State is in memory (see `src/server/mock/store.ts`) and resets when the
- * server restarts.
+ * State is in memory (see `src/server/mock/store.ts`), and in development it
+ * is mirrored to `.mock-data/db.json` so a dev-server restart does not sign
+ * everyone out. In production it is memory only.
  */
 
 export const dynamic = "force-dynamic";
@@ -213,7 +215,18 @@ function one(rows: Row[], entryid: number): Row | null {
 
 /* ---------------------------------------------------------------------- */
 
+/**
+ * Every mutating endpoint is a POST, and the handler below edits account
+ * objects in place, so this wrapper is the one place that sees all of them —
+ * a hook inside `createAccount` would miss the rest.
+ */
 export async function POST(request: Request, ctx: Ctx) {
+  const response = await post(request, ctx);
+  saveDb();
+  return response;
+}
+
+async function post(request: Request, ctx: Ctx) {
   const { path } = await ctx.params;
   const endpoint = path.join("/");
   const url = new URL(request.url);
