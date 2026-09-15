@@ -85,11 +85,18 @@ function loadDb(): Db {
 }
 
 /**
- * Writes the whole store. Called once per mutating request from the route
- * handler, which edits account objects in place — there is no narrower hook
- * that catches every edit.
+ * Writes the store. Called once per mutating request from the route handler,
+ * which edits account objects in place — there is no narrower hook that
+ * catches every edit.
  *
- * An uploaded CV is held as base64, so this file grows with the CVs in it.
+ * The two base64 blobs — an uploaded CV and the profile picture — are held in
+ * memory but deliberately **not** written. They are the bulk of the file and
+ * the most sensitive thing in it, and the point of persisting at all is to
+ * keep a developer signed in across a restart, which needs the account and its
+ * session, not the attachments. The cost is real and visible: after a restart
+ * a CV has to be re-uploaded, and the profile completeness on `/account` drops
+ * by the 50 points `progress()` gives for one.
+ *
  * Delete `.mock-data/` to reset.
  */
 export function saveDb(): void {
@@ -97,7 +104,10 @@ export function saveDb(): void {
   try {
     mkdirSync(dirname(dbFile), { recursive: true });
     const saved: PersistedDb = {
-      accounts: [...db.accounts],
+      accounts: [...db.accounts].map(([regno, account]) => [
+        regno,
+        { ...account, cv: null, picture: null },
+      ]),
       sessions: [...db.sessions],
       nextAccountId: db.nextAccountId,
       nextEntryId: db.nextEntryId,

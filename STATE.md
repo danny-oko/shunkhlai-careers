@@ -5,18 +5,21 @@ Last run: 2026-09-15 (run 4, **first implementation slice** — L2, one implemen
 
 ## High Priority (loop is acting or waiting on human)
 
-- **Applicant PII and live session tokens now sit on disk in cleartext.**
-  `fix/mock-session-persistence` writes the mock store to `.mock-data/db.json`
-  so a dev-server restart no longer signs everyone out. The verifier pulled the
-  real contents out of an ordinary session: register number, the phone that
-  doubles as the password, address, email, both live tokens, and full CV bodies
-  (it uploaded one and decoded it back out of the file). Gitignored and
-  development-only — but a developer's laptop is exactly where the owner's own
-  test registrations accumulate, with no expiry and no rotation. This is
-  GOAL.md risk 3 ("Applicant PII with no owner") arriving in a new place.
-  **Waiting on a human ruling:** accept as dev scaffolding, or narrow what is
-  persisted (accounts and sessions only, drop the CV blob) — the login fix
-  works either way.
+- **Applicant PII on disk — ruled on, narrowed.** `fix/mock-session-persistence`
+  writes the mock store to `.mock-data/db.json` so a dev-server restart no
+  longer signs everyone out. The verifier pulled the real contents out of an
+  ordinary session: register number, the phone that doubles as the password,
+  address, email, both live tokens, and full CV bodies (it uploaded one and
+  decoded it back out of the file). The owner ruled on 2026-09-15: **narrow it,
+  keep the test file.** The two base64 blobs — CV and profile picture — are now
+  held in memory and never written; everything sign-in needs still is. Verified
+  live: after a CV upload the file is 812 bytes with `cv: null`, `picture:
+  null`, and no trace of the body, while a restart still restores the account
+  and the pre-restart token. Residual exposure, accepted: register number,
+  phone-as-password, address, email and live tokens remain in cleartext on the
+  developer's disk. The cost of the narrowing is visible — a CV must be
+  re-uploaded after a restart, and `/account` completeness drops the 50 points
+  it gives for one.
 
 - **Sign-in posts to a create-or-update endpoint.** `auth.signIn()` sends
   `lastname: ""`, `firstname: ""`, `email: ""` to `SaveHrAppUser`, because that
