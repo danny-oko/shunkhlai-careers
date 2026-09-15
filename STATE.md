@@ -1,56 +1,66 @@
 # Loop State — shunkhlai-careers
 
-Last run: 2026-09-11 (run 3, report-only, first run on the repo's own skills)
+Last run: 2026-09-15 (run 4, **first implementation slice** — L2, one implementer
++ one independent verifier, commissioned by the owner)
 
 ## High Priority (loop is acting or waiting on human)
 
-- **The verification bar does not exist on `main`.** `LOOP.md` and the three
-  skills now say a change is verified by
-  `bun run test && bun run lint && bun run build`, but `main`'s `package.json`
-  has only `dev, build, start, lint` — there is no `test` script and no vitest.
-  The suite lives on `feat/test-harness`, which has never been pushed.
-  Until that lands, the bar the loop enforces is one command short of real.
-  Next action: push `feat/test-harness` and open its PR. ~5 min.
+- **Applicant PII and live session tokens now sit on disk in cleartext.**
+  `fix/mock-session-persistence` writes the mock store to `.mock-data/db.json`
+  so a dev-server restart no longer signs everyone out. The verifier pulled the
+  real contents out of an ordinary session: register number, the phone that
+  doubles as the password, address, email, both live tokens, and full CV bodies
+  (it uploaded one and decoded it back out of the file). Gitignored and
+  development-only — but a developer's laptop is exactly where the owner's own
+  test registrations accumulate, with no expiry and no rotation. This is
+  GOAL.md risk 3 ("Applicant PII with no owner") arriving in a new place.
+  **Waiting on a human ruling:** accept as dev scaffolding, or narrow what is
+  persisted (accounts and sessions only, drop the CV blob) — the login fix
+  works either way.
 
-- **Four branches exist only on this machine.** `feat/test-harness` (51 tests
-  and the `postedAt` fix) and `feat/loop-skills` (the rewritten skills) are
-  committed locally and unpushed. A disk failure loses both.
-  Next action: push. ~1 min.
+- **Sign-in posts to a create-or-update endpoint.** `auth.signIn()` sends
+  `lastname: ""`, `firstname: ""`, `email: ""` to `SaveHrAppUser`, because that
+  is what the Postman collection does. The endpoint reference documents a
+  dedicated route the collection never mentions:
+  `POST /api/applicant/auth/login` with `{ regNo, mobile }`. Harmless against
+  the mock, which returns early on the existing-account branch. If the real
+  service upserts the fields it is handed, **every sign-in would blank that
+  applicant's stored name and email**. Cannot be tested: no backend is
+  reachable. Touches fenced `src/lib/api/auth.ts`, so it is the owner's call.
+
+- **`POST /api/applicant/auth/refresh-token` does not exist in the mock.** The
+  call falls through the POST switch to `requireAccount` and 401s
+  unconditionally, which is the second console error in the owner's screenshot.
+  The refresh path has therefore never executed successfully anywhere — the
+  collection has no refresh request either. Queued as the next slice.
 
 ## Watch List
 
-- **PR #8** (brand system) and **PR #9** (careers redesign) — both draft,
-  opened 2026-09-11. #9 is based on #8, so #8 merges first. Neither has been
-  reviewed yet; flag if still draft in 7 days.
-- **No open issues.** #1 and #2 have been closed since run 2. Nothing to chase.
+- **The repo's own verification recipe cannot validate a dev-only change.**
+  `LOOP.md` and both agent role files prescribe `bun run start` for end-to-end
+  checks. Persistence is compiled out of the production build (Turbopack folds
+  the `NODE_ENV` guard), so under `bun run start` this fix has no effect at all
+  and the original bug reproduces exactly. Any dev-only behaviour verified that
+  way will look broken; the recipe needs a `next dev` escape hatch.
+- **`bun run lint:strict` fails on `src/app/api/applicant/[...path]/route.ts`**
+  — 5 errors, all pre-existing, reproduced independently against `main`'s
+  unmodified file (complexity 6 / 5 / 24 / 80, and 364 lines against a 180-line
+  cap). Touching the file is what pulls it into the changed-files set. CI runs
+  `test`, `lint`, `build` only, so this does not gate anything. Clearing it
+  means refactoring a fenced 370-line route — its own slice.
+- **A corrupt `db.json` reaches the user as the wrong message.** Degrading to
+  an empty store is right, but the user is then told
+  `...дугаар таарахгүй байна.` — the wrong-password wording — for a correct
+  password. A new route into the known copy bug below.
+- **One message for two different failures.** The mock answers "no such
+  account" and "wrong password" identically. Needs an owner-approved Mongolian
+  string before it can be split; deliberately untouched by this slice.
 
 ## Recent Noise (ignored this run)
 
-- **Three stale branches, none of them findings.** Judged by content, per the
-  squash-merge rule:
-  - `origin/1-landing-page` — diff against `main` is empty. Fully merged.
-  - `chore/loop-engineering-setup` — `-1046` lines against `main`. Merged as
-    PR #6; the branch has since fallen behind.
-  - `feature/recruitment-api-layer` — `-1549` lines. Merged as PR #4.
-
-  All three are safe to delete. A PR from any of them would propose reverting
-  newer work. This is the trap that produced two false positives in run 1;
-  the rule caught all three automatically this time.
-- **Production is green.** `/`, `/careers` and `/about` all return 200. The
-  `/careers` 500 raised in run 2 is resolved — the in-process job read shipped
-  in PR #6.
-- Still no `.github/workflows/`; all checks run by hand.
-
-## State Updates
-
-- Repo `danny-oko/shunkhlai-careers`, `main` @ `e445882`.
-- Open PRs: 2 (#8, #9, both draft). Open issues: 0. Merged: #3–#7.
-- Local-only branches: `feat/test-harness`, `feat/loop-skills`.
-- Bar on `feat/loop-skills`: 51 tests pass, lint clean, build succeeds.
-  Not yet runnable on `main` — see High Priority.
-- The generic loop-engineering plugin was uninstalled this run. The skills in
-  `.claude/` are now the only definition.
-- Next run: check whether #8/#9 have moved, and whether the harness landed.
-
----
-Run log: see `loop-run-log.md`
+- `feat/careers-filter-dropdowns` and its PR #24 — green on all checks, closed
+  unmerged by the owner on 2026-09-15, branch deleted at the owner's
+  instruction. Not a finding; a decision.
+- Items from run 3 that are now stale: the "no test script on `main`" finding is
+  resolved — `main` has vitest and 54 passing tests. `feat/test-harness` and
+  `feat/loop-skills` have landed.
