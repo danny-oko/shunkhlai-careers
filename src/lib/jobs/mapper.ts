@@ -34,6 +34,7 @@ function base(row: JobListRow | JobOrder): Job {
     positionGroupId: row.posgroupid ?? 0,
     workType: (row.worktype ?? "").trim(),
     positionType: (row.postype ?? "").trim(),
+    positionTypeId: row.postypeid ?? 0,
     statusId: row.status ?? 0,
     status: (row.statusname ?? "").trim(),
     // `||`, not `??`: the backend sends "" for a date it does not have, and

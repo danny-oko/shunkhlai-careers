@@ -20,6 +20,8 @@ export type Job = {
   workType: string;
   /** "Үндсэн", "Гэрээт". */
   positionType: string;
+  /** The same value's id in `getDropDownData.positiontype` (`valuestr`). */
+  positionTypeId: number;
   statusId: number;
   status: string;
   /** Advert window, as the backend formats it (`YYYY.MM.DD`). */

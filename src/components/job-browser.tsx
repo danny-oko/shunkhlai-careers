@@ -5,14 +5,16 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
 
-import { FilterSection } from "@/components/job-filters";
+import { FilterSelect } from "@/components/job-filters";
 import {
   applyFacets,
   companyOptions,
   defaultFacets,
+  facetBase,
   groupOptions,
   isFiltered,
   locationOptions,
+  positionTypeOptions,
   salaryOptions,
   workTypeOptions,
   type JobFacets,
@@ -23,15 +25,16 @@ import { cn } from "@/lib/utils";
 import { SectionRule } from "@/components/brand/section-rule";
 
 /**
- * Two filter layers, matching what the API actually supports.
+ * Every filter `getDropDownData` offers, in one rail.
  *
- * Position name, location and salary band go back to
- * `getRecruitmentOrderList` through the URL, so results stay linkable and
- * server-rendered. Position group, company and work type are refined over the
- * rows already on the page.
+ * Two layers sit behind them, matching what the API actually supports.
+ * Location and salary band go back to `getRecruitmentOrderList` through the
+ * URL, so those results stay linkable and server-rendered. Position group,
+ * company, position type and work type are refined over the rows already on
+ * the page.
  *
- * Which side of that line a filter falls on is an implementation detail to the
- * candidate, so both layers are the same pills in the same rail.
+ * Which side of that line a filter falls on is an implementation detail to
+ * the candidate, so both layers are the same dropdown in the same rail.
  */
 export function JobBrowser({
   jobs,
@@ -50,11 +53,20 @@ export function JobBrowser({
   const salaryLevelId = params.get("salaryLevelID") ?? "";
 
   const visibleJobs = React.useMemo(() => applyFacets(jobs, facets), [jobs, facets]);
-  const groups = React.useMemo(() => groupOptions(jobs), [jobs]);
-  const companies = React.useMemo(() => companyOptions(jobs), [jobs]);
-  const workTypes = React.useMemo(() => workTypeOptions(jobs), [jobs]);
   const locations = React.useMemo(() => locationOptions(filterData), [filterData]);
   const salaryLevels = React.useMemo(() => salaryOptions(filterData), [filterData]);
+
+  // Each client-side list is counted against what the *other* facets keep, so
+  // a number reads as "what I get if I pick this".
+  const lists = React.useMemo(
+    () => ({
+      group: groupOptions(filterData, facetBase(jobs, facets, "group")),
+      company: companyOptions(filterData, facetBase(jobs, facets, "company")),
+      positionType: positionTypeOptions(filterData, facetBase(jobs, facets, "positionType")),
+      workType: workTypeOptions(jobs, facetBase(jobs, facets, "workType")),
+    }),
+    [jobs, facets, filterData],
+  );
 
   /** Server-side filters live in the URL. */
   function pushQuery(next: Record<string, string>) {
@@ -72,40 +84,43 @@ export function JobBrowser({
     router.push("/careers");
   }
 
-  const hasFacets = isFiltered(facets);
+  const isAnyFilterOn = isFiltered(facets) || Boolean(locationId) || Boolean(salaryLevelId);
 
   const filterSections = (
     <>
-      <FilterSection
-        title="Албан тушаалын бүлэг"
-        options={groups}
+      <FilterSelect
+        label="Албан тушаалын бүлэг"
+        options={lists.group}
         value={facets.group}
         onChange={(value) => setFacets((current) => ({ ...current, group: value }))}
-        defaultOpen
       />
-      <FilterSection
-        title="Байршил"
+      <FilterSelect
+        label="Байршил"
         options={locations}
         value={locationId || ALL}
         onChange={(value) => pushQuery({ locationid: value === ALL ? "" : value })}
       />
-      <FilterSection
-        title="Цалингийн түвшин"
+      <FilterSelect
+        label="Цалингийн түвшин"
         options={salaryLevels}
         value={salaryLevelId || ALL}
-        onChange={(value) =>
-          pushQuery({ salaryLevelID: value === ALL ? "" : value })
-        }
+        onChange={(value) => pushQuery({ salaryLevelID: value === ALL ? "" : value })}
       />
-      <FilterSection
-        title="Компани"
-        options={companies}
+      <FilterSelect
+        label="Компани"
+        options={lists.company}
         value={facets.company}
         onChange={(value) => setFacets((current) => ({ ...current, company: value }))}
       />
-      <FilterSection
-        title="Ажлын төрөл"
-        options={workTypes}
+      <FilterSelect
+        label="Ажлын хэлбэр"
+        options={lists.positionType}
+        value={facets.positionType}
+        onChange={(value) => setFacets((current) => ({ ...current, positionType: value }))}
+      />
+      <FilterSelect
+        label="Ажлын төрөл"
+        options={lists.workType}
         value={facets.workType}
         onChange={(value) => setFacets((current) => ({ ...current, workType: value }))}
       />
@@ -126,7 +141,7 @@ export function JobBrowser({
         >
           <SlidersHorizontal className="size-3.5" />
           Шүүлтүүр
-          {hasFacets || locationId || salaryLevelId ? (
+          {isAnyFilterOn ? (
             <span className="size-1.5 rounded-full bg-primary" />
           ) : null}
         </button>
@@ -140,7 +155,21 @@ export function JobBrowser({
           )}
         >
           <div className="lg:sticky lg:top-16">
-            {filterSections}
+            <div className="flex items-center justify-between gap-4 px-6 pt-6">
+              <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">
+                Шүүлтүүр
+              </h2>
+              {isAnyFilterOn ? (
+                <button
+                  type="button"
+                  onClick={clearEverything}
+                  className="rounded-full px-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  Цэвэрлэх
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-4 px-6 py-5">{filterSections}</div>
           </div>
         </aside>
 
@@ -162,7 +191,9 @@ export function JobBrowser({
           ) : (
             /* Keyed on the active facets so the entrance replays whenever the
                result set changes. */
-            <ul key={`${facets.group}-${facets.company}-${facets.workType}`}>
+            <ul
+              key={`${facets.group}-${facets.company}-${facets.positionType}-${facets.workType}`}
+            >
               {visibleJobs.map((job, index) => (
                 <li
                   key={job.id}

@@ -1,113 +1,61 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
+
+import { Select } from "@/components/ui/select";
 import type { FacetOption } from "@/lib/jobs/types";
 
-function FilterPill({
-  option,
-  isSelected,
-  onSelect,
-}: {
-  option: FacetOption;
-  isSelected: boolean;
-  onSelect: (value: string) => void;
-}) {
-  // The rail is narrow and some location names are long, so the label
-  // truncates - `title` keeps the whole of it reachable.
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={isSelected}
-      onClick={() => onSelect(option.value)}
-      title={option.label}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-full border px-3.5 py-2 text-left text-[0.8125rem] transition-colors",
-        "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-        isSelected
-          ? "border-transparent bg-foreground font-medium text-background"
-          : "border-border/70 text-foreground hover:bg-muted",
-      )}
-    >
-      <span className="truncate">{option.label}</span>
-      {typeof option.count === "number" && (
-        <span
-          className={cn(
-            "ml-auto text-xs tabular-nums",
-            isSelected ? "text-background/60" : "text-muted-foreground/70",
-          )}
-        >
-          {option.count}
-        </span>
-      )}
-    </button>
-  );
-}
-
-export function FilterSection({
-  title,
+/**
+ * One filter, as a dropdown.
+ *
+ * Every list here now comes from `getDropDownData` rather than from the rows
+ * on the page, which means each one is as long as the tenant's configuration
+ * — locations and salary bands run to a few dozen. The open pill rail that
+ * preceded this grew the sidebar by the length of its longest list and pushed
+ * the postings off the first screen; a dropdown holds all of it in one row of
+ * chrome.
+ *
+ * Native `<select>` rather than a listbox, for the same reason the account
+ * forms use it: it is faster to operate on a phone, and accessible for
+ * nothing. Counts ride in the option text because that is all a native option
+ * can carry. The two server-side lists arrive without them — the page only
+ * holds the rows for the current selection, so there is no honest number.
+ */
+export function FilterSelect({
+  label,
   options,
   value,
   onChange,
-  defaultOpen = false,
 }: {
-  title: string;
+  label: string;
   options: FacetOption[];
   value: string;
   onChange: (value: string) => void;
-  defaultOpen?: boolean;
 }) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-  const contentId = React.useId();
+  const id = React.useId();
 
   return (
-    <div className="border-b border-border/70">
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        aria-expanded={isOpen}
-        aria-controls={contentId}
-        className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2"
+    <div className="flex flex-col gap-1.5">
+      <label
+        htmlFor={id}
+        className="text-[0.6875rem] font-medium tracking-[0.06em] text-muted-foreground uppercase"
       >
-        <span className="text-[0.9375rem] font-semibold tracking-[-0.01em]">
-          {title}
-        </span>
-        <ChevronDown
-          aria-hidden
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            isOpen && "rotate-180",
-          )}
-        />
-      </button>
-
-      {/* 0fr -> 1fr animates the height without measuring it. */}
-      <div
-        id={contentId}
-        className={cn(
-          "grid transition-[grid-template-rows] duration-200 ease-out",
-          isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
+        {label}
+      </label>
+      <Select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-8 rounded-lg text-[0.8125rem] md:text-[0.8125rem]"
       >
-        <div className="overflow-hidden">
-          <div
-            role="radiogroup"
-            aria-label={title}
-            className="flex flex-col gap-1.5 px-6 pb-6"
-          >
-            {options.map((option) => (
-              <FilterPill
-                key={option.value}
-                option={option}
-                isSelected={option.value === value}
-                onSelect={onChange}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {typeof option.count === "number"
+              ? `${option.label} (${option.count})`
+              : option.label}
+          </option>
+        ))}
+      </Select>
     </div>
   );
 }
