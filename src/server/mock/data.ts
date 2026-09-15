@@ -444,8 +444,12 @@ export const filterData = {
  * against the live backend. `getPositionsDropdown` is the one list whose
  * `posgroupid` genuinely is on the wire, and it is not listed here.
  *
- * `required` is the collection's own wording: `divisionid` and `skillcompid`
- * are заавал, while `countryid` is optional and `0` means every row.
+ * `required` is only documented for `divisionid`, which the collection calls
+ * заавал; `countryid` it calls optional, with `0` meaning every row.
+ * `skillcompid` it describes as "Сонгосон ур чадварын дугаар" and says nothing
+ * about requiredness — treating it as required is our inference, on the
+ * grounds that the levels differ per skill, so a level list with no skill
+ * behind it would be a list of levels belonging to nothing.
  */
 export const parentOf: Record<string, { param: string; required?: boolean }> = {
   GetDivisionDropDown: { param: "countryid" },
