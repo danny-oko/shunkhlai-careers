@@ -39,6 +39,60 @@ brandbook's own dark blue-grey is `--brand-navy` above.
 
 ---
 
+## 1.1 Alternate colour schemes (not brandbook)
+
+The header carries a palette button that steps the whole site through four
+colour schemes. **Only the first is brandbook.** The other three are 2026
+trend colours, and like `--ink` they are ours, not the brandbook's - do not
+describe them as brand colours or use them in print.
+
+Each scheme fills the same three roles the site is built on and changes
+nothing else, so the 60-30-10 split is identical in all four:
+
+| Scheme | 60% ground | 30% ink panel | 10% accent | Source |
+|---|---|---|---|---|
+| `shunkhlai` | White | `#06203d` navy | `#ea5901` orange | Brandbook 1.3 |
+| `cloud` | `#f0eee9` | `#2b2723` stone | `#9a6a06` amber gold | Pantone COTY 2026, Cloud Dancer 11-4201; ink mid tone is Benjamin Moore Silhouette AF-655 |
+| `plum` | `#f7f0f2` blush | `#351e28` Plum Noir | `#f25731` persimmon | Pinterest Palette 2026, their Persimmon-Plum pairing |
+| `cobalt` | `#e9f3fd` Cool Blue | `#191d21` charcoal | `#3a5ce0` cobalt | Pinterest Palette 2026 Cool Blue; cobalt and charcoal-over-black are both 2026 signals |
+
+The values live in `src/app/globals.css` under `[data-palette="..."]`; the list
+the UI walks is `src/lib/palettes.ts`. `shunkhlai` has no CSS block: it is what
+`:root` and `.dark` already say, so with no attribute set the site is exactly
+what it was before the button existed.
+
+### Where the trend colours were bent, and why
+
+A colour of the year is picked for fabric and walls, not for a 16px line of
+Cyrillic on a screen. Two of the four published colours land in a UI role
+untouched - Pinterest's Plum Noir `#351e28` carries `ink-foreground` at 14.4:1
+as an ink panel, and their Cool Blue `#d7efff` works as a page ground. The rest
+were adjusted:
+
+- **Benjamin Moore Silhouette** `#57504c` is too light to carry body text as a
+  full-bleed panel, so it is `--ink-2` and `--ink` is a deeper stone.
+- **Persimmon** `#ff5c34` and **cobalt** were each deepened by one step so the
+  accent still clears 3:1 where `text-brand` puts it - small mono numerals in
+  the history timeline, footer link hovers, and on the ink panels.
+
+### Pinterest's Wasabi, and why it is not here
+
+`#e9f056` is the loudest colour in the 2026 set and it did not make it. It
+cannot be `--brand` in light mode: that token is small text in `site-footer`
+and `history-timeline`, on the page ground, where Wasabi measures **1.1:1**
+against every ground in use. Darkening it far enough to pass takes it to
+luminance 0.245, which is olive, not chartreuse - the trend is gone before the
+contrast arrives. It works only as a fill with near-black type (14.8:1), which
+is not a role this token system has. If that role is ever wanted, it needs its
+own token, not a palette.
+
+Every pair that carries text was measured, not eyeballed: body text, muted
+text, both ink panels and the CTA clear WCAG AA in all four schemes in both
+light and dark, and all three new schemes have a *higher* CTA contrast than the
+brandbook palette's own 3.54 (white on `#ea5901`).
+
+---
+
 ## 2. Typography (brandbook 1.12, 1.12.1, 1.12.2)
 
 Three typefaces, each with a defined job:

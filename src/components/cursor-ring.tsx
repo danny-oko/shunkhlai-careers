@@ -13,12 +13,14 @@ const TYPING = "input, textarea, [contenteditable]";
 const EASE = 0.18;
 
 /**
- * A ring and a dot in place of the arrow.
+ * A point of light and a turning ring, in place of the arrow.
  *
- * The dot is exactly where the pointer is; the ring chases it a frame behind,
- * which is what makes it read as trailing the hand rather than being drawn on
- * it. Over anything pressable the ring opens out and takes the brand colour,
- * so the thing the arrow's hand used to say is still said.
+ * The light is exactly where the pointer is - a small brand-coloured core
+ * carrying a soft halo, so it reads as something lit rather than as a drawn
+ * dot. The ring of dashes chases it a frame behind, which is what makes it
+ * read as trailing the hand rather than being painted on it, and turns slowly
+ * on its own. Over anything pressable the ring opens out and takes the brand
+ * colour, so the thing the arrow's hand used to say is still said.
  *
  * Everything is written straight to the two elements' styles inside one
  * animation frame. Through React state this would be a render per pointer
@@ -31,7 +33,6 @@ const EASE = 0.18;
 export function CursorRing() {
   const ringRef = React.useRef<HTMLDivElement>(null);
   const dotRef = React.useRef<HTMLDivElement>(null);
-  const [on, setOn] = React.useState(false);
 
   React.useEffect(() => {
     const fine = window.matchMedia("(pointer: fine)");
@@ -42,7 +43,6 @@ export function CursorRing() {
     const dot = dotRef.current;
     if (!ring || !dot) return;
 
-    setOn(true);
     document.documentElement.dataset.cursorRing = "on";
 
     let x = window.innerWidth / 2;
@@ -99,21 +99,43 @@ export function CursorRing() {
     };
   }, []);
 
-  if (!on) return null;
-
+  // Both marks are always in the page, and start invisible: they are only
+  // lit once the pointer has been seen, and on a touch screen it never is.
+  //
+  // They must not be held back behind a piece of state the effect sets,
+  // which is what this used to do - the effect reads the two elements out of
+  // their refs, so gating the render on state the effect sets means the refs
+  // are still empty when it runs, it gives up, and the state it was meant to
+  // set never is. The marks never appeared at all.
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 z-100">
       <div
         ref={ringRef}
         data-seen="no"
         data-over="no"
-        className="cursor-ring-circle absolute top-0 left-0 size-9 rounded-full border border-foreground/35"
-      />
+        className="cursor-ring-circle absolute top-0 left-0 size-9 rounded-full"
+      >
+        {/* The dashes are drawn rather than bordered so their count and their
+            gaps are ours rather than the browser's, and they turn on their
+            own element because the frame loop owns the ring's transform. */}
+        <svg viewBox="0 0 100 100" className="cursor-ring-dash size-full">
+          <circle
+            cx="50"
+            cy="50"
+            r="47"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeDasharray="7 6.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
       <div
         ref={dotRef}
         data-seen="no"
         data-over="no"
-        className="cursor-ring-dot absolute top-0 left-0 size-1.5 rounded-full bg-foreground"
+        className="cursor-ring-dot absolute top-0 left-0 size-1.75 rounded-full"
       />
     </div>
   );

@@ -18,6 +18,17 @@ export type WallItem = {
   body?: string;
   /** A real photograph, where there is one. Otherwise a placeholder is used. */
   image?: string;
+  /**
+   * A wide transparent lockup — a club's logo — instead of a photograph.
+   *
+   * It is artwork, not a picture of something, so it is drawn whole on a light
+   * plate rather than cropped to fill the tile: a wordmark with its sides cut
+   * off is no longer the mark. The plate is there for the dark theme, where
+   * the navy half of every lockup would otherwise disappear into the ground.
+   */
+  logo?: string;
+  /** A second line under the title in the dialog. */
+  subtitle?: string;
   /** Set on the Academy voices — the person's job, under their name. */
   role?: string;
 };
@@ -49,6 +60,28 @@ const BOUNDS = { x: [130, 540], y: [60, 200], z: [130, 540] } as const;
 
 /** Tile width as a share of the sphere's own radius, after the reference. */
 const TILE = 0.16;
+
+/**
+ * What a lockup tile takes of that instead.
+ *
+ * A photograph reads at a glance from any size; a wordmark has to be read, and
+ * at the photograph's width these are about eighty pixels across with the name
+ * set in a fifth of that. Wider, and shallow rather than portrait, because the
+ * lockups are around five to one — a portrait tile would be mostly plate.
+ */
+const LOGO_TILE = 1.8;
+
+/**
+ * And never narrower than this, whatever the stage.
+ *
+ * The sphere is sized off the box it is given, and on a phone that box is a
+ * quarter the width of a desktop one: the share above came out at 38px across,
+ * which is a wordmark drawn at four pixels tall. A photograph survives being
+ * small — it is still a picture of someone — so the walls that carry them
+ * never needed a floor. A name that cannot be read is not a small name, it is
+ * a blank, so these have one.
+ */
+const LOGO_MIN = 92;
 
 const PERSPECTIVE = 1100;
 /** How far it tips as it turns. Small: it is what swings tiles off the top. */
@@ -111,6 +144,69 @@ const picture = (item: WallItem, index: number) => item.image ?? mock(index);
 const PENDING = "Дэлгэрэнгүй мэдээлэл удахгүй нэмэгдэнэ.";
 
 /**
+ * Light in both themes: the lockups are drawn for a white ground.
+ *
+ * With the edge, which is not decoration — the page this sits on is white too,
+ * so an unruled white plate has no outline at all and the wall reads as empty
+ * until a logo happens to fall on something darker.
+ */
+const PLATE = "bg-white ring-1 ring-black/10";
+
+/**
+ * A tile's box on the sphere: how wide it is, and how it hangs off its point.
+ *
+ * Hung by half its own height, the point the frame loop puts it on is the
+ * middle of the tile. A lockup is half as tall as it is wide; a photograph is
+ * taller than wide and keeps the half-width drop the first two walls were
+ * built with.
+ */
+const box = (item: WallItem, index: number, tile: number) => {
+  const vary = VARY[index % VARY.length];
+  const width = Math.round(
+    vary * (item.logo ? Math.max(tile * LOGO_TILE, LOGO_MIN) : tile),
+  );
+  return {
+    width,
+    marginLeft: -width / 2,
+    marginTop: item.logo ? -width / 4 : -width / 2,
+  };
+};
+
+/**
+ * The box an item's picture is drawn in — portrait and edge to edge for a
+ * photograph, shallow and plated for a lockup.
+ */
+const frame = (item: WallItem) =>
+  item.logo ? `aspect-[2/1] ${PLATE}` : "aspect-[3/4]";
+
+/**
+ * The picture itself, at whichever of the two treatments the item asks for.
+ *
+ * `pad` is the lockup's margin inside its plate and is ignored by a
+ * photograph, which has none: it is cropped to the box on purpose.
+ */
+const Visual = ({
+  item,
+  index,
+  sizes,
+  pad,
+}: {
+  item: WallItem;
+  index: number;
+  sizes: string;
+  pad: string;
+}) => (
+  <Image
+    src={item.logo ?? picture(item, index)}
+    alt=""
+    aria-hidden
+    fill
+    sizes={sizes}
+    className={item.logo ? `object-contain ${pad}` : "object-cover"}
+  />
+);
+
+/**
  * What opens when a picture is picked.
  *
  * A voice — one of the Academy posters, which comes with a portrait, a job and
@@ -145,16 +241,17 @@ function Details({
             <div
               className={cn(
                 "relative",
-                voice ? "aspect-4/5 max-h-[42vh] sm:max-h-none" : "aspect-16/10",
+                voice
+                  ? "aspect-4/5 max-h-[42vh] sm:max-h-none"
+                  : "aspect-16/10",
+                item.logo && PLATE,
               )}
             >
-              <Image
-                src={picture(item, index)}
-                alt=""
-                aria-hidden
-                fill
+              <Visual
+                item={item}
+                index={index}
                 sizes="(max-width: 640px) 100vw, 272px"
-                className="object-cover"
+                pad="p-8"
               />
             </div>
 
@@ -166,9 +263,9 @@ function Details({
             >
               <DialogTitle className="text-lg">{item.title}</DialogTitle>
 
-              {item.role && (
+              {(item.role ?? item.subtitle) && (
                 <DialogDescription className="mt-1 text-xs tracking-[0.08em] uppercase">
-                  {item.role}
+                  {item.role ?? item.subtitle}
                 </DialogDescription>
               )}
 
@@ -206,7 +303,10 @@ export function SphereGallery({
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const isReduced = useReducedMotion();
-  const points = React.useMemo(() => spherePoints(items.length), [items.length]);
+  const points = React.useMemo(
+    () => spherePoints(items.length),
+    [items.length],
+  );
   const [opened, setOpened] = React.useState<number | null>(null);
   const [stage, setStage] = React.useState({ w: 0, h: 0 });
   const turn = React.useRef({ shown: 0, target: 0 });
@@ -328,14 +428,17 @@ export function SphereGallery({
             onClick={() => setOpened(index)}
             className="text-left"
           >
-            <span className="relative block aspect-[3/4] overflow-hidden rounded-[3px]">
-              <Image
-                src={picture(item, index)}
-                alt=""
-                aria-hidden
-                fill
+            <span
+              className={cn(
+                "relative block overflow-hidden rounded-[3px]",
+                frame(item),
+              )}
+            >
+              <Visual
+                item={item}
+                index={index}
                 sizes="(max-width: 640px) 45vw, 22vw"
-                className="object-cover"
+                pad="p-[6%]"
               />
             </span>
             <span className="mt-2 block text-[0.6875rem] text-muted-foreground">
@@ -372,47 +475,44 @@ export function SphereGallery({
           transformStyle: "preserve-3d",
         }}
       >
-        {items.map((item, index) => {
-          const size = Math.round(tile * VARY[index % VARY.length]);
-          return (
+        {items.map((item, index) => (
+          <div
+            key={item.title}
+            onPointerEnter={() => {
+              held.current = true;
+            }}
+            onPointerLeave={() => {
+              held.current = opened !== null;
+            }}
+            onClick={() => setOpened(index)}
+            className="group absolute top-1/2 left-1/2 cursor-pointer will-change-transform"
+            style={box(item, index, tile)}
+          >
+            {/* The lift is on the inner box: the outer one's transform is
+                rewritten every frame by the loop and would swallow it. */}
             <div
-              key={item.title}
-              onPointerEnter={() => {
-                held.current = true;
-              }}
-              onPointerLeave={() => {
-                held.current = opened !== null;
-              }}
-              onClick={() => setOpened(index)}
-              className="group absolute top-1/2 left-1/2 cursor-pointer will-change-transform"
-              style={{
-                width: size,
-                marginLeft: -size / 2,
-                marginTop: -size / 2,
-              }}
+              className={cn(
+                "relative overflow-hidden rounded-[3px] shadow-[0_10px_30px_-14px_rgb(0_0_0/0.4)] transition-[scale,box-shadow] duration-300 ease-out group-hover:scale-[1.08] group-hover:shadow-[0_22px_50px_-20px_rgb(0_0_0/0.5)]",
+                frame(item),
+              )}
             >
-              {/* The lift is on the inner box: the outer one's transform is
-                  rewritten every frame by the loop and would swallow it. */}
-              <div className="relative aspect-[3/4] overflow-hidden rounded-[3px] shadow-[0_10px_30px_-14px_rgb(0_0_0/0.4)] transition-[scale,box-shadow] duration-300 ease-out group-hover:scale-[1.08] group-hover:shadow-[0_22px_50px_-20px_rgb(0_0_0/0.5)]">
-                <Image
-                  src={picture(item, index)}
-                  alt=""
-                  fill
-                  sizes="160px"
-                  className="object-cover"
-                />
-              </div>
-
-              {/* Under its own picture rather than at the foot of the stage:
-                  named where it is, the caption belongs to the tile the eye is
-                  already on. `top-full` keeps it out of the tile's own box, so
-                  it cannot push the picture off its point on the sphere. */}
-              <p className="absolute inset-x-[-3rem] top-full mt-2 text-center text-[0.6875rem] leading-snug tracking-[0.04em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                {item.title}
-              </p>
+              <Visual
+                item={item}
+                index={index}
+                sizes={item.logo ? "300px" : "160px"}
+                pad="p-[6%]"
+              />
             </div>
-          );
-        })}
+
+            {/* Under its own picture rather than at the foot of the stage:
+                named where it is, the caption belongs to the tile the eye is
+                already on. `top-full` keeps it out of the tile's own box, so
+                it cannot push the picture off its point on the sphere. */}
+            <p className="absolute inset-x-[-3rem] top-full mt-2 text-center text-[0.6875rem] leading-snug tracking-[0.04em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              {item.title}
+            </p>
+          </div>
+        ))}
       </div>
 
       {details}

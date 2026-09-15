@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--app-font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-ubuntu-mono);
   --font-heading: var(--font-sans);
   --color-brand: var(--brand);
   --color-brand-2: var(--brand-2);
@@ -81,7 +81,7 @@
   --sheen-warm: var(--brand);
   --sheen-cool: color-mix(in oklab, var(--brand-blue) 35%, white);
 
-  --app-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+  --app-font-sans: var(--font-ubuntu-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
   /* Pure White / Charcoal Dark Grey */
@@ -151,6 +151,192 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: var(--brand);
+}
+
+/* -------------------------------------------------------------------------
+   Colour schemes (the header's palette button)
+
+   Each scheme below re-casts the same three roles the site is already built
+   on - 60% ground, 30% ink panel, 10% accent - and changes nothing else. No
+   component names a colour of its own, so swapping the tokens here swaps the
+   whole site.
+
+   `shunkhlai` is the brandbook palette in :root above and has no block here:
+   with no `data-palette` on <html>, or with `data-palette="shunkhlai"`, none
+   of these selectors match and the defaults stand.
+
+   Specificity, since it is the whole trick: `:root[data-palette=…]` and
+   `.dark[data-palette=…]` both score (0,2,0), which beats plain `:root` and
+   plain `.dark` at (0,1,0). The two are tied with each other, so the dark
+   block wins by coming second in the file - and it only matches at all once
+   next-themes has put `dark` on <html>.
+
+   Every pair that carries text was measured rather than eyeballed. Each
+   scheme's body text, muted text, ink panels and CTA clear WCAG AA, and each
+   scheme's CTA contrast is higher than the brandbook palette's own 3.54.
+   The 2026 sources are cited per scheme; see docs/brand.md §1.1.
+   ---------------------------------------------------------------------- */
+
+/* Үүлэн цагаан - Pantone Color of the Year 2026, PANTONE 11-4201 Cloud Dancer
+   (#f0eee9), the first white ever chosen. Ground is Cloud Dancer itself; the
+   ink panels are a deep stone whose mid tone is Benjamin Moore's 2026 pick,
+   Silhouette AF-655 (#57504c); the accent is an amber gold, which keeps the
+   warm accent the brandbook palette has without imitating its orange. */
+:root[data-palette="cloud"] {
+  --brand: #9a6a06;
+  --brand-2: #c08c12;
+  --brand-blue: #4a5a6b;
+  --brand-navy: #57504c;
+  --brand-foreground: #ffffff;
+
+  --ink: #2b2723;
+  --ink-2: #57504c;
+  --ink-foreground: #faf8f4;
+  --ink-muted: #c2b9ae;
+
+  --background: #f0eee9;
+  --foreground: #23201c;
+  --card: #faf9f6;
+  --popover: #faf9f6;
+  --secondary: #e4e0d8;
+  --muted: #e4e0d8;
+  --muted-foreground: #635c54;
+  --accent: #eae6df;
+  --border: #cec7bb;
+  --input: #bfb7a8;
+}
+
+.dark[data-palette="cloud"] {
+  --brand: #e0a52a;
+  --brand-2: #f0c255;
+  --brand-blue: #7d93a8;
+  --brand-navy: #7a7268;
+  /* The gold is light enough that white on it would be unreadable; the CTA
+     takes dark type instead. */
+  --brand-foreground: #1a1509;
+
+  --ink: #141210;
+  --ink-2: #2f2a25;
+  --ink-foreground: #f7f4ee;
+  --ink-muted: #b6ac9e;
+
+  --background: #1b1916;
+  --foreground: #f4f1ea;
+  --card: #232019;
+  --popover: #232019;
+  --secondary: #2e2a24;
+  --muted: #2e2a24;
+  --muted-foreground: #b0a798;
+  --accent: #2e2a24;
+  --border: #3a352e;
+  --input: #453f37;
+}
+
+/* Хар чавга - Pinterest's 2026 Palette, using their Persimmon-Plum pairing.
+   Plum Noir #351e28 is dark enough to be the ink panels exactly as published,
+   which is rare for a colour of the year; Persimmon #ff5c34 is the gradient
+   partner, and --brand is a shade deeper than it so the accent still reads as
+   small text on the blush ground. The CTA takes dark type, not white. */
+:root[data-palette="plum"] {
+  --brand: #f25731;
+  --brand-2: #ff5c34;
+  --brand-blue: #7b5f86;
+  --brand-navy: #56344a;
+  --brand-foreground: #2b0d04;
+
+  --ink: #351e28;
+  --ink-2: #56344a;
+  --ink-foreground: #fbf6f8;
+  --ink-muted: #c8adbb;
+
+  --background: #f7f0f2;
+  --foreground: #1f1218;
+  --card: #fdfafb;
+  --popover: #fdfafb;
+  --secondary: #eadfe3;
+  --muted: #eadfe3;
+  --muted-foreground: #6a5560;
+  --accent: #f1e8eb;
+  --border: #d8c6cd;
+  --input: #c6b0b8;
+}
+
+.dark[data-palette="plum"] {
+  --brand: #ff7550;
+  --brand-2: #ff9c7e;
+  --brand-blue: #9a7aa6;
+  --brand-navy: #6b4f5e;
+  --brand-foreground: #2b0d04;
+
+  /* Plum Noir moves up to --ink-2 here: the page ground is already dark, so
+     the panels have to sit below it to stay a distinct layer. */
+  --ink: #150c10;
+  --ink-2: #351e28;
+  --ink-foreground: #f9f2f5;
+  --ink-muted: #c3a5b1;
+
+  --background: #171013;
+  --foreground: #f6ecf0;
+  --card: #1f161a;
+  --popover: #1f161a;
+  --secondary: #2a1e24;
+  --muted: #2a1e24;
+  --muted-foreground: #b49da6;
+  --accent: #2a1e24;
+  --border: #38272e;
+  --input: #433038;
+}
+
+/* Кобальт - Pinterest's Cool Blue as a tinted page ground rather than white,
+   2026's charcoal-instead-of-black for the ink panels, and cobalt as the
+   accent. The one scheme here whose 60% is not a neutral: the ground carries
+   the hue and the accent carries the voltage. */
+:root[data-palette="cobalt"] {
+  --brand: #3a5ce0;
+  --brand-2: #4f75ff;
+  --brand-blue: #3a5ce0;
+  --brand-navy: #2c3339;
+  --brand-foreground: #ffffff;
+
+  --ink: #191d21;
+  --ink-2: #2c3339;
+  --ink-foreground: #f6f9fc;
+  --ink-muted: #b4bfc9;
+
+  --background: #e9f3fd;
+  --foreground: #0e1723;
+  --card: #f7fbff;
+  --popover: #f7fbff;
+  --secondary: #d3e7f7;
+  --muted: #d3e7f7;
+  --muted-foreground: #4a5c6e;
+  --accent: #dfeefb;
+  --border: #b3cee6;
+  --input: #9cbcd8;
+}
+
+.dark[data-palette="cobalt"] {
+  --brand: #6d8dff;
+  --brand-2: #9db2ff;
+  --brand-blue: #6d8dff;
+  --brand-navy: #3a444f;
+  --brand-foreground: #08102e;
+
+  --ink: #0a0d10;
+  --ink-2: #1e252b;
+  --ink-foreground: #f4f8fb;
+  --ink-muted: #aebac6;
+
+  --background: #0f1318;
+  --foreground: #eef3f8;
+  --card: #161b21;
+  --popover: #161b21;
+  --secondary: #20272e;
+  --muted: #20272e;
+  --muted-foreground: #a3b1bf;
+  --accent: #20272e;
+  --border: #2b333c;
+  --input: #353f4a;
 }
 
 @layer base {
@@ -570,11 +756,14 @@
 
 .cursor-ring-circle {
   opacity: 0;
+  /* The dashes take this, so the ring's colour is one property to animate
+     rather than a stroke buried in the SVG. */
+  color: color-mix(in oklab, var(--foreground) 42%, transparent);
   transition:
     opacity 200ms ease-out,
     width 220ms cubic-bezier(0.22, 1, 0.36, 1),
     height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 220ms ease-out,
+    color 220ms ease-out,
     background-color 220ms ease-out;
   will-change: transform;
 }
@@ -585,12 +774,34 @@
 .cursor-ring-circle[data-over="yes"] {
   width: 3.5rem;
   height: 3.5rem;
-  border-color: var(--brand);
+  color: var(--brand);
   background-color: color-mix(in oklab, var(--brand) 10%, transparent);
 }
 
+/* The dashes turn, slowly and forever, so the ring reads as something running
+   rather than a shape parked on the pointer. On its own element because the
+   frame loop writes the ring's own transform every frame and the two would
+   otherwise overwrite each other. */
+@keyframes cursor-ring-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cursor-ring-dash {
+  animation: cursor-ring-turn 14s linear infinite;
+}
+
+/* The core: brand colour with the light it would be throwing if it were one.
+   Three shadows rather than one because a single large blur fades to nothing
+   evenly and reads as fog - stacking a tight bright one inside two wide faint
+   ones is what gives it a centre. */
 .cursor-ring-dot {
   opacity: 0;
+  background-color: var(--brand-2);
+  box-shadow:
+    0 0 5px 1px color-mix(in oklab, var(--brand-2) 75%, transparent),
+    0 0 16px 4px color-mix(in oklab, var(--brand) 42%, transparent),
+    0 0 38px 11px color-mix(in oklab, var(--brand) 16%, transparent);
   transition: opacity 200ms ease-out;
   will-change: transform;
 }
@@ -600,4 +811,59 @@
 /* The field's own caret is enough; two marks in one place is one too many. */
 .cursor-ring-dot[data-over="typing"] {
   opacity: 0;
+}
+
+/* <CursorRing> does not mount at all with motion turned down, so this only
+   has to hold if that ever changes. */
+@media (prefers-reduced-motion: reduce) {
+  .cursor-ring-dash {
+    animation: none;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   History tile reveal
+
+   Түүхэн замнал changes its photograph a tile at a time rather than by
+   crossfading. Each tile of the incoming photograph opens through the page's
+   own ground rather than straight over the outgoing one: a crossfade between
+   two photographs passes through a muddy blend of both, and going through
+   the ground instead keeps every frame of the change a colour the page
+   already has.
+
+   The veil is an inset shadow rather than a second element because there is
+   one of these per tile and the count is in the dozens. The spread only has
+   to cover a tile, not the frame.
+
+   The sweep and the stagger are passed in per tile as animation-delay; only
+   the shape of one tile's change is described here.
+   ---------------------------------------------------------------------- */
+
+@keyframes history-tile-in {
+  from {
+    opacity: 0;
+    box-shadow: inset 0 0 0 200px var(--history-veil);
+  }
+  55% {
+    opacity: 1;
+    box-shadow: inset 0 0 0 200px var(--history-veil);
+  }
+  to {
+    opacity: 1;
+    box-shadow: inset 0 0 0 200px transparent;
+  }
+}
+
+.history-tile {
+  --history-veil: color-mix(in oklab, var(--background) 88%, transparent);
+  animation-name: history-tile-in;
+  animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
+  animation-fill-mode: both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .history-tile {
+    animation: none;
+    opacity: 1;
+  }
 }

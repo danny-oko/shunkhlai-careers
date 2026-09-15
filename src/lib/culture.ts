@@ -147,9 +147,49 @@ export const benefits: Benefit[] = [
   },
 ];
 
+export type Club = {
+  name: string;
+  /** The wordmark on the lockup, for the caption under the Mongolian name. */
+  nameEn: string;
+  /** The club's own lockup: the Shunkhlai mark beside its wordmark. */
+  logo: string;
+};
+
 /**
- * Content plan 2.8. HR has given the count but not the roster.
+ * Content plan 2.8. The clubs as HR's own lockups name them.
  *
- * TODO(HR): supply the club names and photos, then this becomes a list.
+ * Each logo is a wide transparent lockup - the eagle beside the club's
+ * wordmark - so these are drawn whole on a light plate rather than cropped
+ * like the photographs elsewhere on the wall. The wordmark already says the
+ * club's name, and `name` repeats it in Mongolian for the caption and for a
+ * reader who never sees the picture.
+ *
+ * TODO(HR): the count below is 14 and these are the 13 lockups delivered.
+ * The fourteenth is still to come.
  */
+export const clubs: Club[] = [
+  { name: "Шагайн клуб", nameEn: "Shagai club", logo: "/clubs/shagai.png" },
+  { name: "Спорт клуб", nameEn: "Sport club", logo: "/clubs/sport.png" },
+  { name: "И-спорт клуб", nameEn: "E-sport club", logo: "/clubs/e-sport.png" },
+  { name: "Дартс клуб", nameEn: "Darts club", logo: "/clubs/darts.png" },
+  { name: "Хайкинг клуб", nameEn: "Hiking club", logo: "/clubs/hiking.png" },
+  { name: "Бүжгийн клуб", nameEn: "Dance club", logo: "/clubs/dance.png" },
+  { name: "Хөгжмийн клуб", nameEn: "Music club", logo: "/clubs/music.png" },
+  { name: "Подкаст клуб", nameEn: "Podcast club", logo: "/clubs/podcast.png" },
+  {
+    name: "Шинжлэх ухааны клуб",
+    nameEn: "Science club",
+    logo: "/clubs/science.png",
+  },
+  {
+    name: "Англи хэлний клуб",
+    nameEn: "English club",
+    logo: "/clubs/english.png",
+  },
+  { name: "Бизнес клуб", nameEn: "Business club", logo: "/clubs/business.png" },
+  { name: "Vogue клуб", nameEn: "Vogue", logo: "/clubs/vogue.png" },
+  { name: "Be Happy клуб", nameEn: "Be Happy", logo: "/clubs/be-happy.png" },
+];
+
+/** HR's figure, which is still one ahead of the lockups in `clubs`. */
 export const clubCount = 14;
