@@ -52,7 +52,7 @@ export default async function JobPage({ params }: PageProps<"/careers/[id]">) {
       <main className="flex-1">
         <JobHeader job={job} />
 
-        <div className="mx-auto w-full max-w-4xl px-6 pt-16">
+        <div className="mx-auto w-full max-w-6xl px-6 pt-16 lg:px-10">
           <JobContent job={job} />
 
           {job.isOpen ? (

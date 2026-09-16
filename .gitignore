@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# Mock backend state, written in development only. Holds registered accounts,
+# issued tokens and uploaded CVs — local scratch data, never committed.
+/.mock-data/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
