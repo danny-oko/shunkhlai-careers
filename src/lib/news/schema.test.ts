@@ -139,12 +139,10 @@ describe("checkboxes", () => {
   });
 
   it("reads a checked box as true", () => {
-    expect(parse({ featured: "on" }).success && parse({ featured: "on" }).data.featured).toBe(
-      true,
-    );
-    expect(
-      parse({ removeCover: "on" }).success && parse({ removeCover: "on" }).data.removeCover,
-    ).toBe(true);
+    const featured = parse({ featured: "on" });
+    expect(featured.success && featured.data.featured).toBe(true);
+    const removeCover = parse({ removeCover: "on" });
+    expect(removeCover.success && removeCover.data.removeCover).toBe(true);
   });
 
   it("refuses a value no checkbox produces", () => {

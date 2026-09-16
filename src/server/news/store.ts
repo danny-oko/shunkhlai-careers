@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
-import { uniqueSlug } from "@/lib/news/slug";
+import { uniqueSlug } from "@/lib/news/shared/slug";
 import {
   NEWS_CATEGORIES,
   type NewsArticle,
