@@ -1,3 +1,6 @@
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
 import { defaultCountry, dropdowns, filterData, listRow, parentOf, postings } from "./data";
 
 /**
