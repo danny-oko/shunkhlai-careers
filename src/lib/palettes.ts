@@ -8,10 +8,11 @@
  * list the UI walks and the contract for the id that goes on <html>.
  *
  * `shunkhlai` is the brandbook palette and stays exactly as it was. The other
- * three are 2026 trend colours, each chosen so that the three roles keep the
- * contrast the brandbook palette already had - see docs/brand.md §1.1.
+ * four come from 2026 trend collections - two from Dunn-Edwards, one from
+ * London Fashion Week - each chosen so the three roles keep the contrast the
+ * brandbook palette already had. See docs/brand.md §1.1.
  */
-export const PALETTE_IDS = ["shunkhlai", "cloud", "plum", "cobalt"] as const;
+export const PALETTE_IDS = ["shunkhlai", "viridian", "london", "charcoal", "wine"] as const;
 
 export type PaletteId = (typeof PALETTE_IDS)[number];
 
@@ -30,19 +31,24 @@ export const PALETTES: readonly Palette[] = [
     source: "Брэндбүүк 1.3 - цагаан, хөх, оранж",
   },
   {
-    id: "cloud",
-    label: "Үүлэн цагаан",
-    source: "Pantone 2026 - Cloud Dancer",
+    id: "viridian",
+    label: "Виридиан",
+    source: "Dunn-Edwards 2026 - Viridian Odyssey, Cedar Grove",
   },
   {
-    id: "plum",
-    label: "Хар чавга",
-    source: "Pinterest 2026 - Plum Noir, Persimmon",
+    id: "london",
+    label: "Лондон",
+    source: "London Fashion Week FW 2025-26 - ягаан, лаванда, охра",
   },
   {
-    id: "cobalt",
-    label: "Кобальт",
-    source: "Pinterest 2026 - Cool Blue, кобальт хөх",
+    id: "charcoal",
+    label: "Нүүрсэн саарал",
+    source: "Dunn-Edwards 2026 - Eagle's View, Viridian Odyssey",
+  },
+  {
+    id: "wine",
+    label: "Дарсан улаан",
+    source: "London Fashion Week FW 2025-26 - хүрэн, охра",
   },
 ];
 
