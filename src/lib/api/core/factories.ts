@@ -46,7 +46,11 @@ export function toOption(row: DropdownRow): DropdownOption {
  * @param path      e.g. `/api/applicant/GetCountryDropDown`
  * @param options   `standard: false` for the three that take `search` only.
  */
-export function createDropdown<TExtra extends Record<string, unknown> = Record<string, never>>(
+// `Record<never, never>` rather than `Record<string, never>`: the latter is an
+// index signature saying every key is `undefined`, so `DropdownQuery &
+// Partial<TExtra>` refused a `{ search }` a caller had in hand for one of the
+// endpoints that take no parent id.
+export function createDropdown<TExtra extends Record<string, unknown> = Record<never, never>>(
   path: string,
   options: { standard?: boolean } = {},
 ) {

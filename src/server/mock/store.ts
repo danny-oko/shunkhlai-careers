@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { defaultCountry, dropdowns, filterData, listRow, postings } from "./data";
+import { defaultCountry, dropdowns, filterData, listRow, parentOf, postings } from "./data";
 
 /**
  * State for the mock backend: in memory, mirrored to disk in development.
@@ -222,6 +222,49 @@ export function labelFor(dropdown: string, key: unknown): string {
   if (key === null || key === undefined || key === "") return "";
   const row = dropdowns[dropdown]?.find((item) => String(item.key) === String(key));
   return row ? String(row.text) : "";
+}
+
+/* --- dropdowns --------------------------------------------------------- */
+
+/**
+ * One dropdown's rows for one request.
+ *
+ * The three filters narrow rather than replace one another: a combobox that
+ * has a country chosen and a word typed means both, and resolving a saved id
+ * still has to respect the parent it was saved under. Answering the whole
+ * table to any of them is what made the cascade cosmetic — the child list
+ * reloaded on every parent change and came back identical.
+ */
+export function dropdownRows(name: string, params: URLSearchParams): Row[] {
+  const rows = dropdowns[name] ?? [];
+  const parent = parentOf[name];
+  const search = (params.get("search") ?? "").trim().toLowerCase();
+  const ids = params.getAll("ids").filter(Boolean);
+  const lfr = params.get("lfr") === "true";
+
+  let result = rows;
+
+  if (parent) {
+    const value = Number(params.get(parent.param) ?? 0);
+    // `0` and an absent parameter both mean "every row" where the collection
+    // allows it; where the parent is required they mean the applicant has not
+    // chosen one yet, so there is nothing to offer.
+    if (Number.isFinite(value) && value !== 0) {
+      result = result.filter((row) => Number(row[parent.param]) === value);
+    } else if (parent.required) {
+      result = [];
+    }
+  }
+
+  if (ids.length > 0) result = result.filter((row) => ids.includes(String(row.key)));
+  if (search) result = result.filter((row) => String(row.text).toLowerCase().includes(search));
+  if (lfr) result = result.slice(0, 5);
+
+  return result.map((row, index) => {
+    const visible: Row = { row_index: index + 1, ...row };
+    if (parent) delete visible[parent.param];
+    return visible;
+  });
 }
 
 /* --- profile completion ------------------------------------------------ */

@@ -39,6 +39,12 @@ export const http: AxiosInstance = axios.create({
   baseURL: resolveBaseUrl(),
   timeout: API_TIMEOUT_MS,
   withCredentials: false,
+  // The collection spells multi-valued parameters as a repeated key —
+  // `?ids=1&ids=2` — where axios would write `ids[]=1&ids[]=2` and the backend
+  // would see a parameter it does not have. Nothing sent an array until the
+  // dropdowns began resolving a saved value through `ids`, so this never
+  // surfaced; `indexes: null` is what repeats the bare key.
+  paramsSerializer: { indexes: null },
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
