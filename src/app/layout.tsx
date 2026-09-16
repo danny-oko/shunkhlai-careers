@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, PT_Serif } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { CursorRing } from "@/components/cursor-ring";
+import { ChromeSlot } from "@/components/chrome-slot";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
@@ -22,6 +23,18 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+// The newsroom's reading face. PT Serif is a ParaType design drawn for
+// Cyrillic first, so Mongolian copy sets without the fallback-to-Georgia
+// wobble a Latin-only serif produces on Ө/ө and Ү/ү. Only /news and
+// /admin/news ask for it; the rest of the site stays on Geist.
+const ptSerif = PT_Serif({
+  variable: "--font-pt-serif",
+  subsets: ["latin", "cyrillic", "cyrillic-ext"],
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   // Absolute base for Open Graph images. Update if the site moves.
   metadataBase: new URL("https://careers.shunkhlai.mn"),
@@ -38,7 +51,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="mn"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${ptSerif.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
         <ThemeProvider
@@ -51,9 +64,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               header is fixed, so pages own the top offset their own hero
               needs — the landing hero deliberately opens underneath it. */}
           <SessionProvider>
-            <SiteHeader />
+            <ChromeSlot>
+              <SiteHeader />
+            </ChromeSlot>
             {children}
-            <SiteFooter />
+            <ChromeSlot>
+              <SiteFooter />
+            </ChromeSlot>
             <Toaster position="bottom-right" />
             <CursorRing />
           </SessionProvider>

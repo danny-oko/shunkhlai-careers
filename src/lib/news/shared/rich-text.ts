@@ -1,0 +1,444 @@
+import { LIMITS } from "./limits";
+
+/**
+ * The article body format, and the only code that decides what is allowed in it.
+ *
+ * Bodies are Tiptap (ProseMirror) JSON. The editor produces it, D1 stores it,
+ * and the site renders it node by node into React elements — never through
+ * raw HTML injection. That makes this file the security boundary for
+ * everything an editor types: whatever `sanitizeDoc` returns is, by
+ * construction, a tree of known node types with known attributes, and links
+ * and images that point somewhere safe.
+ *
+ * It runs twice. The site sanitises before sending so the editor sees what will
+ * be kept; the Worker sanitises again on arrival because it cannot trust the
+ * caller. Same function both times, so the two can never disagree.
+ *
+ * Dependency-free: the Worker imports this file by relative path from outside
+ * its own package, and a bare import here would resolve against the wrong
+ * `node_modules`.
+ */
+
+/* --- the format ---------------------------------------------------------- */
+
+export type LinkMark = {
+  type: "link";
+  attrs: { href: string; target: "_blank" | null };
+};
+
+export type Mark =
+  | { type: "bold" }
+  | { type: "italic" }
+  | { type: "underline" }
+  | { type: "strike" }
+  | LinkMark;
+
+export type TextNode = { type: "text"; text: string; marks?: Mark[] };
+export type InlineNode = TextNode | { type: "hardBreak" };
+
+export type ImageAttrs = {
+  src: string;
+  alt: string;
+  /** Shown as the caption under the picture. */
+  title: string | null;
+  width: number | null;
+  height: number | null;
+};
+
+/**
+ * Three heading levels, as the editor names them: title, subheading, minor
+ * heading. On the article page they render one level down (h2–h4), because the
+ * page's own h1 is the article's headline.
+ */
+export type HeadingLevel = 1 | 2 | 3;
+
+export type ListItemNode = { type: "listItem"; content: BlockNode[] };
+
+export type BlockNode =
+  | { type: "paragraph"; content?: InlineNode[] }
+  | { type: "heading"; attrs: { level: HeadingLevel }; content?: InlineNode[] }
+  | { type: "bulletList"; content: ListItemNode[] }
+  | { type: "orderedList"; attrs: { start: number }; content: ListItemNode[] }
+  | { type: "blockquote"; content: BlockNode[] }
+  | { type: "image"; attrs: ImageAttrs }
+  | { type: "horizontalRule" };
+
+export type RichDoc = { type: "doc"; content: BlockNode[] };
+
+export function emptyDoc(): RichDoc {
+  return { type: "doc", content: [{ type: "paragraph" }] };
+}
+
+/* --- URLs ---------------------------------------------------------------- */
+
+const LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+/**
+ * A site-relative path, and nothing that only looks like one.
+ *
+ * `//evil.example` and `/\evil.example` are both read by browsers as a
+ * different host, so a leading slash alone proves nothing.
+ */
+function isSitePath(value: string): boolean {
+  return (
+    value.startsWith("/") &&
+    !value.startsWith("//") &&
+    !value.startsWith("/\\") &&
+    !value.split(/[/\\]/u).includes("..")
+  );
+}
+
+/**
+ * A link target that cannot run script, or null.
+ *
+ * Allow-listed by protocol after the URL parser has normalised it, so case
+ * tricks (`JaVaScRiPt:`) and leading whitespace are already gone by the time
+ * the protocol is compared. Control characters are refused before parsing:
+ * the parser strips tabs and newlines out of a scheme, which is how
+ * `java\tscript:` gets past filters that compare first and parse second.
+ */
+export function safeHref(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const href = raw.trim();
+  if (!href || href.length > 2048) return null;
+  // Control characters and spaces: refusing them is the point.
+  if (/[\x00-\x20\x7f]/u.test(href)) return null;
+
+  if (href.startsWith("#")) return href;
+  if (href.startsWith("/")) return isSitePath(href) ? href : null;
+
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return null;
+  }
+  return LINK_PROTOCOLS.has(url.protocol) ? url.href : null;
+}
+
+/**
+ * What an editor typed into the link box, made into something `safeHref`
+ * accepts. People type `shunkhlai.mn`, not `https://shunkhlai.mn`.
+ */
+export function normalizeLinkInput(raw: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (/^[\w.+-]+@[\w-]+\.[\w.-]+$/u.test(value)) return safeHref(`mailto:${value}`);
+  if (/^\+?[\d\s()-]{6,}$/u.test(value)) return safeHref(`tel:${value.replace(/[\s()-]/gu, "")}`);
+  if (/^[a-z][\w+.-]*:/iu.test(value) || value.startsWith("/") || value.startsWith("#")) {
+    return safeHref(value);
+  }
+  return safeHref(`https://${value}`);
+}
+
+/**
+ * An image source: https, or a path on this site. Never `data:`, never
+ * `http:` (mixed content), never `javascript:`.
+ */
+export function safeImageSrc(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const src = raw.trim();
+  if (!src || src.length > 2048) return null;
+  if (src.startsWith("/")) return isSitePath(src) ? src : null;
+
+  try {
+    const url = new URL(src);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/* --- sanitising ---------------------------------------------------------- */
+
+export type SanitizeOptions = {
+  /**
+   * A second, stricter rule for images. The Worker passes one that only
+   * accepts its own Cloudinary cloud and site paths, so an editor cannot embed
+   * an image that tracks readers from a third-party host.
+   */
+  isAllowedImage?: (src: string) => boolean;
+};
+
+type Raw = Record<string, unknown>;
+
+type Context = SanitizeOptions & { nodes: number };
+
+/** Deeper than any real article; shallow enough to stop a crafted document. */
+const MAX_DEPTH = 12;
+
+function asRecord(value: unknown): Raw | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Raw) : null;
+}
+
+function childrenOf(value: unknown): unknown[] {
+  const content = asRecord(value)?.content;
+  return Array.isArray(content) ? content : [];
+}
+
+function attrsOf(value: Raw): Raw {
+  return asRecord(value.attrs) ?? {};
+}
+
+function cleanString(value: unknown, max: number): string {
+  if (typeof value !== "string") return "";
+  // Control characters: keep tab and newline; strip the rest.
+  return value.replace(/[\x00-\x08\x0b-\x1f\x7f]/gu, "").slice(0, max);
+}
+
+function dimension(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 && number <= 20_000 ? number : null;
+}
+
+/** Room for one more node? Counting is what bounds a hostile document. */
+function spend(context: Context): boolean {
+  context.nodes += 1;
+  return context.nodes <= LIMITS.bodyNodes;
+}
+
+const SIMPLE_MARKS = new Set(["bold", "italic", "underline", "strike"]);
+
+function sanitizeMarks(raw: unknown): Mark[] {
+  if (!Array.isArray(raw)) return [];
+
+  const marks: Mark[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of raw) {
+    const mark = asRecord(entry);
+    const type = typeof mark?.type === "string" ? mark.type : "";
+    if (!mark || seen.has(type)) continue;
+
+    if (SIMPLE_MARKS.has(type)) {
+      seen.add(type);
+      marks.push({ type } as Mark);
+    } else if (type === "link") {
+      const href = safeHref(attrsOf(mark).href);
+      // An unsafe link loses the link, not the words it was on.
+      if (!href) continue;
+      seen.add(type);
+      const target = attrsOf(mark).target === "_blank" ? "_blank" : null;
+      marks.push({ type: "link", attrs: { href, target } });
+    }
+  }
+
+  return marks;
+}
+
+function sanitizeInlines(raw: unknown[], context: Context): InlineNode[] {
+  const inlines: InlineNode[] = [];
+
+  for (const entry of raw) {
+    const node = asRecord(entry);
+    if (!node || !spend(context)) continue;
+
+    if (node.type === "hardBreak") {
+      inlines.push({ type: "hardBreak" });
+      continue;
+    }
+
+    // Anything else inline is kept only for its words. ProseMirror refuses an
+    // empty text node outright, so those are dropped rather than passed on.
+    const text = cleanString(node.type === "text" ? node.text : plainText(node), LIMITS.bodyText);
+    if (!text) continue;
+
+    const marks = node.type === "text" ? sanitizeMarks(node.marks) : [];
+    inlines.push(marks.length > 0 ? { type: "text", text, marks } : { type: "text", text });
+  }
+
+  return inlines;
+}
+
+function withContent<T extends { type: string }>(
+  node: T,
+  content: InlineNode[],
+): T & { content?: InlineNode[] } {
+  return content.length > 0 ? { ...node, content } : node;
+}
+
+function sanitizeListItems(raw: unknown[], context: Context, depth: number): ListItemNode[] {
+  const items: ListItemNode[] = [];
+
+  for (const entry of raw) {
+    if (!spend(context)) break;
+    // A bare paragraph where a list item belongs is wrapped rather than lost.
+    const source = asRecord(entry)?.type === "listItem" ? childrenOf(entry) : [entry];
+    const content = sanitizeBlocks(source, context, depth + 1);
+    if (content.length > 0) items.push({ type: "listItem", content });
+  }
+
+  return items;
+}
+
+function sanitizeImage(node: Raw, context: Context): BlockNode | null {
+  const attrs = attrsOf(node);
+  const src = safeImageSrc(attrs.src);
+  if (!src || (context.isAllowedImage && !context.isAllowedImage(src))) return null;
+
+  const title = cleanString(attrs.title, 300).trim();
+  return {
+    type: "image",
+    attrs: {
+      src,
+      alt: cleanString(attrs.alt, 300).trim(),
+      title: title || null,
+      width: dimension(attrs.width),
+      height: dimension(attrs.height),
+    },
+  };
+}
+
+/**
+ * One raw block into zero or more clean ones.
+ *
+ * Unknown containers are flattened rather than dropped, so a paste from
+ * somewhere richer (a table, a code block) keeps its words even though it
+ * loses its shape.
+ */
+function sanitizeBlock(node: Raw, context: Context, depth: number): BlockNode[] {
+  switch (node.type) {
+    case "paragraph":
+      return [withContent({ type: "paragraph" }, sanitizeInlines(childrenOf(node), context))];
+
+    case "heading": {
+      const level = Number(attrsOf(node).level);
+      const safeLevel: HeadingLevel = level === 1 || level === 3 ? level : 2;
+      const content = sanitizeInlines(childrenOf(node), context);
+      return [withContent({ type: "heading", attrs: { level: safeLevel } }, content)];
+    }
+
+    case "bulletList":
+    case "orderedList": {
+      const content = sanitizeListItems(childrenOf(node), context, depth);
+      if (content.length === 0) return [];
+      if (node.type === "bulletList") return [{ type: "bulletList", content }];
+      const start = Number(attrsOf(node).start);
+      return [
+        {
+          type: "orderedList",
+          attrs: { start: Number.isInteger(start) && start > 0 ? Math.min(start, 9999) : 1 },
+          content,
+        },
+      ];
+    }
+
+    case "blockquote": {
+      const content = sanitizeBlocks(childrenOf(node), context, depth + 1);
+      return content.length > 0 ? [{ type: "blockquote", content }] : [];
+    }
+
+    case "image": {
+      const image = sanitizeImage(node, context);
+      return image ? [image] : [];
+    }
+
+    case "horizontalRule":
+      return [{ type: "horizontalRule" }];
+
+    case "text":
+    case "hardBreak":
+      return [withContent({ type: "paragraph" }, sanitizeInlines([node], context))];
+
+    case "codeBlock": {
+      const text = cleanString(plainText(node), LIMITS.bodyText);
+      return [withContent({ type: "paragraph" }, text ? [{ type: "text", text }] : [])];
+    }
+
+    default:
+      return sanitizeBlocks(childrenOf(node), context, depth + 1);
+  }
+}
+
+function sanitizeBlocks(raw: unknown[], context: Context, depth: number): BlockNode[] {
+  if (depth > MAX_DEPTH) return [];
+
+  const blocks: BlockNode[] = [];
+  for (const entry of raw) {
+    const node = asRecord(entry);
+    if (!node || !spend(context)) continue;
+    blocks.push(...sanitizeBlock(node, context, depth));
+  }
+  return blocks;
+}
+
+/**
+ * Anything in, a well-formed document out. Never throws.
+ *
+ * The result always has at least one block, because the editor cannot open a
+ * document with none.
+ */
+export function sanitizeDoc(input: unknown, options: SanitizeOptions = {}): RichDoc {
+  const context: Context = { ...options, nodes: 0 };
+  const content = sanitizeBlocks(childrenOf(input), context, 0);
+  return { type: "doc", content: content.length > 0 ? content : emptyDoc().content };
+}
+
+/* --- reading ------------------------------------------------------------- */
+
+function plainText(node: unknown): string {
+  const record = asRecord(node);
+  if (!record) return "";
+  if (record.type === "text") return typeof record.text === "string" ? record.text : "";
+  if (record.type === "hardBreak") return " ";
+  return childrenOf(record).map(plainText).join("");
+}
+
+const TEXT_BLOCKS = new Set(["paragraph", "heading"]);
+
+/**
+ * The words of a document, block by block, separated by blank lines.
+ *
+ * Stored alongside the body in D1 so search, excerpts and reading time never
+ * need to parse JSON on a read.
+ */
+export function docText(doc: RichDoc | unknown): string {
+  const lines: string[] = [];
+
+  const walk = (node: unknown) => {
+    const record = asRecord(node);
+    if (!record) return;
+    if (TEXT_BLOCKS.has(String(record.type))) {
+      const text = plainText(record).replace(/\s+/gu, " ").trim();
+      if (text) lines.push(text);
+      return;
+    }
+    if (record.type === "image") {
+      const title = attrsOf(record).title;
+      if (typeof title === "string" && title.trim()) lines.push(title.trim());
+      return;
+    }
+    childrenOf(record).forEach(walk);
+  };
+
+  walk(doc);
+  return lines.join("\n\n");
+}
+
+export function wordCount(text: string): number {
+  return text.split(/\s+/u).filter(Boolean).length;
+}
+
+/**
+ * 180 words a minute — the slow end of the usual range, because Mongolian
+ * Cyrillic sets longer words than the English the figure comes from. Never
+ * zero: "0 минут" reads as broken rather than short.
+ */
+export function readingMinutes(text: string): number {
+  return Math.max(1, Math.ceil(wordCount(text) / 180));
+}
+
+/** Cut on a word boundary, with an ellipsis only when something was dropped. */
+export function excerpt(text: string, max = 180): string {
+  const flat = text.replace(/\s+/gu, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
+/** True when there is nothing to publish: no words and no pictures. */
+export function isDocBlank(doc: RichDoc): boolean {
+  if (docText(doc).trim()) return false;
+  return !JSON.stringify(doc).includes('"type":"image"');
+}

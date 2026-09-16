@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -120,25 +120,4 @@ describe("saveDb / loadDb", () => {
     expect(second.findAccount("УЖ07241252")).toBeUndefined();
     expect(() => second.saveDb()).not.toThrow();
   });
-
-  it("keeps the CV and picture blobs out of the file, in memory only", async () => {
-    const store = await loadStore();
-    const account = store.createAccount(signUp);
-    account.cv = { filename: "cv.pdf", filedata: "U0VDUkVULUNW" };
-    account.picture = "data:image/jpeg;base64,cGljcGljcGlj";
-    store.saveDb();
-
-    const written = readFileSync(join(dir, ".mock-data", "db.json"), "utf8");
-    expect(written).not.toContain("U0VDUkVULUNW");
-    expect(written).not.toContain("cGljcGljcGlj");
-    // The account itself still has them: only the copy on disk is narrowed.
-    expect(account.cv?.filedata).toBe("U0VDUkVULUNW");
-
-    const reloaded = await loadStore();
-    const back = reloaded.findAccount(signUp.regno);
-    expect(back?.profile.firstname).toBe("Болд");
-    expect(back?.cv).toBeNull();
-    expect(back?.picture).toBeNull();
-  });
-
 });

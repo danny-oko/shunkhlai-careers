@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // The newsroom API: Hono on Workers, Drizzle over D1. The Next site calls
+  // it server-side only, with a bearer token — it is not a public API.
+  "name": "shunhlai-news-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": { "enabled": true },
+
+  // Not secrets: safe to commit. The Cloudinary cloud name is part of every
+  // public image URL anyway.
+  "vars": {
+    "CLOUDINARY_CLOUD_NAME": "",
+    "CLOUDINARY_FOLDER": "shunhlai/news",
+    // Origin of the Next site. Seeded covers are site-relative paths, and
+    // this is what the API resolves them against when it needs an absolute URL.
+    "SITE_ORIGIN": "http://localhost:3000"
+  },
+
+  // Secrets — set with `wrangler secret put <NAME>`, never here:
+  //   API_TOKEN              shared with the Next app as NEWS_API_TOKEN
+  //   CLOUDINARY_API_KEY
+  //   CLOUDINARY_API_SECRET
+  // For local dev, copy .dev.vars.example to .dev.vars.
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shunhlai-news",
+      // Replace with the id `wrangler d1 create shunhlai-news` prints.
+      // Local dev (`wrangler dev`) does not need a real one.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
