@@ -1,0 +1,33 @@
+{
+  "name": "shunhlai-news-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "cf-typegen": "wrangler types src/worker-configuration.d.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply shunhlai-news --local",
+    "db:migrate:remote": "wrangler d1 migrations apply shunhlai-news --remote",
+    "db:seed:local": "wrangler d1 execute shunhlai-news --local --file ./seed/seed.sql",
+    "db:seed:remote": "wrangler d1 execute shunhlai-news --remote --file ./seed/seed.sql",
+    "db:seed:build": "bun ./scripts/build-seed.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "hono": "4.13.8",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260916.1",
+    "drizzle-kit": "0.31.10",
+    "typescript": "^5",
+    "vitest": "^5.0.0",
+    "wrangler": "4.132.0"
+  },
+  "packageManager": "bun@1.3.14"
+}

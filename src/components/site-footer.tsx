@@ -22,6 +22,7 @@ const columns = [
   {
     title: "Компани",
     links: [
+      { href: "/news", label: "Мэдээ, сурвалжилга" },
       { href: "/about#history", label: "Бидний түүх" },
       { href: "/about", label: "Бидний тухай" },
       { href: "/about#life", label: "Ажилтны түүх" },

@@ -31,8 +31,13 @@ export type DropdownOption = {
   raw: DropdownRow;
 };
 
+/** Reference names arrive as `/03/ Name` — drop the leading code for display. */
+export function stripCode(text: string | null | undefined): string {
+  return (text ?? "").replace(/^\s*\/\s*\d+\s*\/\s*/u, "").trim();
+}
+
 export function toOption(row: DropdownRow): DropdownOption {
-  return { value: String(row.key), label: (row.text ?? "").trim(), raw: row };
+  return { value: String(row.key), label: stripCode(row.text), raw: row };
 }
 
 /**

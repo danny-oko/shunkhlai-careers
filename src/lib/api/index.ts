@@ -39,6 +39,7 @@ export {
   type DropdownRow,
   type SectionEntry,
   type SectionResource,
+  stripCode,
 } from "./core/factories";
 export {
   type Audience,

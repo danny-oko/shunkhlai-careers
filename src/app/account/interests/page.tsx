@@ -8,7 +8,7 @@ import { useDropdown } from "@/components/account/use-dropdown";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
-import { applications, reference, toApiError } from "@/lib/api";
+import { applications, reference, stripCode, toApiError } from "@/lib/api";
 import type { InterestedJobRow } from "@/lib/api/applications";
 
 /**
@@ -215,11 +215,11 @@ export default function InterestsPage() {
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">
-                  {row.positionname || row.posgroupname || "Ажлын байр"}
+                  {stripCode(row.positionname) || stripCode(row.posgroupname) || "Ажлын байр"}
                 </p>
                 {row.positionname && row.posgroupname ? (
                   <p className="text-muted-foreground mt-0.5 truncate text-sm">
-                    {row.posgroupname}
+                    {stripCode(row.posgroupname)}
                   </p>
                 ) : null}
               </div>
