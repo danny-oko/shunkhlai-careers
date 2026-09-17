@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-
 import { HistoryTimeline } from "@/components/aboutUs/history-timeline";
 import { StatementBands } from "@/components/aboutUs/statement-bands";
 import { CultureSection } from "@/components/aboutUs/culture-section";
