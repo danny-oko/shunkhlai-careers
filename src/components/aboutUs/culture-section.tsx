@@ -7,7 +7,7 @@ import { SectionRule } from "@/components/brand/section-rule";
 import { SectionRail } from "@/components/aboutUs/section-rail";
 import { SphereGallery } from "@/components/aboutUs/sphere-gallery";
 import { useScrollProgress } from "@/components/landing/use-scroll-progress";
-import { academyVoices } from "@/lib/culture";
+import { academyVoices, clubs } from "@/lib/culture";
 
 const ID = "culture";
 
@@ -19,8 +19,9 @@ const ID = "culture";
  * prose these walls replaced; the rest are marked below and show a standing
  * note instead of invented copy.
  *
- * TODO(HR): the pictures are placeholders — `public/brand/mock-*.jpg` — and
- * every entry without a `body` is waiting for one.
+ * TODO(HR): the pictures on the first two walls are placeholders —
+ * `public/brand/mock-*.jpg` — and every entry without a `body` is waiting for
+ * one. The clubs wall is HR's own artwork throughout.
  *
  * The keys are the hashes these used to be their own sections under, so every
  * link already written against them — the site footer — still arrives at the
@@ -88,24 +89,22 @@ const TABS = [
   {
     key: "clubs",
     label: "Хобби клубууд",
+    // Every tile here is a club's own lockup, so this wall has no placeholders
+    // and no invented names: it is the roster in lib/culture, which is what HR
+    // sent. The words that used to open the wall are on the first tile, and it
+    // carries the Shunkhlai mark the thirteen lockups are all built around.
     wall: [
       {
         title: "Хобби клубууд",
+        subtitle: "Hobby clubs",
         body: "Ажилтнуудын чөлөөт цаг, хамтын үйл ажиллагааг дэмжих зорилгоор урлаг, спорт, олон нийтийн арга хэмжээг тогтмол зохион байгуулдаг. Нийт 14 төрлийн сонирхлын клуб ажилладаг.",
+        logo: "/brand/logo-lockup.png",
       },
-      { title: "Сагсан бөмбөг" },
-      { title: "Волейбол" },
-      { title: "Ширээний теннис" },
-      { title: "Гүйлтийн клуб" },
-      { title: "Уулын аялал" },
-      { title: "Шатар" },
-      { title: "Гэрэл зураг" },
-      { title: "Дуу хөгжим" },
-      { title: "Ном унших" },
-      { title: "Бүжиг" },
-      { title: "Гар урлал" },
-      { title: "Сурын харваа" },
-      { title: "Морин спорт" },
+      ...clubs.map((club) => ({
+        title: club.name,
+        subtitle: club.nameEn,
+        logo: club.logo,
+      })),
     ],
   },
 ];

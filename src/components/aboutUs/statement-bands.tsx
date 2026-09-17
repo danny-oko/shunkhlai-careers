@@ -16,6 +16,15 @@ type Step = {
   /** The two statements carry a sentence; the values carry their five names. */
   statement?: string;
   list?: string[];
+  /**
+   * Set both edges straight rather than leaving the right one ragged.
+   *
+   * Only worth asking for where the sentence makes a block — four full lines
+   * closing on a straight edge read as a set column. Justify two lines, or the
+   * one-line values, and there is a single stretched line and nothing under it
+   * to square up with, which reads as a spacing fault rather than as setting.
+   */
+  justify?: boolean;
 };
 
 /**
@@ -34,6 +43,7 @@ const STEPS: Step[] = [
     id: "vision",
     word: vision.label,
     statement: vision.statement,
+    justify: true,
     image: "/brand/statement-bg-2.jpg",
   },
   {
@@ -95,7 +105,13 @@ const SAYING = "text-xl leading-[1.3] font-semibold tracking-tight sm:text-2xl";
 
 function Statement({ step }: { step: Step }) {
   if (!step.list) {
-    return <p className={cn(SAYING, "text-balance")}>{step.statement}</p>;
+    // Balanced where it is not justified: `text-balance` evens the lines of a
+    // short sentence, which is the ragged edge's own way of looking set.
+    return (
+      <p className={cn(SAYING, step.justify ? "text-justify" : "text-balance")}>
+        {step.statement}
+      </p>
+    );
   }
 
   return (
@@ -351,7 +367,13 @@ export function StatementBands() {
               Бидний
             </p>
 
-            <div className={cn(WORD_SIZE, "relative shrink-0")}>
+            {/* Pushed to the right gutter until the sentence joins the row.
+                Below `xl` the sentence drops onto its own line and runs the
+                full measure, which left the word column stranded in the middle
+                with a void after the kicker and its right edge landing 62px
+                short of everything under it. Against the gutter, the word, the
+                rule and the justified sentence all close on one line. */}
+            <div className={cn(WORD_SIZE, "relative ml-auto shrink-0 xl:ml-0")}>
               {/* All three words in one grid cell, so the column is as wide as
                   the widest of them and never changes width. Sized to the word
                   at the line instead, the column breathed in and out by the
@@ -408,8 +430,8 @@ export function StatementBands() {
             </div>
 
             {/* Level with the word, not under it: 8px is where the sentence's
-                capitals land on the word's, worked from Geist's own metrics —
-                cap 0.71em on a 1.30em content box, the word at its 56px ceiling
+                capitals land on the word's, worked from the face's own
+                metrics — cap 0.69em on a 1.30em content box, the word at 56px
                 centred in a 1.25em slot, the sentence at 24px on 1.3 leading.
                 `basis-full` drops it onto its own line below `xl`, where the
                 Mongolian is long enough that the two would meet in the middle. */}

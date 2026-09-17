@@ -22,9 +22,9 @@ import * as React from "react";
 const BOX_WIDTH = 1000;
 
 /**
- * What an uppercase glyph runs, as a share of an em. Geist's Cyrillic caps
- * measure 0.696 averaged over this word, so this is set deliberately over the
- * true figure: it picks a font size about 6% too small, and `textLength` then
+ * What an uppercase glyph runs, as a share of an em. Ubuntu Sans's Cyrillic
+ * caps measure 0.674 averaged over this word, so this is set deliberately over
+ * the true figure: it picks a font size about 9% too small, and `textLength`
  * pulls the word back out to the full box. Erring that way is the point — the
  * mark widens into a display cut rather than being squeezed narrow, which is
  * the proportion a dot screen wants. Erring the other way would compress it.
@@ -36,7 +36,8 @@ const AVERAGE_ADVANCE = 0.74;
  * box is sized off that and not off cap height. Cropping it is the one mistake
  * this layout can make that nothing else would catch: it would take the top
  * off one accent and nothing else, which reads as a rendering fault rather
- * than as a design. Measured at 0.90em in Geist; the rest is clearance.
+ * than as a design. Measured at 0.896em in Ubuntu Sans; the rest is
+ * clearance.
  *
  * Under the baseline is air, not ink — enough that the grid closes off instead
  * of ending on a cut row of dots against the bottom of the page.
@@ -48,13 +49,16 @@ const UNDER_BASELINE = 0.1;
  * The screen, in ems so a shorter word does not get a finer grid. What decides
  * whether this reads as a halftone or as noise is the pitch against the stem,
  * not against the letter: three dots to a stem is the least that still holds
- * together as a stroke, and at 800 a Geist stem is about 0.095em, which is
- * where the pitch below comes from. Dots at 26% of it leave the grid open
- * enough to see through, which is the whole effect.
+ * together as a stroke, and this pitch was set against a stem of about
+ * 0.095em, which is the thinnest the mark was ever asked to carry.
  *
- * The weight is part of the same sum. At 600 the stems are two dots across and
- * the word reads as an outline rather than as a screened solid; going heavier
- * is what buys the third dot.
+ * Ubuntu Sans is heavier than that at the same weight — its 800 stem measures
+ * about 0.156em rendered, so a stroke is nearer five dots than three. The
+ * margin runs the safe way: too few dots to a stem reads as an outline, too
+ * many only reads as a denser screen.
+ *
+ * The weight is part of the same sum, and it is why the family here has to be
+ * one that actually carries 800. The 2010 Ubuntu stops at 700.
  */
 const DOT_PITCH = 0.031;
 const DOT_RADIUS = 0.26;

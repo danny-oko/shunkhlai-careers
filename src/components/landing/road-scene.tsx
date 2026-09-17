@@ -177,6 +177,37 @@ export function RoadScene({
   const line = useTravel(lineRef);
   const [truckBox, setTruckBox] = React.useState(0);
 
+  /**
+   * How tall the ink band actually is.
+   *
+   * It used to be 40% of the stage flat, with the figures in flow from the top
+   * and the chain pinned to the bottom — two blocks measured from opposite
+   * edges of a box neither could see. On a phone the figures fall into two
+   * rows and the pair no longer fit: they overlapped, which is not something a
+   * fixed share of the viewport can be tuned out of, only moved to a different
+   * screen size. The band is content-height with 40% as its floor now, so the
+   * desktop composition is the one it was tuned to and a narrow screen grows
+   * the band instead of stacking two things on one another. The truck stands
+   * on its top edge and the map takes what is left, so both follow it.
+   */
+  const bandRef = React.useRef<HTMLDivElement>(null);
+  const [bandBox, setBandBox] = React.useState(0);
+
+  React.useEffect(() => {
+    const element = bandRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+
+    const watch = new ResizeObserver(([entry]) =>
+      setBandBox(entry.contentRect.height),
+    );
+    watch.observe(element);
+    return () => watch.disconnect();
+  }, []);
+
+  // The CSS share until it has been measured, so the scene is never drawn with
+  // the band at nothing — server-rendered, or with no ResizeObserver to hand.
+  const band = bandBox ? `${bandBox}px` : "40%";
+
   React.useEffect(() => {
     const measure = () => setTruckBox(truckRef.current?.offsetHeight ?? 0);
     measure();
@@ -198,7 +229,7 @@ export function RoadScene({
         aria-hidden
         className="absolute left-0 leading-none font-semibold tracking-[-0.035em] whitespace-nowrap text-foreground/[0.07]"
         style={{
-          bottom: `calc(40% + ${TRUCK_MID_OFFSET * truckBox}px)`,
+          bottom: `calc(${band} + ${TRUCK_MID_OFFSET * truckBox}px)`,
           fontSize: `${TRUCK_FONT * truckBox}px`,
           transform: `translate3d(${lineX}px, 50%, 0)`,
           visibility: line.track && truckBox ? "visible" : "hidden",
@@ -213,7 +244,8 @@ export function RoadScene({
           ratio, 145svh of width is 52svh of height, inside the band's 60svh. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 top-0 flex h-[60%] items-center justify-center overflow-hidden opacity-60"
+        className="absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden opacity-60"
+        style={{ height: `calc(100% - ${band})` }}
       >
         <div className="w-[88vw] max-w-[145svh]">
           <MongoliaMap className="w-full" progress={drive} />
@@ -225,8 +257,9 @@ export function RoadScene({
           edge, which is what clears the sentence off the screen. */}
       <div
         ref={truckRef}
-        className="absolute inset-x-0 bottom-[40%]"
+        className="absolute inset-x-0"
         style={{
+          bottom: band,
           transform: `translate3d(${(enter - 1) * 118}%, ${TANKER_BASE_GAP * 100}%, 0)`,
         }}
       >
@@ -236,7 +269,10 @@ export function RoadScene({
         />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 h-[40%] overflow-hidden bg-ink text-ink-foreground [--gleam-base:var(--ink-foreground)] [--gleam-sheen:var(--sheen-cool)]">
+      <div
+        ref={bandRef}
+        className="absolute inset-x-0 bottom-0 flex min-h-[40%] flex-col overflow-hidden bg-ink text-ink-foreground [--gleam-base:var(--ink-foreground)] [--gleam-sheen:var(--sheen-cool)]"
+      >
         {/* Road markings. Scrolled by moving the repeating gradient itself
             rather than by translating the element: a translated element is
             finite and runs out, which left the dashes stopping mid-screen. */}
@@ -251,7 +287,7 @@ export function RoadScene({
         />
 
         <div
-          className="mx-auto grid max-w-6xl grid-cols-2 gap-x-8 gap-y-4 px-6 pt-12 transition-opacity duration-500 lg:grid-cols-4 lg:px-10"
+          className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-x-8 gap-y-4 px-6 pt-8 transition-opacity duration-500 lg:grid-cols-4 lg:px-10 lg:pt-12"
           style={{ opacity: fade }}
         >
           {stats.map((stat, index) => {
@@ -286,7 +322,7 @@ export function RoadScene({
         </div>
 
         <div
-          className="absolute inset-x-0 bottom-0 transition-opacity duration-500"
+          className="relative mt-auto pt-8 transition-opacity duration-500"
           style={{ opacity: fade }}
         >
         <div
