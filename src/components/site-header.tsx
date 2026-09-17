@@ -19,6 +19,7 @@ export const SITE_BRAND_ID = "site-brand";
 const links = [
   { href: "/", label: "Нүүр" },
   { href: "/about", label: "Бидний тухай" },
+  { href: "/news", label: "Мэдээ" },
   { href: "/careers", label: "Нээлттэй ажлын байр" },
 ];
 

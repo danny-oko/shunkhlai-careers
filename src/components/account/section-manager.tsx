@@ -4,13 +4,16 @@ import * as React from "react";
 import { Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { AsyncCombobox } from "@/components/account/async-combobox";
+import { cascadeEdges, clearDependents } from "@/components/account/dependent-fields";
+import { useDropdown } from "@/components/account/use-dropdown";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toApiError } from "@/lib/api";
-import type { DropdownOption, SectionEntry, SectionResource } from "@/lib/api";
+import type { DropdownOption, DropdownQuery, SectionEntry, SectionResource } from "@/lib/api";
 
 /**
  * One component for every CV section.
@@ -24,17 +27,36 @@ import type { DropdownOption, SectionEntry, SectionResource } from "@/lib/api";
 export type FieldDef = {
   name: string;
   label: string;
-  type: "text" | "number" | "date" | "textarea" | "select" | "yesno";
+  type: "text" | "number" | "date" | "textarea" | "select" | "combobox" | "yesno";
   required?: boolean;
   placeholder?: string;
   hint?: string;
-  /** Loader for `select` fields; re-runs whenever a `deps` field changes. */
-  load?: (values: Values) => Promise<DropdownOption[]>;
+  /**
+   * Loader for `select` and `combobox` fields; re-runs whenever a `deps` field
+   * changes. `query` carries what the applicant typed and, for a `combobox`,
+   * the `ids` that label an already-saved value — so a combobox field must
+   * point at one of the endpoints that take `ids`.
+   */
+  load?: (values: Values, query: DropdownQuery) => Promise<DropdownOption[]>;
+  /** Fields whose value this list hangs off. */
   deps?: string[];
+  /** The endpoint requires the parent: none chosen, nothing to offer. */
+  depsRequired?: boolean;
   wide?: boolean;
 };
 
 export type Values = Record<string, unknown>;
+
+/** The parent values this field's list was, or would be, read under. */
+function depKeyOf(field: FieldDef, values: Values): string {
+  return (field.deps ?? []).map((name) => String(values[name] ?? "")).join("|");
+}
+
+/** `false` while a required parent is still unchosen. */
+function isReady(field: FieldDef, values: Values): boolean {
+  if (!field.depsRequired) return true;
+  return (field.deps ?? []).every((name) => String(values[name] ?? "") !== "");
+}
 
 function SelectField({
   field,
@@ -42,59 +64,84 @@ function SelectField({
   value,
   onChange,
   id,
+  waitingFor,
 }: {
   field: FieldDef;
   values: Values;
   value: string;
   onChange: (value: string) => void;
   id: string;
+  waitingFor: string;
 }) {
-  const depKey = `${field.name}:${(field.deps ?? [])
-    .map((name) => String(values[name] ?? ""))
-    .join("|")}`;
+  const depKey = depKeyOf(field, values);
+  const ready = isReady(field, values);
 
-  const [loaded, setLoaded] = React.useState<{ key: string; options: DropdownOption[] } | null>(
-    null,
+  // The same loader the standalone forms use, so a dependent list behaves the
+  // same way whether it is described by a `FieldDef` or wired up by hand.
+  // Keyed on the declared deps alone — the loader closes over every value in
+  // the form, and reloading on each keystroke elsewhere is not what `deps`
+  // asked for.
+  const { options, isLoading } = useDropdown(
+    () => field.load?.(values, {}) ?? Promise.resolve<DropdownOption[]>([]),
+    [field.name, depKey],
+    ready,
   );
 
-  React.useEffect(() => {
-    let cancelled = false;
-
-    (field.load?.(values) ?? Promise.resolve<DropdownOption[]>([]))
-      .then((options) => {
-        if (!cancelled) setLoaded({ key: depKey, options });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.error(`[${field.name}] dropdown failed`, error);
-        setLoaded({ key: depKey, options: [] });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-    // `values` is intentionally excluded: only the declared deps should reload.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depKey]);
-
-  const options = loaded?.key === depKey ? loaded.options : [];
-  const isLoading = loaded?.key !== depKey;
+  const placeholder = !ready
+    ? `Эхлээд «${waitingFor}» сонгоно уу`
+    : isLoading
+      ? "Ачаалж байна…"
+      : "- Сонгох -";
 
   return (
     <Select
       id={id}
       value={value}
-      disabled={isLoading}
+      disabled={!ready || isLoading}
       aria-busy={isLoading}
       onChange={(event) => onChange(event.target.value)}
     >
-      <option value="">{isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
+      <option value="">{placeholder}</option>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
       ))}
     </Select>
+  );
+}
+
+function ComboboxField({
+  field,
+  values,
+  value,
+  onChange,
+  id,
+  waitingFor,
+}: {
+  field: FieldDef;
+  values: Values;
+  value: string;
+  onChange: (value: string) => void;
+  id: string;
+  waitingFor: string;
+}) {
+  const ready = isReady(field, values);
+
+  return (
+    <AsyncCombobox
+      id={id}
+      value={value}
+      disabled={!ready}
+      reloadKey={depKeyOf(field, values)}
+      placeholder={ready ? "Бичиж хайх" : `Эхлээд «${waitingFor}» сонгоно уу`}
+      load={(query) => field.load?.(values, query) ?? Promise.resolve([])}
+      resolve={async (saved) => {
+        const rows = await (field.load?.(values, { ids: [saved] }) ?? Promise.resolve([]));
+        return rows.find((row) => row.value === saved) ?? null;
+      }}
+      onChange={(next) => onChange(next)}
+    />
   );
 }
 
@@ -113,8 +160,14 @@ function EntryForm({
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  const edges = React.useMemo(() => cascadeEdges(fields), [fields]);
+  const labelOf = React.useCallback(
+    (name: string) => fields.find((field) => field.name === name)?.label ?? name,
+    [fields],
+  );
+
   function set(name: string, value: unknown) {
-    setValues((current) => ({ ...current, [name]: value }));
+    setValues((current) => clearDependents({ ...current, [name]: value }, name, edges));
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -166,6 +219,16 @@ function EntryForm({
                   field={field}
                   values={values}
                   value={value}
+                  waitingFor={labelOf(field.deps?.[0] ?? "")}
+                  onChange={(next) => set(field.name, next)}
+                />
+              ) : field.type === "combobox" ? (
+                <ComboboxField
+                  id={id}
+                  field={field}
+                  values={values}
+                  value={value}
+                  waitingFor={labelOf(field.deps?.[0] ?? "")}
                   onChange={(next) => set(field.name, next)}
                 />
               ) : field.type === "yesno" ? (
@@ -277,7 +340,7 @@ export function SectionManager<TEntry extends SectionEntry>({
   async function save(values: Values) {
     const payload: Values = { entryid: 0, ...values };
     for (const field of fields) {
-      if (field.type === "number" || field.type === "select") {
+      if (field.type === "number" || field.type === "select" || field.type === "combobox") {
         const raw = payload[field.name];
         payload[field.name] = raw === "" || raw === undefined ? null : Number(raw);
       }

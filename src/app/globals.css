@@ -10,6 +10,10 @@
   --font-sans: var(--app-font-sans);
   --font-mono: var(--font-ubuntu-mono);
   --font-heading: var(--font-sans);
+  /* The newsroom reading face. Declared here so `font-serif` exists as a
+     utility; only /news and /admin reach for it. */
+  --font-serif: var(--font-pt-serif), ui-serif, Georgia, "Times New Roman",
+    serif;
   --color-brand: var(--brand);
   --color-brand-2: var(--brand-2);
   --color-brand-blue: var(--brand-blue);
@@ -931,4 +935,197 @@
     animation: none;
     opacity: 1;
   }
+}
+/* -------------------------------------------------------------------------
+   Newsroom
+   /news and /admin/news run on a warm paper ground rather than the site's
+   pure white, because a broadsheet read as one continuous column of serif
+   type on #fff looks like a document and not like a page. Every token below
+   is scoped to [data-newsroom], and it redefines the *base* variables —
+   --background, --foreground, --border and friends — rather than inventing a
+   parallel set. That way every shadcn primitive and every `bg-background` /
+   `border-border` utility inside the subtree adopts the paper palette with
+   no per-component work, and nothing outside the subtree moves at all.
+   ---------------------------------------------------------------------- */
+
+[data-newsroom] {
+  /* Day edition. Warm off-white at L 0.985 with a trace of chroma on the
+     yellow axis: enough to read as stock rather than as screen white,
+     little enough that the photographs on it are not tinted. */
+  --background: oklch(0.985 0.006 85);
+  --foreground: oklch(0.2 0.006 60);
+  --card: oklch(0.999 0.003 85);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.999 0.003 85);
+  --popover-foreground: var(--foreground);
+
+  /* 5.8:1 on the paper ground — datelines and bylines are secondary, not
+     optional, so they stay above the 4.5:1 line rather than sitting at the
+     3:1 a "muted" name invites. */
+  --muted: oklch(0.955 0.008 85);
+  --muted-foreground: oklch(0.45 0.01 60);
+  --accent: oklch(0.955 0.008 85);
+  --accent-foreground: var(--foreground);
+  --secondary: oklch(0.955 0.008 85);
+  --secondary-foreground: var(--foreground);
+
+  /* Hairlines are the whole grammar of a front page, so there are two: a
+     quiet one between stories and a black one under the masthead. */
+  --border: oklch(0.815 0.012 80);
+  --input: oklch(0.775 0.012 80);
+  --rule-strong: oklch(0.29 0.008 60);
+
+  /* Brand orange is 3.6:1 on paper — fine on a 40px headline, short of the
+     line for an 11px kicker, which is exactly where it is used most. This is
+     the same hue darkened to clear 4.5:1 at small sizes. */
+  --paper-accent: oklch(0.52 0.18 43);
+}
+
+.dark [data-newsroom] {
+  /* Night edition: the same warm axis pulled down, so the paper reads as
+     unlit stock rather than as a grey UI panel. */
+  --background: oklch(0.16 0.004 70);
+  --foreground: oklch(0.94 0.005 85);
+  --card: oklch(0.2 0.005 70);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.2 0.005 70);
+  --popover-foreground: var(--foreground);
+
+  --muted: oklch(0.235 0.005 70);
+  --muted-foreground: oklch(0.71 0.008 80);
+  --accent: oklch(0.235 0.005 70);
+  --accent-foreground: var(--foreground);
+  --secondary: oklch(0.235 0.005 70);
+  --secondary-foreground: var(--foreground);
+
+  --border: oklch(1 0 0 / 15%);
+  --input: oklch(1 0 0 / 22%);
+  --rule-strong: oklch(0.86 0.006 85);
+
+  /* Brand orange already clears 4.5:1 against the night ground; lifting it
+     slightly keeps the kicker from going muddy next to white type. */
+  --paper-accent: oklch(0.74 0.16 50);
+}
+
+/* The masthead's closing rule. A newspaper's is always a thick line over a
+   hairline with a sliver of paper between them — one border cannot be two
+   weights, so it is drawn as a background instead. */
+.news-rule-double {
+  height: 5px;
+  background:
+    linear-gradient(var(--rule-strong) 0 0) top / 100% 3px no-repeat,
+    linear-gradient(var(--border) 0 0) bottom / 100% 1px no-repeat;
+}
+
+/* The category line above a headline. Small, letterspaced, in the darkened
+   orange — the one place on the page where colour carries meaning. */
+.news-kicker {
+  color: var(--paper-accent);
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* Headlines. Serif, set tight, with the optical tracking a large size wants
+   and the hanging punctuation a broadsheet gets for free in print. */
+.news-headline {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.08;
+  text-wrap: balance;
+  hanging-punctuation: first last;
+}
+
+/* Reading type. 1.0625rem on a phone is the smallest body a long Mongolian
+   paragraph stays comfortable at; the measure caps at 34em so a line never
+   runs past the ~75 characters the eye can track back from. */
+.news-body {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  letter-spacing: 0.003em;
+  text-wrap: pretty;
+}
+
+@media (width >= 48rem) {
+  .news-body {
+    font-size: 1.1875rem;
+    line-height: 1.72;
+  }
+}
+
+.news-measure {
+  max-width: 34em;
+}
+
+/* The opening capital. `initial-letter` is the property that actually sinks
+   a cap into the following lines, and Safari and Chrome both honour it;
+   the float below is the fallback for engines that do not, which is why the
+   two blocks disagree about line-height on purpose. */
+.news-dropcap::first-letter {
+  -webkit-initial-letter: 3;
+  initial-letter: 3;
+  float: left;
+  margin-right: 0.08em;
+  padding-top: 0.04em;
+  color: var(--foreground);
+  font-family: var(--font-serif);
+  font-size: 3.2em;
+  font-weight: 700;
+  line-height: 0.82;
+}
+
+@supports (initial-letter: 3) or (-webkit-initial-letter: 3) {
+  .news-dropcap::first-letter {
+    float: none;
+    margin-right: 0.06em;
+    padding-top: 0;
+    font-size: inherit;
+    line-height: inherit;
+  }
+}
+
+/* A column rule that only exists once the columns do. Below the breakpoint
+   the grid is one column and a left border would draw down the page edge. */
+.news-col-rule > * + * {
+  border-top: 1px solid var(--border);
+  padding-top: 1.75rem;
+}
+
+@media (width >= 48rem) {
+  .news-col-rule > * + * {
+    border-top: 0;
+    border-left: 1px solid var(--border);
+    padding-top: 0;
+    padding-left: 1.75rem;
+  }
+}
+
+/* Reading position on an article. A 2px bar is thin enough to ignore and
+   thick enough to answer "how much is left" without scrolling to find out.
+   Scaled from the x origin by the component, which writes `transform` — so
+   nothing here may set `scale`, which would multiply against it. */
+.news-progress {
+  transform-origin: 0 50%;
+  background-image: var(--brand-gradient);
+}
+
+/* The one decorative flourish: a hairline grid behind the masthead, at the
+   weight of newsprint show-through. Dropped entirely in dark mode, where a
+   light grid on a dark ground reads as a UI table rather than as paper. */
+.news-paper-grid {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 28px 28px;
+  opacity: 0.32;
+  mask-image: radial-gradient(120% 90% at 50% 0%, #000 12%, transparent 72%);
+}
+
+.dark .news-paper-grid {
+  opacity: 0.1;
 }

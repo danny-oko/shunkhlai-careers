@@ -13,11 +13,12 @@ const fields: FieldDef[] = [
     load: () => reference.businessTypes(),
   },
   {
+    // 1463 rows — searched on the server rather than scrolled.
     name: "jobid",
     label: "Албан тушаал",
-    type: "select",
+    type: "combobox",
     required: true,
-    load: () => reference.jobTitles(),
+    load: (_values, query) => reference.jobTitles(query),
   },
   { name: "fromdate", label: "Эхэлсэн", type: "date", required: true },
   { name: "todate", label: "Дууссан", type: "date" },
@@ -29,8 +30,8 @@ const fields: FieldDef[] = [
   {
     name: "headjobid",
     label: "Удирдлагын албан тушаал",
-    type: "select",
-    load: () => reference.jobTitles(),
+    type: "combobox",
+    load: (_values, query) => reference.jobTitles(query),
   },
   { name: "headphone", label: "Удирдлагын утас", type: "text" },
 ];

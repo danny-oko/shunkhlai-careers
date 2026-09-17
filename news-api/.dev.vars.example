@@ -1,0 +1,10 @@
+# Copy to .dev.vars for `wrangler dev`. Never commit .dev.vars.
+
+# Shared secret. The Next app sends it as NEWS_API_TOKEN.
+API_TOKEN=local-dev-news-token
+
+# Cloudinary. Uploads are disabled (the API answers 503) until these are set.
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+# Overrides the empty value in wrangler.jsonc for local dev.
+CLOUDINARY_CLOUD_NAME=

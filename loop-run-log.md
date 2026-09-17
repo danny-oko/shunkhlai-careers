@@ -58,3 +58,16 @@ Append one entry per run. Prune entries older than 30 days.
   "outcome": "report-only"
 }
 ```
+
+```json
+{
+  "run_id": "2026-09-15T12:45:00Z",
+  "pattern": "implementation-slice",
+  "duration_s": 1737,
+  "items_found": 5,
+  "actions_taken": 1,
+  "escalations": 1,
+  "tokens_estimate": 253000,
+  "outcome": "fix-proposed | verdict ESCALATE_HUMAN (PII at rest, test-file scope)"
+}
+```

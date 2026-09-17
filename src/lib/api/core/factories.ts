@@ -31,8 +31,13 @@ export type DropdownOption = {
   raw: DropdownRow;
 };
 
+/** Reference names arrive as `/03/ Name` — drop the leading code for display. */
+export function stripCode(text: string | null | undefined): string {
+  return (text ?? "").replace(/^\s*\/\s*\d+\s*\/\s*/u, "").trim();
+}
+
 export function toOption(row: DropdownRow): DropdownOption {
-  return { value: String(row.key), label: (row.text ?? "").trim(), raw: row };
+  return { value: String(row.key), label: stripCode(row.text), raw: row };
 }
 
 /**
@@ -41,7 +46,11 @@ export function toOption(row: DropdownRow): DropdownOption {
  * @param path      e.g. `/api/applicant/GetCountryDropDown`
  * @param options   `standard: false` for the three that take `search` only.
  */
-export function createDropdown<TExtra extends Record<string, unknown> = Record<string, never>>(
+// `Record<never, never>` rather than `Record<string, never>`: the latter is an
+// index signature saying every key is `undefined`, so `DropdownQuery &
+// Partial<TExtra>` refused a `{ search }` a caller had in hand for one of the
+// endpoints that take no parent id.
+export function createDropdown<TExtra extends Record<string, unknown> = Record<never, never>>(
   path: string,
   options: { standard?: boolean } = {},
 ) {

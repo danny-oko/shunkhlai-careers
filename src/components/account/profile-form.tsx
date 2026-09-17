@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useSession } from "@/components/auth/session-provider";
+import { clearDependents } from "@/components/account/dependent-fields";
 import { useDropdown } from "@/components/account/use-dropdown";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
@@ -17,8 +18,14 @@ import { profile as profileApi, reference, toApiError } from "@/lib/api";
  *
  * Country → province → district is a dependent chain on the backend, so
  * changing a parent clears its children rather than leaving an id that no
- * longer belongs to the selection above it.
+ * longer belongs to the selection above it. The edges are declared once, the
+ * same way a `FieldDef` declares them, and `clearDependents` walks the chain.
  */
+
+const CASCADE = {
+  countryid: ["divisionid"],
+  divisionid: ["districtid"],
+};
 
 const MARITAL_STATUSES = [
   { value: "S", label: "Гэрлээгүй" },
@@ -100,17 +107,41 @@ export function ProfileForm() {
   );
   const relatives = useDropdown(() => reference.relativeTypes(), []);
 
+  // Хот/аймаг stays locked until a country is chosen, and for all but a
+  // handful of applicants that country is the tenant's own. `getCountryID`
+  // exists to say which it is — the collection's own note calls it the
+  // pre-filter for the city/province dropdown — so nobody has to find it among
+  // 84 rows, and no id is written down here. The collection disagrees with
+  // itself about which id that is (`1` in two places, `496` in four), which is
+  // the other half of why it has to be read rather than assumed.
+  //
+  // Keyed on the record that was loaded rather than on the field being empty:
+  // an applicant who deliberately picks "- Сонгох -" would otherwise have the
+  // choice undone on the next render.
+  const hasSavedCountry = Boolean(snapshot?.countryid);
+  React.useEffect(() => {
+    if (hasSavedCountry) return;
+    let cancelled = false;
+
+    reference
+      .defaultCountry()
+      .then((home) => {
+        if (cancelled || !home) return;
+        setValues((current) =>
+          current.countryid ? current : { ...current, countryid: String(home.countryid) },
+        );
+      })
+      .catch((seedError) => {
+        console.error("[profile] default country failed", seedError);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasSavedCountry, snapshot]);
+
   function set(name: keyof State, value: string) {
-    setValues((current) => {
-      const next = { ...current, [name]: value };
-      // Clear children when their parent changes.
-      if (name === "countryid") {
-        next.divisionid = "";
-        next.districtid = "";
-      }
-      if (name === "divisionid") next.districtid = "";
-      return next;
-    });
+    setValues((current) => clearDependents({ ...current, [name]: value }, name, CASCADE));
   }
 
   async function onSubmit(event: React.FormEvent) {

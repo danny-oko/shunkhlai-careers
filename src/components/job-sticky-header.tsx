@@ -30,7 +30,7 @@ export function JobStickyHeader({ job }: { job: Job }) {
             isCondensed ? "border-border/70" : "border-transparent",
           )}
         >
-          <div className="mx-auto flex h-16 max-w-4xl items-center gap-4 px-6">
+          <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-6 lg:px-10">
             <Link
               href="/careers"
               className="inline-flex shrink-0 items-center gap-2 text-sm font-medium tracking-[-0.01em] transition-colors hover:text-muted-foreground"

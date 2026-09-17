@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Ubuntu_Sans, Ubuntu_Sans_Mono } from "next/font/google";
+import { Geist, Geist_Mono, PT_Serif } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PaletteProvider } from "@/components/palette-provider";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { CursorRing } from "@/components/cursor-ring";
+import { ChromeSlot } from "@/components/chrome-slot";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
@@ -39,6 +41,18 @@ const sans = Ubuntu_Sans({
 const mono = Ubuntu_Sans_Mono({
   variable: "--font-ubuntu-mono",
   subsets: ["latin", "cyrillic", "cyrillic-ext"],
+  display: "swap",
+});
+
+// The newsroom's reading face. PT Serif is a ParaType design drawn for
+// Cyrillic first, so Mongolian copy sets without the fallback-to-Georgia
+// wobble a Latin-only serif produces on Ө/ө and Ү/ү. Only /news and
+// /admin/news ask for it; the rest of the site stays on Geist.
+const ptSerif = PT_Serif({
+  variable: "--font-pt-serif",
+  subsets: ["latin", "cyrillic", "cyrillic-ext"],
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
