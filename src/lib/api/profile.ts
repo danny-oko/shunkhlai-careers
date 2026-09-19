@@ -64,13 +64,36 @@ export type ProfileInput = {
 };
 
 /** GET /api/applicant/get */
-export function getProfile() {
-  return apiGet<ApplicantProfile>(`${APPLICANT_BASE}/get`);
+export async function getProfile(): Promise<ApplicantProfile> {
+  const data = await apiGet<unknown>(`${APPLICANT_BASE}/get`);
+  // The real backend nests the record under `applicantdata` (with siblings
+  // `recruitmentorders`, `maritalstatus`); the mock returns it flat. Unwrap so
+  // every field — name, regno, phone, email, address, contacts, picturedata —
+  // maps into the form either way.
+  if (data && typeof data === "object" && Array.isArray((data as { applicantdata?: unknown }).applicantdata)) {
+    const list = (data as { applicantdata: ApplicantProfile[] }).applicantdata;
+    return list[0] ?? {};
+  }
+  return (data ?? {}) as ApplicantProfile;
 }
 
 /** POST /api/applicant/SaveHrApplicant */
 export function saveProfile(body: ProfileInput) {
-  return apiPost<unknown>(`${APPLICANT_BASE}/SaveHrApplicant`, body);
+  // The real backend rejects null for numeric fields (e.g. relativeid →
+  // System.Decimal), returning HTTP 400. Send only the fields that have a
+  // value; empty strings are fine for text. (The mock tolerated nulls.)
+  const payload = Object.fromEntries(
+    Object.entries(body).filter(([key, v]) => {
+      if (v === null || v === undefined) return false;
+      // Never send an EMPTY identity field: an empty regno/mobilephone would
+      // blank the applicant's identity on the ERP (a create-or-update endpoint).
+      if ((key === "regno" || key === "mobilephone") && String(v).trim() === "") {
+        return false;
+      }
+      return true;
+    }),
+  );
+  return apiPost<unknown>(`${APPLICANT_BASE}/SaveHrApplicant`, payload);
 }
 
 /** POST /api/applicant/SaveAppPicture — the server makes a full and a thumbnail copy. */

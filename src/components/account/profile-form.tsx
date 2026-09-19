@@ -174,6 +174,9 @@ export function ProfileForm() {
         contactphone2: values.contactphone2.trim(),
       });
 
+      // Mirror the update into our own DB (best-effort; doesn't block the UI).
+      void fetch("/api/erp/sync", { method: "POST" });
+
       toast.success("Хувийн мэдээлэл хадгалагдлаа");
       await refresh();
     } catch (saveError) {
