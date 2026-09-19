@@ -59,17 +59,13 @@ export function createDropdown<TExtra extends Record<string, unknown> = Record<n
   return async function readDropdown(
     query: DropdownQuery & Partial<TExtra> = {},
   ): Promise<DropdownOption[]> {
-    const { search = "", lfr = false, ids, ...extra } = query;
+    const { search = "", lfr = false, ids = "", ...extra } = query;
+    // Standard dropdowns always send `search`, `lfr` and `ids` (empty by
+    // default); the search-only endpoints send `search` alone. Array ids stay
+    // `?ids=1&ids=2` via axios's `indexes: null`.
     const params: Record<string, unknown> = standard
-      ? { search, lfr, ...extra }
+      ? { search, lfr, ids, ...extra }
       : { search, ...extra };
-    // The real backend 400s on an empty `ids` ("The value '' is invalid"), so
-    // only send it when there is something to resolve. (The mock tolerated
-    // `ids=''`.) When present, axios's `indexes: null` keeps the `?ids=1&ids=2`
-    // shape the endpoints expect.
-    if (ids !== undefined && ids !== "" && !(Array.isArray(ids) && ids.length === 0)) {
-      params.ids = ids;
-    }
 
     const rows = await apiGetList<DropdownRow>(path, params, { skipAuth: true });
     return rows.filter((row) => row && row.key !== undefined).map(toOption);
