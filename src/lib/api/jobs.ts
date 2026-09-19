@@ -20,11 +20,14 @@ export type JobListRow = {
   worktype: string;
   requestdate: string;
   advbegindate: string;
-  advenddate: string;
+  /** `null` for an open-ended advert — no closing date set. */
+  advenddate: string | null;
   status: number;
   statusname: string;
-  /** Days left before the advert closes; negative once it has. */
-  remainingdays: number;
+  /** Days left before the advert closes; negative once it has. `null` when
+   *  the posting has no `advenddate` — an open-ended advert, not one
+   *  expiring today. */
+  remainingdays: number | null;
 };
 
 /** The posting record inside `getRecruitmentOrderItem`. */

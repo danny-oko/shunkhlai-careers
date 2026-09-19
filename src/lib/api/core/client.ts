@@ -1,28 +1,12 @@
 import axios, {
+  type AxiosError,
   type AxiosInstance,
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from "axios";
 
-import {
-  API_TIMEOUT_MS,
-  AUTH_BASE,
-  LANGUAGE,
-  ORIGIN_URL,
-  resolveBaseUrl,
-} from "./config";
-// `request.ts` imports `http` from here in turn. Nothing is read across the
-// cycle at module-evaluation time — `unwrap` is only called inside the
-// interceptor below — so both orders of evaluation are safe.
-import { unwrap } from "./request";
-import {
-  type Audience,
-  clearSession,
-  readAccessToken,
-  readRefreshToken,
-  readTokenPair,
-  storeSession,
-} from "./tokens";
+import { API_TIMEOUT_MS, LANGUAGE, ORIGIN_URL, resolveBaseUrl } from "./config";
+import { type Audience, clearSession, readAccessToken } from "./tokens";
 
 declare module "axios" {
   export interface AxiosRequestConfig {
@@ -30,10 +14,14 @@ declare module "axios" {
     audience?: Audience;
     /** Send the call without an Authorization header. */
     skipAuth?: boolean;
-    /** Internal: set once a request has been replayed after a token refresh. */
-    retriedAfterRefresh?: boolean;
   }
 }
+
+/**
+ * Browsers set (and forbid scripts from setting) `Origin` themselves, so this
+ * is only supplied for server-side calls — as the collection's `originUrl`.
+ */
+const serverOrigin = typeof window === "undefined" && ORIGIN_URL ? { Origin: ORIGIN_URL } : {};
 
 export const http: AxiosInstance = axios.create({
   baseURL: resolveBaseUrl(),
@@ -50,28 +38,31 @@ export const http: AxiosInstance = axios.create({
     "Content-Type": "application/json",
     // The collection sends this on every call; it selects the response language.
     language: LANGUAGE,
+    ...serverOrigin,
   },
 });
 
+/** Let the browser set the multipart boundary for FormData payloads. */
+function isFormData(data: unknown): boolean {
+  return typeof FormData !== "undefined" && data instanceof FormData;
+}
+
+function audienceOf(config: InternalAxiosRequestConfig): Audience {
+  return config.audience ?? "applicant";
+}
+
+function bearerFor(config: InternalAxiosRequestConfig): string | null {
+  if (config.skipAuth) return null;
+  const token = readAccessToken(audienceOf(config));
+  return token ? `Bearer ${token}` : null;
+}
+
 http.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // Let the browser set the multipart boundary for FormData payloads.
-    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
-      delete config.headers["Content-Type"];
-    }
+    if (isFormData(config.data)) delete config.headers["Content-Type"];
 
-    // Browsers set (and forbid scripts from setting) `Origin` themselves, so
-    // this only has to be supplied for server-side calls.
-    if (typeof window === "undefined" && ORIGIN_URL) {
-      config.headers.Origin = ORIGIN_URL;
-    }
-
-    if (!config.skipAuth) {
-      const token = readAccessToken(config.audience ?? "applicant");
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
+    const bearer = bearerFor(config);
+    if (bearer) config.headers.Authorization = bearer;
 
     return config;
   },
@@ -79,89 +70,33 @@ http.interceptors.request.use(
 );
 
 /* -------------------------------------------------------------------------
-   Token refresh
+   Expired session
    ------------------------------------------------------------------------
-   Login hands back `access_token` and `refresh_token` together. The refresh
-   endpoints come from the endpoint reference rather than the Postman
-   collection, which never exercises them: they want the old (expiring) access
-   token in the header *and* the refresh token in the body. A 401 triggers one
-   refresh, and every request that raced into the same 401 waits on that single
-   call rather than starting its own. A refresh that fails clears the session. */
+   The Postman collection never refreshes a token — it signs in again. So a
+   401 ("Invalid token") ends the session: the stored tokens are cleared, the
+   session provider hears about it through `onSessionChange`, and the account
+   pages send the applicant back to the sign-in form. Public reads carry
+   `skipAuth` and never get here. */
 
-const REFRESH_PATHS: Record<Audience, string> = {
-  applicant: `${AUTH_BASE}/refresh-token`,
-  admin: `${AUTH_BASE}/admin-user-refresh-token`,
-};
+function isUnauthorizedResponse(error: unknown): error is AxiosError {
+  return axios.isAxiosError(error) && error.response?.status === 401;
+}
 
-const inFlightRefresh = new Map<Audience, Promise<string | null>>();
+function failedConfig(error: unknown): InternalAxiosRequestConfig | undefined {
+  return isUnauthorizedResponse(error) ? error.config : undefined;
+}
 
-async function refreshAccessToken(audience: Audience): Promise<string | null> {
-  const staleAccessToken = readAccessToken(audience);
-  const refreshToken = readRefreshToken(audience);
-  if (!staleAccessToken || !refreshToken) return null;
-
-  try {
-    // A bare axios call, not `http`: the instance's own interceptors would
-    // recurse straight back into this function on another 401.
-    const response = await axios.post(
-      `${resolveBaseUrl()}${REFRESH_PATHS[audience]}`,
-      { refreshToken },
-      {
-        timeout: API_TIMEOUT_MS,
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          language: LANGUAGE,
-          Authorization: `Bearer ${staleAccessToken}`,
-        },
-      },
-    );
-
-    // `response.data` is the whole `{ rettype, retmsg, retdata }` envelope —
-    // this is a bare axios call, so nothing has unwrapped it yet. Handing the
-    // envelope straight to `readTokenPair` found no token at its top level and
-    // threw away a perfectly good refresh. `unwrap` also refuses a non-zero
-    // `rettype`, so a refusal delivered with HTTP 200 cannot yield a token.
-    const pair = readTokenPair(unwrap(response.data));
-    if (!pair) return null;
-
-    storeSession(pair, audience);
-    return pair.accessToken;
-  } catch {
-    return null;
-  }
+/** The audience whose session a 401 has ended, if any. */
+function endedSession(error: unknown): Audience | null {
+  const config = failedConfig(error);
+  return config && !config.skipAuth ? audienceOf(config) : null;
 }
 
 http.interceptors.response.use(
   (response: AxiosResponse) => response,
-  async (error: unknown) => {
-    if (!axios.isAxiosError(error) || error.response?.status !== 401) {
-      return Promise.reject(error);
-    }
-
-    const config = error.config as InternalAxiosRequestConfig | undefined;
-    if (!config || config.skipAuth || config.retriedAfterRefresh) {
-      return Promise.reject(error);
-    }
-
-    const audience = config.audience ?? "applicant";
-
-    let refresh = inFlightRefresh.get(audience);
-    if (!refresh) {
-      refresh = refreshAccessToken(audience).finally(() => {
-        inFlightRefresh.delete(audience);
-      });
-      inFlightRefresh.set(audience, refresh);
-    }
-
-    const accessToken = await refresh;
-    if (!accessToken) {
-      clearSession(audience);
-      return Promise.reject(error);
-    }
-
-    config.retriedAfterRefresh = true;
-    config.headers.Authorization = `Bearer ${accessToken}`;
-    return http.request(config);
+  (error: unknown) => {
+    const audience = endedSession(error);
+    if (audience) clearSession(audience);
+    return Promise.reject(error);
   },
 );

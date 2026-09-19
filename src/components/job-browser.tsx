@@ -195,12 +195,14 @@ export function JobBrowser({
                         takes enough width to wrap the job title beside it. */}
                     <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                       {job.isOpen ? (
-                        <>
-                          <span className="text-foreground font-medium">
-                            {job.remainingDays}
-                          </span>{" "}
-                          хоног<span className="hidden sm:inline"> үлдсэн</span>
-                        </>
+                        job.remainingDays != null ? (
+                          <>
+                            <span className="text-foreground font-medium">
+                              {job.remainingDays}
+                            </span>{" "}
+                            хоног<span className="hidden sm:inline"> үлдсэн</span>
+                          </>
+                        ) : null
                       ) : (
                         <>
                           <span className="hidden sm:inline">Хугацаа </span>дууссан

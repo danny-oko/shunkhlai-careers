@@ -60,6 +60,9 @@ export function createDropdown<TExtra extends Record<string, unknown> = Record<n
     query: DropdownQuery & Partial<TExtra> = {},
   ): Promise<DropdownOption[]> {
     const { search = "", lfr = false, ids = "", ...extra } = query;
+    // Standard dropdowns always send `search`, `lfr` and `ids` (empty by
+    // default); the search-only endpoints send `search` alone. Array ids stay
+    // `?ids=1&ids=2` via axios's `indexes: null`.
     const params: Record<string, unknown> = standard
       ? { search, lfr, ids, ...extra }
       : { search, ...extra };

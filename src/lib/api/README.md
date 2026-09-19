@@ -9,12 +9,12 @@ src/lib/
   api/
     core/        transport — nothing here knows about jobs or applicants
       config.ts     base URL, Origin/language headers, mock-mode switch
-      client.ts     axios instance, auth header, 401 → refresh → replay
+      client.ts     axios instance, auth header, 401 → sign out
       tokens.ts     token storage, applicant and admin tiers
       request.ts    the { rettype, retmsg, retdata } envelope
       errors.ts     one error shape for the whole app
       factories.ts  the two repeating endpoint patterns (below)
-    auth.ts         sign-up / sign-in (one endpoint) and refresh
+    auth.ts         sign-up / sign-in — one endpoint, as in the collection
     account.ts      phone, email and password changes
     profile.ts      core record, photo, CV, completion percentages
     reference.ts    every dropdown
@@ -134,6 +134,9 @@ example rows, kept verbatim; the rest is local demo content in the same shape.
 
 `system.ts` holds the `/api/system` CMS endpoints from the older endpoint
 reference. They are **not in this collection** and unverified — treat those
-shapes as provisional. The same goes for `auth.refresh()`: the collection never
-exercises a refresh endpoint, so the 401 interceptor's retry path is the one
-piece of this layer that has not been proven against a real response.
+shapes as provisional.
+
+Sign-in follows the collection only: `SaveHrAppUser`, no refresh, no logout
+call. The reference doc's `/auth/login` and `/auth/refresh-token` are not used.
+A 401 or an expired JWT `exp` clears the session and the applicant signs in
+again.

@@ -25,8 +25,9 @@ export type Job = {
   /** Advert window, as the backend formats it (`YYYY.MM.DD`). */
   postedAt: string;
   closesAt: string;
-  /** Days left before the advert closes; negative once it has. */
-  remainingDays: number;
+  /** Days left before the advert closes; negative once it has. `null` when
+   *  the posting has no closing date — open-ended, not expiring today. */
+  remainingDays: number | null;
   /** Still accepting applications. */
   isOpen: boolean;
 };

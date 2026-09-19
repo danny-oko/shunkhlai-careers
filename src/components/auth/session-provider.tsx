@@ -23,7 +23,7 @@ import type { ApplicantProfile } from "@/lib/api/profile";
  *     guard sees the pre-sign-in `anonymous` and bounces the user back to the
  *     login form they just submitted.
  *   - the token store is written from outside React too — the 401 interceptor
- *     in `api/core/client.ts` clears it when a refresh fails — so the provider
+ *     in `api/core/client.ts` and an expired token both clear it — so the provider
  *     subscribes to `onSessionChange` rather than assuming it is the only
  *     writer.
  */
@@ -102,8 +102,8 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
     };
   }, [load]);
 
-  // The token store has writers outside React — sign-in, the 401 interceptor's
-  // refresh, and its give-up path all go through `core/tokens.ts`.
+  // The token store has writers outside React — sign-in, the 401 interceptor
+  // and the expiry check all go through `core/tokens.ts`.
   React.useEffect(
     () =>
       onSessionChange((audience) => {

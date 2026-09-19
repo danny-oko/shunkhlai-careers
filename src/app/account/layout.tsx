@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { Loader2 } from "lucide-react";
 
 import { useSession } from "@/components/auth/session-provider";
@@ -21,14 +22,18 @@ const sections = [
 /** Everything under /account needs a session; anonymous visitors go to sign-in. */
 export default function AccountLayout({ children }: LayoutProps<"/account">) {
   const { status } = useSession();
+  const { isLoaded, isSignedIn } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
 
   React.useEffect(() => {
-    if (status === "anonymous") {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    // Only bounce to sign-in when Clerk itself is signed out. If Clerk is signed
+    // in but the app session isn't ready yet, the ClerkErpBridge is either
+    // establishing it or redirecting to /link — so we wait instead of bouncing.
+    if (isLoaded && !isSignedIn && status !== "authenticated") {
+      router.replace("/sign-in");
     }
-  }, [status, pathname, router]);
+  }, [isLoaded, isSignedIn, status, router]);
 
   if (status !== "authenticated") {
     return (

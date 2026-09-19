@@ -59,7 +59,7 @@ export async function getJob(slugOrId: string): Promise<JobDetail | null> {
   const id = parseJobId(slugOrId) ?? slugOrId;
 
   try {
-    return toJobDetail(await (await endpoints()).getOrder(id));
+    return toJobDetail(await (await endpoints()).getOrder(id), id);
   } catch (error) {
     console.error(`[jobs] could not load posting ${id}`, error);
     return null;

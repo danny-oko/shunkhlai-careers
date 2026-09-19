@@ -1,10 +1,14 @@
 /**
  * Applicant session storage.
  *
- * The endpoint reference has two token tiers — an applicant JWT from
- * `/auth/login` and an admin JWT from `/auth/adminUserLogin` — each with its
- * own refresh endpoint. Both are kept here so the axios interceptor has one
- * place to ask for "the token for this audience".
+ * The applicant token comes from `SaveHrAppUser` (see `auth.ts`); the admin
+ * tier is kept alongside it for the CMS calls in `system.ts`, so the axios
+ * interceptor has one place to ask for "the token for this audience".
+ *
+ * Nothing refreshes a token — the Postman collection never does. A token past
+ * its JWT `exp` reads as absent and its session is cleared, so the app sends
+ * the applicant to sign in again instead of firing calls the server will
+ * refuse.
  *
  * NOTE: tokens live in `localStorage`, which means they are readable by any
  * script on the page and invisible to Server Components. That is why every
@@ -39,7 +43,37 @@ function storage(): Storage | null {
 }
 
 export function readAccessToken(audience: Audience = "applicant"): string | null {
-  return readKey(KEYS[audience].access);
+  const token = readKey(KEYS[audience].access);
+  if (!isExpired(token)) return token;
+
+  clearSession(audience);
+  return null;
+}
+
+/**
+ * Reads `exp` (seconds since the epoch) from a JWT payload.
+ *
+ * The login response also carries `expires_at`, but as a local time with no
+ * zone ("2026-09-08T12:00:00"), which a browser outside the server's zone
+ * would misread. `exp` is unambiguous. A token that is not a JWT — the mock
+ * backend's, say — has no expiry here and lives until the server says 401.
+ */
+export function tokenExpiry(token: string): number | null {
+  const exp = readClaims(token.split(".")[1] ?? "").exp;
+  return typeof exp === "number" ? exp * 1000 : null;
+}
+
+function readClaims(base64url: string): { exp?: unknown } {
+  try {
+    return JSON.parse(atob(base64url.replaceAll("-", "+").replaceAll("_", "/"))) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function isExpired(token: string | null): boolean {
+  const expiry = token ? tokenExpiry(token) : null;
+  return expiry !== null && expiry <= Date.now();
 }
 
 export function readRefreshToken(audience: Audience = "applicant"): string | null {
@@ -60,9 +94,8 @@ export function storeSession(pair: TokenPair, audience: Audience = "applicant"):
 }
 
 /**
- * A refresh can answer with a new access token and no new refresh token.
- * Writing the null over the stored one would end the session at the refresh
- * after that, so an absent value leaves what is already there alone.
+ * The login response may omit the refresh token. The collection stores it but
+ * never sends it anywhere; an absent value leaves what is already there alone.
  */
 function writeIfPresent(store: Storage, key: string, value: string | null): void {
   if (value) store.setItem(key, value);

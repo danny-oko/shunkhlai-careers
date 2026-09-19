@@ -111,7 +111,7 @@ export function SiteHeader() {
                 variant="ghost"
                 className="hidden h-9 rounded-full px-3 sm:inline-flex"
               >
-                <Link href="/login">Нэвтрэх</Link>
+                <Link href="/sign-in">Нэвтрэх</Link>
               </Button>
             </>
           )}
@@ -152,7 +152,7 @@ export function SiteHeader() {
           ))}
           {!isAuthenticated && (
             <Link
-              href="/login"
+              href="/sign-in"
               onClick={() => setIsOpen(false)}
               className="block py-3.5 text-base"
             >

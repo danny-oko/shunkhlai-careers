@@ -3,18 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-/**
- * The mock store keeps registered accounts and issued tokens across a
- * dev-server restart. The failure it exists to prevent is silent: the server
- * comes back empty, and signing in with the right credentials answers with the
- * same message as a wrong password.
- *
- * `store.ts` resolves its file from `process.cwd()` and caches the db on
- * `globalThis`, both at import time — so each case stubs the cwd to a throwaway
- * directory and imports a fresh copy.
- */
-
 type MockGlobal = typeof globalThis & { __careersMockDb?: unknown };
 
 let dir: string;
@@ -26,9 +14,8 @@ async function loadStore() {
   return import("./store");
 }
 
-/** What `SaveHrAppUser` passes on sign-up. */
 const signUp = {
-  regno: "УЖ07241252",
+  regno: "УЖ12345678",
   lastname: "Бат",
   firstname: "Болд",
   email: "bold@example.mn",
@@ -41,8 +28,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  // `stubEnv` outlives `restoreAllMocks`; without this the production case
-  // below leaks `NODE_ENV` into whatever runs next.
   vi.unstubAllEnvs();
   delete (globalThis as MockGlobal).__careersMockDb;
   rmSync(dir, { recursive: true, force: true });
@@ -54,9 +39,8 @@ describe("saveDb / loadDb", () => {
     first.createAccount(signUp);
     first.saveDb();
 
-    // A restart: new module instance, no `globalThis` carry-over.
     const second = await loadStore();
-    const account = second.findAccount("УЖ07241252");
+    const account = second.findAccount("УЖ12345678");
 
     expect(account?.password).toBe("80296007");
     expect(account?.profile.firstname).toBe("Болд");
@@ -69,8 +53,9 @@ describe("saveDb / loadDb", () => {
 
     const second = await loadStore();
 
-    // The browser still holds this token; it must not 401 after a restart.
-    expect(second.accountFromToken(token.access_token)?.regno).toBe("УЖ07241252");
+    expect(second.accountFromToken(token.access_token)?.regno).toBe(
+      "УЖ12345678",
+    );
   });
 
   it("carries the id counters over, so ids stay unique", async () => {
@@ -86,8 +71,6 @@ describe("saveDb / loadDb", () => {
   });
 
   it("edits made in place are persisted by a later save", async () => {
-    // The route handler mutates account objects directly, which is why the
-    // save hook sits in the handler rather than in `createAccount`.
     const first = await loadStore();
     const account = first.createAccount(signUp);
     account.profile = { ...account.profile, addr2: "Улаанбаатар" };
@@ -95,7 +78,7 @@ describe("saveDb / loadDb", () => {
 
     const second = await loadStore();
 
-    expect(second.findAccount("УЖ07241252")?.profile.addr2).toBe("Улаанбаатар");
+    expect(second.findAccount("УЖ12345678")?.profile.addr2).toBe("Улаанбаатар");
   });
 
   it("writes nothing in production, where the filesystem is read-only", async () => {
@@ -117,7 +100,7 @@ describe("saveDb / loadDb", () => {
 
     const second = await loadStore();
 
-    expect(second.findAccount("УЖ07241252")).toBeUndefined();
+    expect(second.findAccount("УЖ12345678")).toBeUndefined();
     expect(() => second.saveDb()).not.toThrow();
   });
 });

@@ -110,11 +110,13 @@ export function JobHeader({ job }: { job: JobDetail }) {
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
             {job.level ? <MetaItem icon={GraduationCap}>{job.level}</MetaItem> : null}
             {job.salaryLevel ? <MetaItem icon={Wallet}>{job.salaryLevel}₮</MetaItem> : null}
-            <MetaItem icon={CalendarClock}>
-              {job.isOpen
-                ? `${job.closesAt} хүртэл · ${job.remainingDays} хоног`
-                : "Хугацаа дууссан"}
-            </MetaItem>
+            {job.isOpen && job.remainingDays == null ? null : (
+              <MetaItem icon={CalendarClock}>
+                {job.isOpen
+                  ? `${job.closesAt} хүртэл · ${job.remainingDays} хоног`
+                  : "Хугацаа дууссан"}
+              </MetaItem>
+            )}
           </div>
         </Rise>
 

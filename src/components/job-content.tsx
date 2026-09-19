@@ -8,6 +8,7 @@ import {
 
 import type { JobDetail } from "@/lib/jobs/types";
 import { Reveal } from "@/components/reveal";
+// import { CalendarPlus, CalendarClock } from "lucide-react";
 
 type Fact = {
   label: string;

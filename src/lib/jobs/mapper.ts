@@ -41,8 +41,10 @@ function base(row: JobListRow | JobOrder): Job {
     // or the row sorts to the bottom of the list forever.
     postedAt: row.advbegindate || row.requestdate || "",
     closesAt: row.advenddate ?? "",
-    remainingDays: row.remainingdays ?? 0,
-    isOpen: (row.remainingdays ?? 0) >= 0,
+    // `null` means the posting has no closing date, not that it closes
+    // today — leave it unset instead of collapsing to 0.
+    remainingDays: row.remainingdays ?? null,
+    isOpen: row.remainingdays == null || row.remainingdays >= 0,
   };
 }
 
@@ -59,10 +61,21 @@ export function toJobs(rows: JobListRow[]): Job[] {
  * The detail endpoint returns the posting plus its requirements and duties as
  * separate arrays of `{ name }`. `orderreq` / `orderres` carry the same text as
  * JSON strings; the arrays are the parsed form, so they are what we read.
+ *
+ * Unlike the list endpoint, the live backend's single-order response omits
+ * `entryid` on the order row. `requestedId` is the id we already fetched
+ * with (from the slug or bare id the caller passed to `getJob`), used as a
+ * fallback so a posting whose own row lacks `entryid` doesn't 404.
  */
-export function toJobDetail(dto: JobDetailDto): JobDetail | null {
-  const order = dto?.hrrecruitmentorder?.[0];
-  if (!order?.entryid || !order.posname) return null;
+export function toJobDetail(
+  dto: JobDetailDto,
+  requestedId?: string | number,
+): JobDetail | null {
+  const row = dto?.hrrecruitmentorder?.[0];
+  if (!row?.posname) return null;
+
+  const order = { ...row, entryid: row.entryid ?? Number(requestedId) };
+  if (!order.entryid) return null;
 
   const names = (rows: Array<{ name: string }> | undefined) =>
     (rows ?? [])
