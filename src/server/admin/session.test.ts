@@ -1,16 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-/**
- * This module is the whole admin gate. Every case below is a way in that must
- * stay shut: an expired token, a flipped HMAC byte, a token minted under the
- * previous password, a truncated signature that would make `timingSafeEqual`
- * throw. A throw here is not a safe failure — it is a 500 on a route whose job
- * is to answer "no".
- *
- * The module reads the password and derives the secret at import time, so each
- * case stubs the env and imports a fresh copy.
- */
-
 type Session = typeof import("./session");
 
 async function load(env: Record<string, string | undefined>): Promise<Session> {
@@ -22,7 +11,6 @@ async function load(env: Record<string, string | undefined>): Promise<Session> {
 const PASSWORD = "correct-horse-battery-staple";
 const SECRET = "test-session-secret";
 
-/** A fixed clock, so an "expired" token is expired for a reason, not by luck. */
 const NOW = Date.UTC(2026, 8, 15, 12, 0, 0);
 
 afterEach(() => {
@@ -33,17 +21,26 @@ afterEach(() => {
 
 describe("verifyAdminPassword", () => {
   it("accepts the configured password", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     expect(session.verifyAdminPassword(PASSWORD)).toBe(true);
   });
 
   it("rejects a wrong password", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     expect(session.verifyAdminPassword("wrong")).toBe(false);
   });
 
   it("rejects near-misses, including a prefix and a case flip", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
 
     expect(session.verifyAdminPassword(PASSWORD.slice(0, -1))).toBe(false);
     expect(session.verifyAdminPassword(`${PASSWORD} `)).toBe(false);
@@ -51,14 +48,20 @@ describe("verifyAdminPassword", () => {
   });
 
   it("rejects an empty string without throwing on the length mismatch", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
 
     expect(() => session.verifyAdminPassword("")).not.toThrow();
     expect(session.verifyAdminPassword("")).toBe(false);
   });
 
   it("falls back to the dev password outside production", async () => {
-    const session = await load({ ADMIN_PASSWORD: undefined, ADMIN_SESSION_SECRET: undefined });
+    const session = await load({
+      ADMIN_PASSWORD: undefined,
+      ADMIN_SESSION_SECRET: undefined,
+    });
 
     expect(session.adminLoginAvailable()).toBe(true);
     expect(session.verifyAdminPassword("shunkhlai-dev")).toBe(true);
@@ -76,24 +79,34 @@ describe("verifyAdminPassword", () => {
     // Critically, the dev fallback must not be reachable here.
     expect(session.verifyAdminPassword("shunkhlai-dev")).toBe(false);
     expect(session.verifyAdminPassword("")).toBe(false);
-    expect(session.verifyAdminSession(session.signAdminSession(NOW), NOW)).toBe(false);
+    expect(session.verifyAdminSession(session.signAdminSession(NOW), NOW)).toBe(
+      false,
+    );
   });
 });
 
 describe("signAdminSession / verifyAdminSession", () => {
   it("round-trips a freshly signed token", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const token = session.signAdminSession(NOW);
 
     expect(session.verifyAdminSession(token, NOW)).toBe(true);
   });
 
   it("stamps the expiry as `<epochSeconds>.<signature>`", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const [exp, signature, ...rest] = session.signAdminSession(NOW).split(".");
 
     expect(rest).toHaveLength(0);
-    expect(Number(exp)).toBe(Math.floor(NOW / 1000) + session.SESSION_TTL_SECONDS);
+    expect(Number(exp)).toBe(
+      Math.floor(NOW / 1000) + session.SESSION_TTL_SECONDS,
+    );
     expect(signature).toMatch(/^[\w-]+$/u);
     // base64url: no padding, no +/ that would need escaping in a cookie.
     expect(signature).not.toContain("=");
@@ -102,7 +115,10 @@ describe("signAdminSession / verifyAdminSession", () => {
   });
 
   it("still accepts the token one second before it expires", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const token = session.signAdminSession(NOW);
     const justBefore = NOW + (session.SESSION_TTL_SECONDS - 1) * 1000;
 
@@ -110,7 +126,10 @@ describe("signAdminSession / verifyAdminSession", () => {
   });
 
   it("rejects an expired token", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const token = session.signAdminSession(NOW);
     const afterExpiry = NOW + (session.SESSION_TTL_SECONDS + 60) * 1000;
 
@@ -118,7 +137,10 @@ describe("signAdminSession / verifyAdminSession", () => {
   });
 
   it("rejects a tampered HMAC", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const [exp, signature] = session.signAdminSession(NOW).split(".");
 
     // Flip one character of the signature, keeping the length identical so the
@@ -131,7 +153,10 @@ describe("signAdminSession / verifyAdminSession", () => {
   });
 
   it("rejects an extended expiry that keeps the original signature", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const [exp, signature] = session.signAdminSession(NOW).split(".");
     const forged = `${Number(exp) + 60 * 60 * 24 * 365}.${signature}`;
 
@@ -139,7 +164,10 @@ describe("signAdminSession / verifyAdminSession", () => {
   });
 
   it("rejects a signature of the wrong length instead of throwing", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const [exp, signature] = session.signAdminSession(NOW).split(".");
 
     for (const bad of [signature.slice(0, 8), `${signature}AAAA`, ""]) {
@@ -150,7 +178,10 @@ describe("signAdminSession / verifyAdminSession", () => {
   });
 
   it("rejects garbage, empty, null and undefined values", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
 
     const values: Array<string | null | undefined> = [
       null,
@@ -175,7 +206,10 @@ describe("signAdminSession / verifyAdminSession", () => {
     ];
 
     for (const value of values) {
-      expect(() => session.verifyAdminSession(value, NOW), String(value)).not.toThrow();
+      expect(
+        () => session.verifyAdminSession(value, NOW),
+        String(value),
+      ).not.toThrow();
       expect(session.verifyAdminSession(value, NOW), String(value)).toBe(false);
     }
   });
@@ -183,32 +217,53 @@ describe("signAdminSession / verifyAdminSession", () => {
   it("rejects a token signed under a different password", async () => {
     // No explicit secret, so it derives from the password: changing the
     // password must invalidate every cookie already in the wild.
-    const before = await load({ ADMIN_PASSWORD: "old-password", ADMIN_SESSION_SECRET: undefined });
+    const before = await load({
+      ADMIN_PASSWORD: "old-password",
+      ADMIN_SESSION_SECRET: undefined,
+    });
     const token = before.signAdminSession(NOW);
     expect(before.verifyAdminSession(token, NOW)).toBe(true);
 
-    const after = await load({ ADMIN_PASSWORD: "new-password", ADMIN_SESSION_SECRET: undefined });
+    const after = await load({
+      ADMIN_PASSWORD: "new-password",
+      ADMIN_SESSION_SECRET: undefined,
+    });
     expect(after.verifyAdminSession(token, NOW)).toBe(false);
   });
 
   it("rejects a token signed under a different explicit secret", async () => {
-    const before = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: "secret-a" });
+    const before = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: "secret-a",
+    });
     const token = before.signAdminSession(NOW);
 
-    const after = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: "secret-b" });
+    const after = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: "secret-b",
+    });
     expect(after.verifyAdminSession(token, NOW)).toBe(false);
   });
 
   it("keeps a token valid across a restart when the password is unchanged", async () => {
-    const before = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: undefined });
+    const before = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: undefined,
+    });
     const token = before.signAdminSession(NOW);
 
-    const after = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: undefined });
+    const after = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: undefined,
+    });
     expect(after.verifyAdminSession(token, NOW)).toBe(true);
   });
 
   it("defaults `nowMs` to the current clock", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
 
     expect(session.verifyAdminSession(session.signAdminSession())).toBe(true);
   });
@@ -216,18 +271,19 @@ describe("signAdminSession / verifyAdminSession", () => {
 
 describe("adminCookieOptions", () => {
   it("scopes the cookie to /admin so it never rides along on public pages", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     const options = session.adminCookieOptions();
 
     expect(session.ADMIN_COOKIE).toBe("shunkhlai.admin");
-    expect(options.httpOnly).toBe(true);
-    expect(options.sameSite).toBe("lax");
-    expect(options.path).toBe("/admin");
-    expect(options.maxAge).toBe(session.SESSION_TTL_SECONDS);
-  });
-
+    expect(options.httpOnly).toBe(true); expect(options.sameSite).toBe("lax"); expect(options.path).toBe("/admin"); expect(options.maxAge).toBe(session.SESSION_TTL_SECONDS); });
   it("is insecure only outside production", async () => {
-    const dev = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const dev = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     expect(dev.adminCookieOptions().secure).toBe(false);
 
     const prod = await load({
@@ -239,7 +295,10 @@ describe("adminCookieOptions", () => {
   });
 
   it("keeps the TTL at eight hours", async () => {
-    const session = await load({ ADMIN_PASSWORD: PASSWORD, ADMIN_SESSION_SECRET: SECRET });
+    const session = await load({
+      ADMIN_PASSWORD: PASSWORD,
+      ADMIN_SESSION_SECRET: SECRET,
+    });
     expect(session.SESSION_TTL_SECONDS).toBe(60 * 60 * 8);
   });
 });

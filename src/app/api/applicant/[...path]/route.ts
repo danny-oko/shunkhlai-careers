@@ -236,13 +236,13 @@ async function post(request: Request, ctx: Ctx) {
     const existing = findAccount(regno);
     if (existing) {
       if (existing.password !== mobilephone) {
-        return fail("Бүртгэгдсэн регистрийн дугаар болон утасны дугаар таарахгүй байна.");
+        return fail("Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!");
       }
       return ok(issueToken(existing));
     }
 
     if (!body?.lastname || !body?.firstname) {
-      return fail("Бүртгэгдсэн регистрийн дугаар болон утасны дугаар таарахгүй байна.");
+      return fail("Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!");
     }
 
     const account = createAccount({

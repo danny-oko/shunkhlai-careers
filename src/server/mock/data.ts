@@ -1,15 +1,5 @@
 import type { JobListRow, JobOrder } from "@/lib/api/jobs";
 
-/**
- * Seed data for the bundled mock backend.
- *
- * Every shape here is copied from the Postman collection's saved example
- * responses — field names, casing and value formats are the backend's, not
- * ours. The first two postings are the collection's own example rows, kept
- * verbatim; the rest are local demo content in the same shape so the site has
- * a realistic list to render.
- */
-
 type Posting = JobOrder & {
   mainresp: string[];
   mainreq: string[];
@@ -38,7 +28,9 @@ export const postings: Posting[] = [
     levelname: "Мэргэжил хамаарахгүй",
     quantity: 1,
     addreq: null,
-    mainresp: ["Багажны бэлэн байдлыг хангаж, техникч нарыг шаардлагатай багжаар хангах."],
+    mainresp: [
+      "Багажны бэлэн байдлыг хангаж, техникч нарыг шаардлагатай багжаар хангах.",
+    ],
     mainreq: [
       "Тоног төхөөрөмжийн болон үйлдвэрлэлийн салбарын мэдлэгтэй байх",
       "Шударга, багаар ажиллах чадвартай, аливаа зүйлийг сурах хүсэл эрмэлзэлтэй,",
@@ -434,23 +426,6 @@ export const filterData = {
   ],
 };
 
-/**
- * Which parameter each dependent list is filtered by.
- *
- * The parent id is carried as a column on the row below, but the real service
- * never returns it — it answers `{ key, text }` like every other dropdown, and
- * the filtering happens in SQL. `dropdownRows` strips the column back out so
- * nothing downstream can start depending on a field that would be absent
- * against the live backend. `getPositionsDropdown` is the one list whose
- * `posgroupid` genuinely is on the wire, and it is not listed here.
- *
- * `required` is only documented for `divisionid`, which the collection calls
- * заавал; `countryid` it calls optional, with `0` meaning every row.
- * `skillcompid` it describes as "Сонгосон ур чадварын дугаар" and says nothing
- * about requiredness — treating it as required is our inference, on the
- * grounds that the levels differ per skill, so a level list with no skill
- * behind it would be a list of levels belonging to nothing.
- */
 export const parentOf: Record<string, { param: string; required?: boolean }> = {
   GetDivisionDropDown: { param: "countryid" },
   GetUniversityDropDown: { param: "countryid" },
@@ -458,7 +433,6 @@ export const parentOf: Record<string, { param: string; required?: boolean }> = {
   GetSkillCompLevelDropDown: { param: "skillcompid", required: true },
 };
 
-/** Reference dropdowns, all `{ key, text }` as the collection documents. */
 export const dropdowns: Record<string, Array<Record<string, unknown>>> = {
   GetCountryDropDown: [
     { key: 496, text: "Монгол" },
@@ -545,7 +519,11 @@ export const dropdowns: Record<string, Array<Record<string, unknown>>> = {
     { key: 2, text: "Шинжлэх Ухаан Технологийн Их Сургууль", countryid: 496 },
     { key: 3, text: "Санхүү Эдийн Засгийн Их Сургууль", countryid: 496 },
     { key: 4, text: "Хөдөө Аж Ахуйн Их Сургууль", countryid: 496 },
-    { key: 6, text: "Анагаахын Шинжлэх Ухааны Үндэсний Их Сургууль", countryid: 496 },
+    {
+      key: 6,
+      text: "Анагаахын Шинжлэх Ухааны Үндэсний Их Сургууль",
+      countryid: 496,
+    },
     { key: 7, text: "Монгол Улсын Боловсролын Их Сургууль", countryid: 496 },
     { key: 8, text: "Отгонтэнгэр Их Сургууль", countryid: 496 },
     { key: 9, text: "Их Засаг Олон Улсын Их Сургууль", countryid: 496 },
@@ -683,21 +661,96 @@ export const dropdowns: Record<string, Array<Record<string, unknown>>> = {
     { key: 145, text: "/04/ Мэдээллийн технологи" },
   ],
   getPositionsDropdown: [
-    { key: 3738, text: "/10406/ Business Development Specialist", depid: "2771", posgroupid: 122 },
-    { key: 3714, text: "/10400/ E-Худалдааны мэргэжилтэн", depid: "2481", posgroupid: 122 },
-    { key: 3716, text: "/10402/ Борлуулалтын мэргэжилтэн", depid: "2481", posgroupid: 122 },
-    { key: 3718, text: "/10404/ Ерөнхий нягтлан бодогч", depid: "2483", posgroupid: 122 },
-    { key: 3719, text: "/10405/ Хүний нөөцийн мэргэжилтэн", depid: "2484", posgroupid: 122 },
-    { key: 3720, text: "/10412/ Механик инженер", depid: "2490", posgroupid: 142 },
-    { key: 3722, text: "/10414/ Цахилгааны инженер", depid: "2490", posgroupid: 142 },
-    { key: 3724, text: "/10416/ ХАБЭА-н ажилтан", depid: "2492", posgroupid: 142 },
-    { key: 3726, text: "/10418/ Лабораторийн шинжээч", depid: "2493", posgroupid: 142 },
-    { key: 3745, text: "/10433/ Салбарын менежер", depid: "2510", posgroupid: 144 },
-    { key: 3747, text: "/10435/ ШТС-ын менежер", depid: "2511", posgroupid: 144 },
-    { key: 3748, text: "/10437/ Сайтын гүйцэтгэлийн менежер", depid: "2512", posgroupid: 144 },
-    { key: 3750, text: "/10440/ Системийн администратор", depid: "2520", posgroupid: 145 },
-    { key: 3752, text: "/10442/ Backend хөгжүүлэгч", depid: "2521", posgroupid: 145 },
-    { key: 3754, text: "/10444/ Мэдээллийн аюулгүй байдлын мэргэжилтэн", depid: "2522", posgroupid: 145 },
+    {
+      key: 3738,
+      text: "/10406/ Business Development Specialist",
+      depid: "2771",
+      posgroupid: 122,
+    },
+    {
+      key: 3714,
+      text: "/10400/ E-Худалдааны мэргэжилтэн",
+      depid: "2481",
+      posgroupid: 122,
+    },
+    {
+      key: 3716,
+      text: "/10402/ Борлуулалтын мэргэжилтэн",
+      depid: "2481",
+      posgroupid: 122,
+    },
+    {
+      key: 3718,
+      text: "/10404/ Ерөнхий нягтлан бодогч",
+      depid: "2483",
+      posgroupid: 122,
+    },
+    {
+      key: 3719,
+      text: "/10405/ Хүний нөөцийн мэргэжилтэн",
+      depid: "2484",
+      posgroupid: 122,
+    },
+    {
+      key: 3720,
+      text: "/10412/ Механик инженер",
+      depid: "2490",
+      posgroupid: 142,
+    },
+    {
+      key: 3722,
+      text: "/10414/ Цахилгааны инженер",
+      depid: "2490",
+      posgroupid: 142,
+    },
+    {
+      key: 3724,
+      text: "/10416/ ХАБЭА-н ажилтан",
+      depid: "2492",
+      posgroupid: 142,
+    },
+    {
+      key: 3726,
+      text: "/10418/ Лабораторийн шинжээч",
+      depid: "2493",
+      posgroupid: 142,
+    },
+    {
+      key: 3745,
+      text: "/10433/ Салбарын менежер",
+      depid: "2510",
+      posgroupid: 144,
+    },
+    {
+      key: 3747,
+      text: "/10435/ ШТС-ын менежер",
+      depid: "2511",
+      posgroupid: 144,
+    },
+    {
+      key: 3748,
+      text: "/10437/ Сайтын гүйцэтгэлийн менежер",
+      depid: "2512",
+      posgroupid: 144,
+    },
+    {
+      key: 3750,
+      text: "/10440/ Системийн администратор",
+      depid: "2520",
+      posgroupid: 145,
+    },
+    {
+      key: 3752,
+      text: "/10442/ Backend хөгжүүлэгч",
+      depid: "2521",
+      posgroupid: 145,
+    },
+    {
+      key: 3754,
+      text: "/10444/ Мэдээллийн аюулгүй байдлын мэргэжилтэн",
+      depid: "2522",
+      posgroupid: 145,
+    },
   ],
   GetSourceDropDown: [
     { key: 1, text: "Facebook" },

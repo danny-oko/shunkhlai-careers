@@ -33,7 +33,7 @@ export function AdminBar() {
           <Button
             asChild
             variant="ghost"
-            
+
             size="sm"
             className="hidden sm:inline-flex"
           >

@@ -10,7 +10,15 @@ import {
   readRefreshToken,
   readTokenPair,
   storeSession,
+  tokenExpiry,
 } from "./tokens";
+
+/** An unsigned JWT with the given claims — only the payload is ever read. */
+function jwt(claims: Record<string, unknown>): string {
+  const encode = (value: object) =>
+    btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(claims)}.signature`;
+}
 
 afterEach(() => {
   window.localStorage.clear();
@@ -72,9 +80,8 @@ describe("audience isolation", () => {
 
 describe("storeSession", () => {
   it("leaves an existing refresh token alone when given none", () => {
-    // A refresh response can carry a new access token and no new refresh
-    // token. Overwriting the stored one with null would end the session at
-    // the next refresh.
+    // A login response may omit the refresh token; a null must not erase
+    // the one already stored.
     storeSession({ accessToken: "first", refreshToken: "keep-me" });
     storeSession({ accessToken: "second", refreshToken: null });
 
@@ -141,5 +148,39 @@ describe("readTokenPair", () => {
     ["a non-string access token", { access_token: 12345 }],
   ])("returns null for %s", (_label, retdata) => {
     expect(readTokenPair(retdata)).toBeNull();
+  });
+});
+
+describe("token expiry", () => {
+  const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+  it("reads exp from a JWT", () => {
+    expect(tokenExpiry(jwt({ exp: 1_800_000_000 }))).toBe(1_800_000_000_000);
+  });
+
+  it("has no expiry for a token that is not a JWT", () => {
+    expect(tokenExpiry("mock.1.abc")).toBeNull();
+    expect(tokenExpiry("opaque")).toBeNull();
+    expect(tokenExpiry(jwt({ sub: "1" }))).toBeNull();
+  });
+
+  it("keeps a token that has not expired", () => {
+    const token = jwt({ exp: nowSeconds() + 3600 });
+    storeSession({ accessToken: token, refreshToken: null });
+
+    expect(readAccessToken()).toBe(token);
+    expect(isSignedIn()).toBe(true);
+  });
+
+  it("signs out once the token has expired, and says so", () => {
+    storeSession({ accessToken: jwt({ exp: nowSeconds() - 1 }), refreshToken: "r" });
+    const listener = vi.fn();
+    const unsubscribe = onSessionChange(listener);
+
+    expect(isSignedIn()).toBe(false);
+    expect(readRefreshToken()).toBeNull();
+    expect(listener).toHaveBeenCalledWith("applicant");
+
+    unsubscribe();
   });
 });

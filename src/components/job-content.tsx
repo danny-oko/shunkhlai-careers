@@ -8,6 +8,7 @@ import {
 
 import type { JobDetail } from "@/lib/jobs/types";
 import { Reveal } from "@/components/reveal";
+import { CalendarPlus } from "lucide-react";
 
 type Fact = {
   label: string;
@@ -72,12 +73,12 @@ export function JobContent({ job }: { job: JobDetail }) {
     job.quantity
       ? { label: "Авах хүний тоо", value: String(job.quantity), icon: Users }
       : null,
-    // job.postedAt
-    //   ? { label: "Зар нийтэлсэн", value: job.postedAt, icon: CalendarPlus }
-    //   : null,
-    // job.closesAt
-    //   ? { label: "Зар хаагдах", value: job.closesAt, icon: CalendarClock }
-    //   : null,
+    job.postedAt
+      ? { label: "Зар нийтэлсэн", value: job.postedAt, icon: CalendarPlus }
+      : null,
+    job.closesAt
+      ? { label: "Зар хаагдах", value: job.closesAt, icon: CalendarClock }
+      : null,
   ].filter((fact): fact is Fact => fact !== null);
 
   return (

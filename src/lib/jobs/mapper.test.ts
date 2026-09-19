@@ -100,6 +100,15 @@ describe("toJob", () => {
     expect(toJob(row({ remainingdays: 0 }))!.isOpen).toBe(true);
     expect(toJob(row({ remainingdays: -1 }))!.isOpen).toBe(false);
   });
+
+  it("treats a missing closing date as open-ended, not expiring today", () => {
+    // The live backend sends `remainingdays: null` for postings with no
+    // `advenddate` at all. Collapsing that to 0 would read as "expires
+    // today" for a posting that has no deadline.
+    const job = toJob(row({ remainingdays: null, advenddate: null }))!;
+    expect(job.isOpen).toBe(true);
+    expect(job.remainingDays).toBeNull();
+  });
 });
 
 describe("toJobs", () => {
@@ -151,6 +160,25 @@ describe("toJobDetail", () => {
 
     expect(detail.responsibilities).toEqual([]);
     expect(detail.requirements).toEqual([]);
+  });
+
+  it("falls back to the requested id when the order row omits entryid", () => {
+    // The live backend's single-order endpoint drops `entryid` from the row
+    // (unlike the list endpoint), so a posting like this would otherwise 404.
+    const { entryid: _entryid, ...rowWithoutEntryId } = row();
+    const detail = toJobDetail(
+      dto({ hrrecruitmentorder: [rowWithoutEntryId] } as Partial<JobDetailDto>),
+      786,
+    )!;
+
+    expect(detail.id).toBe("786");
+  });
+
+  it("returns null when neither the row nor the caller has an id", () => {
+    const { entryid: _entryid, ...rowWithoutEntryId } = row();
+    expect(
+      toJobDetail(dto({ hrrecruitmentorder: [rowWithoutEntryId] } as Partial<JobDetailDto>)),
+    ).toBeNull();
   });
 });
 

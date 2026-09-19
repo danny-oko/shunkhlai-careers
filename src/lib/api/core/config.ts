@@ -1,7 +1,7 @@
 /**
  * Transport configuration for the recruitment backend.
  *
- * `NEXT_PUBLIC_API_URL` is the API origin (e.g. `https://careers.shunkhlai.mn`),
+ * `NEXT_PUBLIC_API_URL` is the API origin (`https://careers.shunkhlai.mn`),
  * matching the Postman collection's `baseUrl`. Leave it unset and the app talks
  * to the bundled mock backend in `src/app/api/applicant/**`, which serves the
  * collection's own example payloads — the site runs end to end with no server.
@@ -44,6 +44,4 @@ export const API_TIMEOUT_MS = 15_000;
 
 /* Every path in the collection hangs off this one base. */
 export const APPLICANT_BASE = "/api/applicant";
-/** Documented in the endpoint reference, absent from the Postman collection. */
-export const AUTH_BASE = "/api/applicant/auth";
 export const SYSTEM_BASE = "/api/system";

@@ -1,27 +1,20 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { defaultCountry, dropdowns, filterData, listRow, parentOf, postings } from "./data";
-
-/**
- * State for the mock backend: in memory, mirrored to disk in development.
- *
- * It lives on `globalThis` so hot reloads do not sign the user out mid-session,
- * and it is written to `.mock-data/db.json` after every mutating request so a
- * dev-server restart does not either. An account registered against the mock
- * survives a restart, and so do the tokens already issued to it — a browser
- * holding one stays signed in.
- *
- * Development only. A deployed instance has a read-only filesystem, and its
- * accounts belong to the real service rather than here.
- */
+import {
+  defaultCountry,
+  dropdowns,
+  filterData,
+  listRow,
+  parentOf,
+  postings,
+} from "./data";
 
 export type Row = Record<string, unknown>;
 
 export type Account = {
   id: number;
   regno: string;
-  /** Starts life as the phone number, per `SaveHrAppUser`. */
   password: string;
   profile: Row;
   education: Row[];
@@ -47,15 +40,10 @@ type Db = {
 };
 
 const globalRef = globalThis as typeof globalThis & { __careersMockDb?: Db };
-
-/* --- persistence (development only) ------------------------------------- */
-
-/** Off in production: the filesystem there is read-only. */
 const persists = process.env.NODE_ENV !== "production";
 
 const dbFile = join(process.cwd(), ".mock-data", "db.json");
 
-/** `Map`s do not survive `JSON.stringify`, so they travel as entry arrays. */
 type PersistedDb = {
   accounts: [string, Account][];
   sessions: [string, string][];
@@ -64,7 +52,12 @@ type PersistedDb = {
 };
 
 function emptyDb(): Db {
-  return { accounts: new Map(), sessions: new Map(), nextAccountId: 1, nextEntryId: 1000 };
+  return {
+    accounts: new Map(),
+    sessions: new Map(),
+    nextAccountId: 1,
+    nextEntryId: 1000,
+  };
 }
 
 function loadDb(): Db {
@@ -78,20 +71,9 @@ function loadDb(): Db {
       nextEntryId: Number(saved.nextEntryId) || 1000,
     };
   } catch {
-    // No file yet, or one left by an older shape. Start clean rather than
-    // taking the server down over a dev scratch file.
     return emptyDb();
   }
 }
-
-/**
- * Writes the whole store. Called once per mutating request from the route
- * handler, which edits account objects in place — there is no narrower hook
- * that catches every edit.
- *
- * An uploaded CV is held as base64, so this file grows with the CVs in it.
- * Delete `.mock-data/` to reset.
- */
 export function saveDb(): void {
   if (!persists) return;
   try {
@@ -102,18 +84,16 @@ export function saveDb(): void {
       nextAccountId: db.nextAccountId,
       nextEntryId: db.nextEntryId,
     };
-    // Through a temp file: a half-written db.json is unreadable on restart,
-    // which would lose every account rather than the one request that failed.
     const pending = `${dbFile}.tmp`;
     writeFileSync(pending, JSON.stringify(saved), "utf8");
     renameSync(pending, dbFile);
   } catch {
-    // Persistence is a convenience. A full disk, a read-only mount or a
-    // sandboxed CI checkout must not turn into a failed request.
+    // console.log(error);
   }
 }
 
-export const db: Db = globalRef.__careersMockDb ?? (globalRef.__careersMockDb = loadDb());
+export const db: Db =
+  globalRef.__careersMockDb ?? (globalRef.__careersMockDb = loadDb());
 
 export function nextEntryId(): number {
   db.nextEntryId += 1;
@@ -179,7 +159,10 @@ export function findAccount(regno: string): Account | undefined {
   return db.accounts.get(regno);
 }
 
-export function issueToken(account: Account): { access_token: string; refresh_token: string } {
+export function issueToken(account: Account): {
+  access_token: string;
+  refresh_token: string;
+} {
   const access = `mock.${account.id}.${Math.random().toString(36).slice(2, 12)}`;
   const refresh = `mockr.${account.id}.${Math.random().toString(36).slice(2, 12)}`;
   db.sessions.set(access, account.regno);
@@ -220,21 +203,11 @@ export function removeRow(rows: Row[], entryid: number): boolean {
 /** Resolves a dropdown key to its label, so saved rows can show names too. */
 export function labelFor(dropdown: string, key: unknown): string {
   if (key === null || key === undefined || key === "") return "";
-  const row = dropdowns[dropdown]?.find((item) => String(item.key) === String(key));
+  const row = dropdowns[dropdown]?.find(
+    (item) => String(item.key) === String(key),
+  );
   return row ? String(row.text) : "";
 }
-
-/* --- dropdowns --------------------------------------------------------- */
-
-/**
- * One dropdown's rows for one request.
- *
- * The three filters narrow rather than replace one another: a combobox that
- * has a country chosen and a word typed means both, and resolving a saved id
- * still has to respect the parent it was saved under. Answering the whole
- * table to any of them is what made the cascade cosmetic — the child list
- * reloaded on every parent change and came back identical.
- */
 export function dropdownRows(name: string, params: URLSearchParams): Row[] {
   const rows = dropdowns[name] ?? [];
   const parent = parentOf[name];
@@ -246,9 +219,6 @@ export function dropdownRows(name: string, params: URLSearchParams): Row[] {
 
   if (parent) {
     const value = Number(params.get(parent.param) ?? 0);
-    // `0` and an absent parameter both mean "every row" where the collection
-    // allows it; where the parent is required they mean the applicant has not
-    // chosen one yet, so there is nothing to offer.
     if (Number.isFinite(value) && value !== 0) {
       result = result.filter((row) => Number(row[parent.param]) === value);
     } else if (parent.required) {
@@ -256,8 +226,12 @@ export function dropdownRows(name: string, params: URLSearchParams): Row[] {
     }
   }
 
-  if (ids.length > 0) result = result.filter((row) => ids.includes(String(row.key)));
-  if (search) result = result.filter((row) => String(row.text).toLowerCase().includes(search));
+  if (ids.length > 0)
+    result = result.filter((row) => ids.includes(String(row.key)));
+  if (search)
+    result = result.filter((row) =>
+      String(row.text).toLowerCase().includes(search),
+    );
   if (lfr) result = result.slice(0, 5);
 
   return result.map((row, index) => {
@@ -267,9 +241,6 @@ export function dropdownRows(name: string, params: URLSearchParams): Row[] {
   });
 }
 
-/* --- profile completion ------------------------------------------------ */
-
-/** The percentages `/api/applicant/get` reports for the progress meter. */
 export function completion(account: Account) {
   const profile = account.profile;
   const personalFields = [
@@ -284,22 +255,36 @@ export function completion(account: Account) {
     profile.contactname,
     profile.contactphone,
   ];
-  const filled = personalFields.filter((value) => value !== null && value !== undefined && value !== "").length;
+  const filled = personalFields.filter(
+    (value) => value !== null && value !== undefined && value !== "",
+  ).length;
   const persinfoper = Math.round((filled / personalFields.length) * 100);
 
   const educationper = Math.min(
     100,
-    account.education.length * 50 + account.languages.length * 25 + account.skills.length * 25,
+    account.education.length * 50 +
+      account.languages.length * 25 +
+      account.skills.length * 25,
   );
   const experienceper = Math.min(100, account.experience.length * 50);
   const familyper = Math.min(100, account.family.length * 50);
-  const distinctper = Math.min(100, account.interests.length * 50 + (account.cv ? 50 : 0));
+  const distinctper = Math.min(
+    100,
+    account.interests.length * 50 + (account.cv ? 50 : 0),
+  );
 
   const totalper = Math.round(
     (persinfoper + educationper + experienceper + familyper + distinctper) / 5,
   );
 
-  return { persinfoper, educationper, experienceper, familyper, distinctper, totalper };
+  return {
+    persinfoper,
+    educationper,
+    experienceper,
+    familyper,
+    distinctper,
+    totalper,
+  };
 }
 
 /* --- postings ---------------------------------------------------------- */
@@ -307,7 +292,9 @@ export function completion(account: Account) {
 export function jobList(query: { jobName?: string; locationid?: number }) {
   const name = (query.jobName ?? "").trim().toLowerCase();
   const locationName = query.locationid
-    ? filterData.location.find((row) => row.entryid === Number(query.locationid))?.name
+    ? filterData.location.find(
+        (row) => row.entryid === Number(query.locationid),
+      )?.name
     : undefined;
 
   return postings
