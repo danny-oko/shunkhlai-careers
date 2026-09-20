@@ -19,10 +19,6 @@ export function changeUserInfo(body: ChangeUserInfoInput) {
   return apiPost<unknown>(`${APPLICANT_BASE}/changeUserInfo`, body);
 }
 
-export function changePassword(oldpassword: string, newpassword: string) {
-  return changeUserInfo({ type: "PASSWORD", oldpassword, newpassword });
-}
-
 export function changePhone(phonenumber: string) {
   return changeUserInfo({ type: "PHONE", phonenumber });
 }

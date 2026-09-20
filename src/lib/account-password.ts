@@ -16,8 +16,8 @@ const announce = (data: Reply) => {
 };
 
 /**
- * Server route, not `account.changePassword`: the route also updates the ERP
- * credential the server re-logs in with. Throws the Mongolian message on refusal
+ * Goes through the server route, not the ERP directly: the route also updates
+ * the ERP credential the server re-logs in with. Throws the Mongolian message on refusal
  * and toasts on success (with a re-link warning when the follow-up login failed).
  */
 export async function postPasswordChange(oldpassword: string, newpassword: string) {
