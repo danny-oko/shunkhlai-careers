@@ -31,13 +31,45 @@ export type DropdownOption = {
   raw: DropdownRow;
 };
 
-/** Reference names arrive as `/03/ Name` — drop the leading code for display. */
+/**
+ * Reference names arrive as `/03/ Name` — drop the leading code for display.
+ * Position labels carry hyphenated codes too (`/02-007/ …`, `/100-17/ …`).
+ */
 export function stripCode(text: string | null | undefined): string {
-  return (text ?? "").replace(/^\s*\/\s*\d+\s*\/\s*/u, "").trim();
+  return (text ?? "").replace(/^\s*\/\s*\d[\d-]*\s*\/\s*/u, "").trim();
 }
 
 export function toOption(row: DropdownRow): DropdownOption {
   return { value: String(row.key), label: stripCode(row.text), raw: row };
+}
+
+/** True when `ids` names at least one row (a bare `ids=` is a 400). */
+function hasIds(ids: DropdownQuery["ids"]): boolean {
+  return Array.isArray(ids) ? ids.length > 0 : String(ids ?? "") !== "";
+}
+
+/**
+ * The query string for one dropdown call.
+ *
+ * Standard dropdowns send `search` and `lfr`; the search-only endpoints send
+ * `search` alone. `ids` is left out when empty: the server rejects a bare
+ * `ids=` with a 400 ("The value '' is invalid."). Array ids stay
+ * `?ids=1&ids=2` via axios's `indexes: null`.
+ */
+function dropdownParams(query: DropdownQuery, standard: boolean): Record<string, unknown> {
+  const { search = "", ...rest } = query;
+  return standard ? standardParams(search, rest) : { search, ...withoutShared(rest) };
+}
+
+/** `lfr` and `ids` mean nothing to a search-only endpoint; a parent id does. */
+function withoutShared(rest: Omit<DropdownQuery, "search">): Record<string, unknown> {
+  const { lfr: _lfr, ids: _ids, ...extra } = rest;
+  return extra;
+}
+
+function standardParams(search: string, rest: Omit<DropdownQuery, "search">): Record<string, unknown> {
+  const { lfr = false, ids, ...extra } = rest;
+  return { search, lfr, ...(hasIds(ids) ? { ids } : {}), ...extra };
 }
 
 /**
@@ -59,15 +91,9 @@ export function createDropdown<TExtra extends Record<string, unknown> = Record<n
   return async function readDropdown(
     query: DropdownQuery & Partial<TExtra> = {},
   ): Promise<DropdownOption[]> {
-    const { search = "", lfr = false, ids = "", ...extra } = query;
-    // Standard dropdowns always send `search`, `lfr` and `ids` (empty by
-    // default); the search-only endpoints send `search` alone. Array ids stay
-    // `?ids=1&ids=2` via axios's `indexes: null`.
-    const params: Record<string, unknown> = standard
-      ? { search, lfr, ids, ...extra }
-      : { search, ...extra };
-
-    const rows = await apiGetList<DropdownRow>(path, params, { skipAuth: true });
+    const rows = await apiGetList<DropdownRow>(path, dropdownParams(query, standard), {
+      skipAuth: true,
+    });
     return rows.filter((row) => row && row.key !== undefined).map(toOption);
   };
 }
@@ -112,6 +138,11 @@ export type SectionResource<TEntry extends SectionEntry = SectionEntry> = {
   remove(entryid: number): Promise<unknown>;
 };
 
+/** A `Get…` answer is one row or a one-row array; either way, the row or null. */
+function firstRow<T>(row: T | T[] | null): T | null {
+  return (Array.isArray(row) ? row[0] : row) ?? null;
+}
+
 export function createSection<TEntry extends SectionEntry = SectionEntry>(
   config: SectionConfig,
 ): SectionResource<TEntry> {
@@ -132,9 +163,7 @@ export function createSection<TEntry extends SectionEntry = SectionEntry>(
       if (!config.get) throw new Error(`${config.listKey}: no single-row endpoint.`);
       // The collection warns that entryid 0 comes back empty.
       if (!entryid) return null;
-      const row = await apiGet<TEntry | TEntry[] | null>(config.get, { entryid });
-      if (Array.isArray(row)) return row[0] ?? null;
-      return row ?? null;
+      return firstRow(await apiGet<TEntry | TEntry[] | null>(config.get, { entryid }));
     },
 
     save(entry: TEntry | TEntry[]) {

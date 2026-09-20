@@ -15,7 +15,6 @@ src/lib/
       errors.ts     one error shape for the whole app
       factories.ts  the two repeating endpoint patterns (below)
     auth.ts         sign-up / sign-in — one endpoint, as in the collection
-    account.ts      phone, email and password changes
     profile.ts      core record, photo, CV, completion percentages
     reference.ts    every dropdown
     sections.ts     the CV sections, over three bundle endpoints
@@ -59,7 +58,8 @@ in the collection.
 
 **The phone number is the initial password.** `mobilephone` carries the phone on
 first sign-up and the password on every sign-in after that — until
-`changeUserInfo` with `type: "PASSWORD"` replaces it. The sign-in copy says so
+`changeUserInfo` with `type: "PASSWORD"` replaces it (called server-side by
+`POST /api/erp/password`, which also updates the stored credential). The sign-in copy says so
 out loud, because otherwise the first login is a guessing game.
 
 ## Two patterns carry most of the surface

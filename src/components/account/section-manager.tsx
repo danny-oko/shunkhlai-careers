@@ -6,6 +6,8 @@ import { toast } from "sonner";
 
 import { AsyncCombobox } from "@/components/account/async-combobox";
 import { cascadeEdges, clearDependents } from "@/components/account/dependent-fields";
+import { encodeSectionValues, type EmptyAs } from "@/components/account/section-payload";
+import { initialValues } from "@/components/account/section-values";
 import { useDropdown } from "@/components/account/use-dropdown";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
@@ -42,6 +44,11 @@ export type FieldDef = {
   deps?: string[];
   /** The endpoint requires the parent: none chosen, nothing to offer. */
   depsRequired?: boolean;
+  /**
+   * What an empty `number` / `select` / `combobox` value is sent as: left out
+   * (default) or `0`. Never `null` — the backend 400s on it for some columns.
+   */
+  emptyAs?: EmptyAs;
   wide?: boolean;
 };
 
@@ -338,13 +345,7 @@ export function SectionManager<TEntry extends SectionEntry>({
   }, []);
 
   async function save(values: Values) {
-    const payload: Values = { entryid: 0, ...values };
-    for (const field of fields) {
-      if (field.type === "number" || field.type === "select" || field.type === "combobox") {
-        const raw = payload[field.name];
-        payload[field.name] = raw === "" || raw === undefined ? null : Number(raw);
-      }
-    }
+    const payload = encodeSectionValues(fields, values);
 
     await resource.save(payload as TEntry);
     setEditing(null);
@@ -387,11 +388,8 @@ export function SectionManager<TEntry extends SectionEntry>({
       {editing !== null ? (
         <EntryForm
           fields={fields}
-          initial={
-            editing === "new"
-              ? { ...defaults, entryid: 0 }
-              : { ...defaults, ...(editing as Values) }
-          }
+          // Defaults are for new rows only; see `initialValues`.
+          initial={initialValues(fields, defaults, editing === "new" ? "new" : (editing as Values))}
           onCancel={() => setEditing(null)}
           onSubmit={save}
         />

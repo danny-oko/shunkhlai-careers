@@ -19,6 +19,54 @@ export function parseJobId(slugOrId: string): string | null {
   return match ? match[1] : null;
 }
 
+const DAY_MS = 86_400_000;
+
+/** Midnight (local) of the given moment's calendar day. */
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** Whole days from `now`'s calendar day to `end`; negative once it has passed. */
+function dayDiff(end: Date, now: Date | undefined): number {
+  return Math.round((end.getTime() - startOfDay(now ?? new Date()).getTime()) / DAY_MS);
+}
+
+/**
+ * Whole days from today to the advert's closing day (`YYYY.MM.DD`); negative
+ * once it has passed, 0 on the closing day. `null` when there is no parseable
+ * closing date.
+ *
+ * Computed from `advenddate` rather than read from the list's `remainingdays`,
+ * which the live list sends with the wrong sign for expired adverts (posting
+ * 923: closed 2026.05.29, list said +114, get-one said -114). The server does
+ * not enforce expiry either, so this is the only place it is decided.
+ */
+export function daysUntilClose(advenddate: string | null | undefined, now?: Date): number | null {
+  const end = parseApiDate(advenddate ?? "");
+  return end ? dayDiff(end, now) : null;
+}
+
+/** A finite number of days, else `null` (absent, `NaN`, a string...). */
+function finiteDays(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Open while the closing day has not passed; the date always wins. Without a
+ * usable date the backend's own count is trusted only when it says "already
+ * closed" (negative): the live get-one endpoint drops `advenddate` for an
+ * expired posting but still sends `remainingdays` -114, whereas the list's
+ * positive count next to a past date is the wrong-signed one. No date and no
+ * negative count = open-ended.
+ */
+export function isPostingOpen(
+  advenddate: string | null | undefined,
+  fallbackRemainingDays: number | null | undefined,
+  now?: Date,
+): boolean {
+  return (daysUntilClose(advenddate, now) ?? finiteDays(fallbackRemainingDays) ?? 0) >= 0;
+}
+
 function base(row: JobListRow | JobOrder): Job {
   const id = String(row.entryid);
   const title = (row.posname ?? "").trim();
@@ -43,8 +91,8 @@ function base(row: JobListRow | JobOrder): Job {
     closesAt: row.advenddate ?? "",
     // `null` means the posting has no closing date, not that it closes
     // today — leave it unset instead of collapsing to 0.
-    remainingDays: row.remainingdays ?? null,
-    isOpen: row.remainingdays == null || row.remainingdays >= 0,
+    remainingDays: daysUntilClose(row.advenddate) ?? row.remainingdays ?? null,
+    isOpen: isPostingOpen(row.advenddate, row.remainingdays),
   };
 }
 

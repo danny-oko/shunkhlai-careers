@@ -8,6 +8,8 @@ import {
   type ApplicantLink,
 } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/db/crypto";
+import { buildProfilePayload } from "@/lib/api/profile-payload";
+import type { ApplicantProfile, ProfileInput } from "@/lib/api/profile";
 import { erpLogin, erpGet, erpPost, type ErpSession } from "./client";
 
 /** The ERP `/api/applicant/get` payload nests the record under `applicantdata`. */
@@ -128,47 +130,35 @@ export type ProfilePatch = {
 /**
  * Writes edited personal data back to the ERP (`SaveHrApplicant`) and refreshes
  * the D1 mirror. The patch is merged OVER the current record, so required and
- * unedited fields (regno, mobilephone, contacts, location) are preserved and
- * never blanked — the same safety principle as the sign-in fix.
+ * unedited fields are preserved and never blanked. (Its only caller today is
+ * `updateProfileAction` in `src/app/link/actions.ts`.)
  */
 export async function saveProfile(
   clerkUserId: string,
   patch: ProfilePatch
 ): Promise<ApplicantData | null> {
-  const current =
-    (await getProfileSnapshot(clerkUserId))?.data ??
-    (await syncProfile(clerkUserId)) ??
-    {};
+  // Always the LIVE ERP record, never the D1 mirror: SaveHrApplicant is a full
+  // replace, so echoing a stale snapshot (an old mobilephone, contacts, licence
+  // flags edited elsewhere) would silently overwrite what the ERP now holds.
+  // If the live read fails or is empty we refuse to save rather than guess.
+  const current = await syncProfile(clerkUserId);
+  if (!current) throw new Error("Хувийн мэдээллийг уншиж чадсангүй. Дахин оролдоно уу.");
 
-  const pick = (k: string) => (k in patch ? (patch as Record<string, unknown>)[k] : current[k]);
-
-  const body = {
-    // Required — always sent from the current record unless explicitly edited.
-    regno: current.regno ?? "",
-    mobilephone: current.mobilephone ?? "", // the ERP password; not edited here
-    lastname: pick("lastname") ?? "",
-    firstname: pick("firstname") ?? "",
-    // Editable.
-    email2: pick("email2") ?? "",
-    addr2: pick("addr2") ?? "",
-    maritalstatus: pick("maritalstatus") ?? null,
-    // Preserved as-is so a partial edit never wipes them.
-    countryid: current.countryid ?? null,
-    divisionid: current.divisionid ?? null,
-    districtid: current.districtid ?? null,
-    contactname: current.contactname ?? "",
-    relativeid: current.relativeid ?? null,
-    contactphone: current.contactphone ?? "",
-    contactname2: current.contactname2 ?? "",
-    relativeid2: current.relativeid2 ?? null,
-    contactphone2: current.contactphone2 ?? "",
-  };
-
-  // The backend rejects null for numeric fields (e.g. relativeid → Decimal), so
-  // send only the fields that have a value. Empty strings are fine for text.
-  const payload = Object.fromEntries(
-    Object.entries(body).filter(([, v]) => v !== null && v !== undefined)
+  // Same builder as the browser client: SaveHrApplicant is a full replace, so
+  // the loaded record is echoed (licence flags isa..ise, custom1/custom2, …)
+  // and only the patched keys change. Derived/heavy keys and null ids are left
+  // out by the builder. The phone is the ERP password and is echoed unchanged.
+  const edits = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined)
   );
+  const input = {
+    lastname: String(current.lastname ?? ""),
+    firstname: String(current.firstname ?? ""),
+    regno: String(current.regno ?? ""),
+    mobilephone: String(current.mobilephone ?? ""),
+    ...edits,
+  } as ProfileInput;
+  const payload = buildProfilePayload(input, current as ApplicantProfile);
 
   const token = await getValidErpToken(clerkUserId);
   await erpPost("/api/applicant/SaveHrApplicant", token, payload); // throws on rettype != 0

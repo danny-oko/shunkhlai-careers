@@ -1,6 +1,7 @@
 "use client";
 
 import { SectionManager, type FieldDef } from "@/components/account/section-manager";
+import { useHomeCountry } from "@/components/account/use-home-country";
 import { Separator } from "@/components/ui/separator";
 import { reference, sections } from "@/lib/api";
 import type {
@@ -59,10 +60,17 @@ const educationFields: FieldDef[] = [
     required: true,
     load: () => reference.educationLevels(),
   },
-  { name: "fromdate", label: "Элссэн", type: "date" },
-  { name: "todate", label: "Төгссөн", type: "date" },
-  { name: "isgraduated", label: "Төгссөн эсэх", type: "yesno" },
+  { name: "fromdate", label: "Элссэн огноо", type: "date" },
+  {
+    // The backend derives "graduated" from this date and ignores `isgraduated`.
+    name: "todate",
+    label: "Төгссөн огноо",
+    type: "date",
+    hint: "Хоосон бол одоо суралцаж байгаа гэж тооцно.",
+  },
   { name: "gpa", label: "Голч дүн", type: "number" },
+  { name: "gpapercent", label: "Голч дүн (хувь)", type: "number" },
+  { name: "score", label: "Оноо", type: "text" },
   { name: "certificateno", label: "Дипломын дугаар", type: "text" },
   { name: "thesis", label: "Дипломын ажлын сэдэв", type: "text", wide: true },
   { name: "note", label: "Тэмдэглэл", type: "textarea", wide: true },
@@ -76,7 +84,6 @@ const languageFields: FieldDef[] = [
     required: true,
     load: () => reference.foreignLanguages(),
   },
-  { name: "studytime", label: "Судалсан хугацаа (жил)", type: "number" },
   {
     name: "listeninglevelid",
     label: "Сонсох",
@@ -129,6 +136,8 @@ const skillFields: FieldDef[] = [
 ];
 
 export default function EducationPage() {
+  const homeCountry = useHomeCountry();
+
   return (
     <div className="space-y-12">
       <SectionManager<EducationEntry>
@@ -136,12 +145,18 @@ export default function EducationPage() {
         description="Төгссөн болон суралцаж буй сургуулиудаа нэмнэ үү."
         resource={sections.education}
         fields={educationFields}
-        defaults={{ isgraduated: "Y" }}
+        defaults={{ ...(homeCountry ? { countryid: homeCountry } : {}) }}
         primary={(row) =>
           row.universityname || row.universitynametext || "Сургууль"
         }
         secondary={(row) =>
-          [row.professionname, row.educationlevelname, row.todate]
+          [
+            row.educationlevelname,
+            row.professionname,
+            // Derived from `todate` itself: the server's `graduated` flag is
+            // inverted (todate set → "Үгүй", empty → "Тийм").
+            row.todate ? `Төгссөн: ${row.todate}` : "Сурч байгаа",
+          ]
             .filter(Boolean)
             .join(" · ")
         }
@@ -157,9 +172,7 @@ export default function EducationPage() {
         defaults={{}}
         primary={(row) => row.forlanguagename || "Гадаад хэл"}
         secondary={(row) =>
-          [row.score, row.studytime ? `${row.studytime} жил` : ""]
-            .filter(Boolean)
-            .join(" · ")
+          row.score ?? ""
         }
         emptyText="Гадаад хэлний мэдээлэл алга."
       />

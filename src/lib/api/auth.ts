@@ -21,7 +21,7 @@ import {
  * "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!".
  *
  * `mobilephone` doubles as the password: it is the initial credential, and
- * after `account.changePassword()` it carries the new one.
+ * after a password change (`POST /api/erp/password`) it carries the new one.
  *
  * There is no logout call, and refresh is not wired here: an expired token ends
  * the session and the applicant signs in again.

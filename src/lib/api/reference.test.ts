@@ -93,7 +93,7 @@ describe("search", () => {
     expect(seen[0]).toContain(`search=${encodeURIComponent("менежер")}`);
   });
 
-  it("still sends the collection's empty defaults when nothing is asked for", async () => {
+  it("sends search and lfr but omits an empty ids, which the server rejects with a 400", async () => {
     const seen: string[] = [];
     http.defaults.adapter = recording(seen);
 
@@ -101,7 +101,17 @@ describe("search", () => {
 
     expect(seen[0]).toContain("search=");
     expect(seen[0]).toContain("lfr=false");
-    expect(seen[0]).toContain("ids=");
+    expect(seen[0]).not.toContain("ids=");
+  });
+
+  it("omits an empty array of ids too, and keeps a numeric 0 parent", async () => {
+    const seen: string[] = [];
+    http.defaults.adapter = recording(seen);
+
+    await reference.universities({ ids: [], countryid: 0 });
+
+    expect(seen[0]).not.toContain("ids");
+    expect(seen[0]).toContain("countryid=0");
   });
 
   it("omits lfr and ids for the three endpoints that take search alone", async () => {

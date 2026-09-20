@@ -6,8 +6,10 @@ import {
   MAX_CV_BYTES,
   PHONE_PATTERN,
   REGISTER_ID_PATTERN,
+  MAX_SALARY_LEVEL_KEY,
   applicationSchema,
   describeCvFileError,
+  salaryLevelKeySchema,
 } from "./apply-schema";
 
 /**
@@ -134,5 +136,19 @@ describe("applicationSchema", () => {
   it("caps the note so a paste cannot blow past the backend's column", () => {
     expect(applicationSchema.safeParse(values({ note: "a".repeat(1000) })).success).toBe(true);
     expect(applicationSchema.safeParse(values({ note: "a".repeat(1001) })).success).toBe(false);
+  });
+});
+
+describe("salaryLevelKeySchema", () => {
+  it("accepts band keys", () => {
+    for (const key of [1, 5, 23, MAX_SALARY_LEVEL_KEY]) {
+      expect(salaryLevelKeySchema.safeParse(key).success).toBe(true);
+    }
+  });
+
+  it("rejects a tögrög amount (the ORA-01438 overflow) and other non-keys", () => {
+    for (const bad of [2000000, 999, 100, 0, -1, 1.5, Number.NaN]) {
+      expect(salaryLevelKeySchema.safeParse(bad).success).toBe(false);
+    }
   });
 });

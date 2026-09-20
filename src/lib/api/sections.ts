@@ -33,7 +33,13 @@ export type EducationEntry = SectionEntry & {
   educationlevelname?: string;
   fromdate?: string;
   todate?: string;
-  isgraduated?: "Y" | "N";
+  /**
+   * Derived by the server from `todate`, and INVERTED relative to its meaning:
+   * the real backend returns `Үгүй` when `todate` is SET and `Тийм` when it is
+   * EMPTY. Do not display this; the UI derives the label from `todate` itself.
+   * `isgraduated` is ignored.
+   */
+  graduated?: string;
   gpa?: number;
   gpapercent?: number;
   score?: string;
@@ -46,7 +52,6 @@ export type LanguageEntry = SectionEntry & {
   entryid: number;
   forlanguageid?: number;
   forlanguagename?: string;
-  studytime?: number;
   listeninglevelid?: number;
   speakinglevelid?: number;
   readinglevelid?: number;
@@ -73,7 +78,8 @@ export type ExperienceEntry = SectionEntry & {
   jobname?: string;
   fromdate?: string;
   todate?: string;
-  isworking?: "Y" | "N";
+  /** Derived by the server from `todate`; `isworking` is ignored. */
+  working?: string;
   basewage?: number;
   responsibility?: string;
   reason?: string;
