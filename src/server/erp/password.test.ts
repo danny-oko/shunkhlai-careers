@@ -9,6 +9,8 @@ const state = vi.hoisted(() => ({
   login: vi.fn(),
   post: vi.fn(),
   get: vi.fn(),
+  failNextUpdate: false,
+  failAllUpdates: false,
   FakeErpError: class extends Error {},
 }));
 const { FakeErpError } = state;
@@ -22,6 +24,10 @@ vi.mock("@/lib/db", () => ({
     update: () => ({
       set: (values: Record<string, unknown>) => ({
         where: async () => {
+          if (state.failAllUpdates || state.failNextUpdate) {
+            state.failNextUpdate = false;
+            throw new Error("d1 down");
+          }
           state.updates.push(values);
           state.row = { ...state.row, ...values };
         },
@@ -50,6 +56,8 @@ const session = { accessToken: "tok2", refreshToken: null, expiresAt: Date.now()
 beforeEach(() => {
   vi.clearAllMocks();
   state.updates = [];
+  state.failNextUpdate = false;
+  state.failAllUpdates = false;
   state.row = {
     regnoEnc: "enc(AA00000000)",
     phoneEnc: "enc(oldpw)",
@@ -90,13 +98,40 @@ describe("changeErpPassword", () => {
 
   it("keeps the new password and flags the row when re-login fails", async () => {
     state.post.mockResolvedValue({});
-    state.login.mockRejectedValue(new Error("login down"));
+    state.login.mockRejectedValue(new FakeErpError("Нэвтрэх амжилтгүй"));
     const result = await changeErpPassword("u1", "oldpw", "newpw1");
 
     expect(state.row?.phoneEnc).toBe("enc(newpw1)");
     expect(state.row?.status).toBe("failed");
-    expect(state.row?.lastError).toBe("login down");
+    expect(state.row?.lastError).toBe("Нэвтрэх амжилтгүй");
     expect(result).toEqual({ relinkRequired: true });
+  });
+});
+
+describe("changeErpPassword when D1 fails after the ERP accepted the change", () => {
+  it("reports relinkRequired instead of throwing when the secret write fails", async () => {
+    state.post.mockResolvedValue({});
+    state.failNextUpdate = true;
+    const result = await changeErpPassword("u1", "oldpw", "newpw1");
+
+    expect(result).toEqual({ relinkRequired: true });
+    expect(state.login).not.toHaveBeenCalled();
+  });
+
+  it("never persists a raw driver error message in lastError", async () => {
+    state.post.mockResolvedValue({});
+    state.login.mockRejectedValue(new Error("Failed query: update ... params: enc(newpw1)"));
+    await changeErpPassword("u1", "oldpw", "newpw1");
+
+    expect(state.row?.status).toBe("failed");
+    expect(String(state.row?.lastError)).not.toContain("enc(");
+    expect(String(state.row?.lastError)).not.toContain("Failed query");
+  });
+
+  it("still reports relinkRequired when even the failed-flag write throws", async () => {
+    state.post.mockResolvedValue({});
+    state.failAllUpdates = true;
+    await expect(changeErpPassword("u1", "oldpw", "newpw1")).resolves.toEqual({ relinkRequired: true });
   });
 });
 

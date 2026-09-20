@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { getDb, applicantLink, type ApplicantLink } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/db/crypto";
-import { erpLogin, erpPost, type ErpSession } from "./client";
+import { ErpError, erpLogin, erpPost, type ErpSession } from "./client";
 import { getLink, getValidErpToken } from "./link";
 
 export type PasswordChangeResult = { relinkRequired: boolean };
@@ -53,7 +53,9 @@ async function refreshTokens(
   await patchLink(clerkUserId, await sessionColumns(session, row));
 }
 
-const messageOf = (e: unknown) => (e instanceof Error ? e.message : RELINK_MESSAGE);
+// Only the ERP's own Mongolian retmsg is safe to persist: a D1/driver error can
+// embed the SQL and its bound params (the encrypted secret, the Clerk user id).
+const messageOf = (e: unknown) => (e instanceof ErpError ? e.message : RELINK_MESSAGE);
 
 /**
  * Changes the ERP password (`changeUserInfo` type PASSWORD) and keeps the stored
@@ -81,15 +83,39 @@ export async function changeErpPassword(
     newpassword,
   }); // throws ErpError on rettype != 0
 
-  await updateStoredSecret(clerkUserId, newpassword);
+  return storeAfterChange(clerkUserId, newpassword);
+}
 
-  const row = await getLink(clerkUserId);
-  if (!row) return { relinkRequired: true };
+/**
+ * The ERP already holds the new password, so nothing below may surface as a
+ * plain failure: if D1 cannot be written the stored credential is stale, and the
+ * only honest answer is "re-link" (the /link form overwrites the row). The
+ * `failed` flag is best effort, since D1 may be the thing that is down.
+ */
+async function storeAfterChange(
+  clerkUserId: string,
+  newpassword: string,
+): Promise<PasswordChangeResult> {
   try {
+    await updateStoredSecret(clerkUserId, newpassword);
+  } catch (e) {
+    await patchLink(clerkUserId, { status: "failed", lastError: messageOf(e) }).catch(() => null);
+    return { relinkRequired: true };
+  }
+  return refreshAfterStore(clerkUserId, newpassword);
+}
+
+async function refreshAfterStore(
+  clerkUserId: string,
+  newpassword: string,
+): Promise<PasswordChangeResult> {
+  try {
+    const row = await getLink(clerkUserId);
+    if (!row) return { relinkRequired: true };
     await refreshTokens(clerkUserId, row, newpassword);
     return { relinkRequired: false };
   } catch (e) {
-    await patchLink(clerkUserId, { status: "failed", lastError: messageOf(e) });
+    await patchLink(clerkUserId, { status: "failed", lastError: messageOf(e) }).catch(() => null);
     return { relinkRequired: true };
   }
 }
