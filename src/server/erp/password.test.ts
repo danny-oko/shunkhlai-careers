@@ -152,7 +152,9 @@ describe("saveProfile", () => {
       totalper: 50,
       addr2: "old",
     };
-    state.row = { ...state.row, dataJson: JSON.stringify(record), syncedAt: new Date() };
+    // The D1 mirror is STALE (old phone, no licence): saveProfile must ignore it.
+    const stale = { ...record, mobilephone: "11111111", isb: false, custom1: null };
+    state.row = { ...state.row, dataJson: JSON.stringify(stale), syncedAt: new Date() };
     state.post.mockResolvedValue({});
     state.get.mockResolvedValue({ applicantdata: [record] });
 
@@ -166,5 +168,13 @@ describe("saveProfile", () => {
     expect(payload).not.toHaveProperty("totalper");
     expect(payload).not.toHaveProperty("relativeid");
     expect(payload).not.toHaveProperty("custom2");
+  });
+
+  it("refuses to save when the live ERP record cannot be read", async () => {
+    state.row = { ...state.row, dataJson: JSON.stringify({ mobilephone: "11111111" }), syncedAt: new Date() };
+    state.get.mockResolvedValue({ applicantdata: [] });
+
+    await expect(saveProfile("u1", { addr2: "new" })).rejects.toThrow();
+    expect(state.post.mock.calls.some((c) => c[0] === "/api/applicant/SaveHrApplicant")).toBe(false);
   });
 });

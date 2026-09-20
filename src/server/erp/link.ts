@@ -137,10 +137,12 @@ export async function saveProfile(
   clerkUserId: string,
   patch: ProfilePatch
 ): Promise<ApplicantData | null> {
-  const current =
-    (await getProfileSnapshot(clerkUserId))?.data ??
-    (await syncProfile(clerkUserId)) ??
-    {};
+  // Always the LIVE ERP record, never the D1 mirror: SaveHrApplicant is a full
+  // replace, so echoing a stale snapshot (an old mobilephone, contacts, licence
+  // flags edited elsewhere) would silently overwrite what the ERP now holds.
+  // If the live read fails or is empty we refuse to save rather than guess.
+  const current = await syncProfile(clerkUserId);
+  if (!current) throw new Error("Хувийн мэдээллийг уншиж чадсангүй. Дахин оролдоно уу.");
 
   // Same builder as the browser client: SaveHrApplicant is a full replace, so
   // the loaded record is echoed (licence flags isa..ise, custom1/custom2, …)
