@@ -8,8 +8,9 @@ import { useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { account, profile as profileApi, toApiError } from "@/lib/api";
+import { profile as profileApi, toApiError } from "@/lib/api";
 import { pictureSrc } from "@/lib/api/profile";
+import { postPasswordChange } from "@/lib/account-password";
 import { describeCvFileError } from "@/lib/apply-schema";
 
 /** Profile photo, CV and password — the three things `SaveHrApplicant` does not carry. */
@@ -193,8 +194,7 @@ export function PasswordForm() {
 
     setIsBusy(true);
     try {
-      await account.changePassword(oldpassword, newpassword);
-      toast.success("Нууц үг солигдлоо");
+      await postPasswordChange(oldpassword, newpassword);
       setOld("");
       setNew("");
       setConfirm("");

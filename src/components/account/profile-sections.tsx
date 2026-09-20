@@ -40,7 +40,7 @@ export const PersonalSection = ({
       <TextField name="lastname" label="Эцэг/эх-ийн нэр" values={values} set={set} required readOnly />
       <TextField name="firstname" label="Нэр" values={values} set={set} required readOnly />
       <TextField name="regno" label="Регистрийн дугаар" values={values} set={set} required readOnly />
-      <TextField name="mobilephone" label="Утас" values={values} set={set} required type="tel" />
+      <TextField name="mobilephone" label="Утас" values={values} set={set} required readOnly type="tel" hint="Утасны дугаар нэвтрэх мэдээлэлтэй холбоотой тул энд өөрчлөгдөхгүй." />
       <TextField name="email2" label="Имэйл" values={values} set={set} required type="email" />
       <SelectField
         name="maritalstatus"

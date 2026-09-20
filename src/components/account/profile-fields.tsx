@@ -21,6 +21,7 @@ export const TextField = ({
   required,
   readOnly,
   type,
+  hint,
 }: {
   name: string;
   label: string;
@@ -29,8 +30,9 @@ export const TextField = ({
   required?: boolean;
   readOnly?: boolean;
   type?: string;
+  hint?: string;
 }) => (
-  <Field label={label} htmlFor={name} required={required}>
+  <Field label={label} htmlFor={name} required={required} hint={hint}>
     <Input
       id={name}
       type={type}
