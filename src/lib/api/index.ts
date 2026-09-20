@@ -6,7 +6,6 @@
  * "Careers Web API — Үндсэн"; `README.md` maps each module to its requests.
  *
  *   auth          sign-up / sign-in (one endpoint, as in the collection)
- *   account       phone, email and password changes
  *   profile       core record, photo, CV, completion percentages
  *   sections      the CV sections, over three bundle endpoints
  *   reference     every dropdown
@@ -16,7 +15,6 @@
  */
 
 export * as auth from "./auth";
-export * as account from "./account";
 export * as profile from "./profile";
 export * as sections from "./sections";
 export * as reference from "./reference";
