@@ -31,6 +31,20 @@ export function describeCvFileError(file: File): string | null {
   return null;
 }
 
+/**
+ * The apply endpoint's salary field is a salary-LEVEL key — the `key` of a
+ * `getDropDownData.salarylevel` band — not an amount in tögrög. The backend
+ * column is NUMBER(2), so anything of three digits (e.g. 2000000) fails with
+ * ORA-01438 and creates no row. Bound it here so an amount can never be sent.
+ */
+export const MAX_SALARY_LEVEL_KEY = 99;
+
+export const salaryLevelKeySchema = z
+  .number({ error: "Цалингийн түвшин буруу байна." })
+  .int("Цалингийн түвшин буруу байна.")
+  .min(1, "Цалингийн түвшин буруу байна.")
+  .max(MAX_SALARY_LEVEL_KEY, "Цалингийн түвшин буруу байна.");
+
 export const applicationSchema = z
   .object({
     fullName: z

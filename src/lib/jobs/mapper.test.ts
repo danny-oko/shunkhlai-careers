@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { JobDetail as JobDetailDto, JobListRow } from "@/lib/api/jobs";
 
-import { parseApiDate, parseJobId, toJob, toJobDetail, toJobs, toSlug } from "./mapper";
+import { daysUntilClose, isPostingOpen, parseApiDate, parseJobId, toJob, toJobDetail, toJobs, toSlug } from "./mapper";
 
 /**
  * The mapper is the only file that speaks both the backend's field names and
@@ -93,12 +93,16 @@ describe("toJob", () => {
     expect(toJob(row({ advbegindate: "" }))!.postedAt).toBe("2026.08.20");
   });
 
-  it("treats the closing day itself as still open", () => {
-    // The fuel line and the "N хоног үлдсэн" label both read isOpen, so the
-    // boundary matters: 0 days left is the last day to apply, not the first
-    // day closed.
-    expect(toJob(row({ remainingdays: 0 }))!.isOpen).toBe(true);
-    expect(toJob(row({ remainingdays: -1 }))!.isOpen).toBe(false);
+  it("decides open/closed from advenddate, not the list's remainingdays", () => {
+    // Live posting 923: closed 2026.05.29, yet the list sent remainingdays +114
+    // (wrong sign) and status 5. Expiry is not enforced server-side.
+    const expired = toJob(row({ advenddate: "2026.05.29", remainingdays: 114, status: 5 }))!;
+    expect(expired.isOpen).toBe(false);
+    expect(expired.remainingDays!).toBeLessThan(0);
+    // ...and a far-future date is open even when the list claims it expired.
+    const live = toJob(row({ advenddate: "2099.01.01", remainingdays: -5 }))!;
+    expect(live.isOpen).toBe(true);
+    expect(live.remainingDays!).toBeGreaterThan(0);
   });
 
   it("treats a missing closing date as open-ended, not expiring today", () => {
@@ -199,5 +203,61 @@ describe("parseApiDate", () => {
     for (const value of ["", "24.07.2026", "2026.7.4", "tomorrow"]) {
       expect(parseApiDate(value)).toBeNull();
     }
+  });
+});
+
+describe("isPostingOpen / daysUntilClose", () => {
+  const now = new Date(2026, 8, 20, 15, 30); // 2026-09-20, mid-afternoon
+
+  it("treats the closing day itself as still open", () => {
+    // 0 days left is the last day to apply, not the first day closed.
+    expect(daysUntilClose("2026.09.20", now)).toBe(0);
+    expect(isPostingOpen("2026.09.20", null, now)).toBe(true);
+  });
+
+  it("closes the day after", () => {
+    expect(daysUntilClose("2026.09.19", now)).toBe(-1);
+    expect(isPostingOpen("2026.09.19", 999, now)).toBe(false);
+  });
+
+  it("counts days ahead", () => {
+    expect(daysUntilClose("2026.09.25", now)).toBe(5);
+  });
+
+  it("closes posting 923's shape: past advenddate, positive list remainingdays", () => {
+    expect(isPostingOpen("2026.05.29", 114, now)).toBe(false);
+    expect(daysUntilClose("2026.05.29", now)).toBe(-114);
+  });
+
+  it("treats null / empty advenddate as open-ended", () => {
+    expect(isPostingOpen(null, null, now)).toBe(true);
+    expect(isPostingOpen("", null, now)).toBe(true);
+    expect(daysUntilClose(null, now)).toBeNull();
+  });
+
+  it("closes the get-one shape of 923: no advenddate, remainingdays -114", () => {
+    expect(isPostingOpen(undefined, -114, now)).toBe(false);
+    expect(isPostingOpen("", -114, now)).toBe(false);
+    expect(isPostingOpen(null, -1, now)).toBe(false);
+  });
+
+  it("keeps a posting with no date and a null/zero/positive/odd count open", () => {
+    // 1022's get-one shape: no advenddate, remainingdays null.
+    expect(isPostingOpen(undefined, null, now)).toBe(true);
+    expect(isPostingOpen(undefined, undefined, now)).toBe(true);
+    expect(isPostingOpen(undefined, 0, now)).toBe(true);
+    expect(isPostingOpen(undefined, 30, now)).toBe(true);
+    expect(isPostingOpen(undefined, Number.NaN, now)).toBe(true);
+    expect(isPostingOpen(undefined, Number.NEGATIVE_INFINITY, now)).toBe(true);
+  });
+
+  it("lets a readable date beat the count in both directions", () => {
+    expect(isPostingOpen("2026.09.25", -5, now)).toBe(true);
+    expect(isPostingOpen("2026.09.19", 5, now)).toBe(false);
+  });
+
+  it("falls back to remainingdays only for an unreadable date", () => {
+    expect(isPostingOpen("soon", -3, now)).toBe(false);
+    expect(isPostingOpen("soon", 3, now)).toBe(true);
   });
 });

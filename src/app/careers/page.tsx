@@ -1,6 +1,8 @@
 import { CareersHero } from "@/components/brand/careers-hero";
 import { JobBrowser } from "@/components/job-browser";
 import { getFilterData, listJobs } from "@/lib/jobs";
+import type { Job } from "@/lib/jobs";
+import type { JobQuery } from "@/lib/api/jobs";
 
 export const metadata = {
   title: "Нээлттэй ажлын байр",
@@ -15,30 +17,52 @@ export const metadata = {
  */
 export const revalidate = 300;
 
-export default async function CareersPage({ searchParams }: PageProps<"/careers">) {
-  const params = await searchParams;
-  const read = (key: string) => {
-    const value = params[key];
-    return Array.isArray(value) ? value[0] : value;
-  };
+/** The postings, or `null` when the backend could not be reached. */
+async function loadJobs(query: JobQuery): Promise<Job[] | null> {
+  try {
+    return await listJobs(query);
+  } catch (error) {
+    console.error("[careers] could not load postings", error);
+    return null;
+  }
+}
 
+type SearchParams = Awaited<PageProps<"/careers">["searchParams"]>;
+
+/** The URL's filters as a posting query. */
+function toQuery(params: SearchParams): JobQuery {
+  const read = (key: string) => [params[key]].flat()[0] ?? "";
+  return {
+    jobName: read("jobName"),
+    locationid: Number(read("locationid")) || 0,
+    salaryLevelID: read("salaryLevelID"),
+  };
+}
+
+function countOpen(jobs: Job[] | null): number {
+  return (jobs ?? []).filter((job) => job.isOpen).length;
+}
+
+function Outage() {
+  return (
+    <p role="alert" className="text-muted-foreground px-6 py-16 text-center text-sm">
+      Ажлын байрын мэдээллийг одоогоор ачаалж чадсангүй. Түр хүлээгээд дахин оролдоно уу.
+    </p>
+  );
+}
+
+export default async function CareersPage({ searchParams }: PageProps<"/careers">) {
   const [jobs, filterData] = await Promise.all([
-    listJobs({
-      jobName: read("jobName") ?? "",
-      locationid: Number(read("locationid")) || 0,
-      salaryLevelID: read("salaryLevelID") ?? "",
-    }),
+    loadJobs(toQuery(await searchParams)),
     getFilterData(),
   ]);
 
-  const openCount = jobs.filter((job) => job.isOpen).length;
-
   return (
     <main className="flex-1 pt-16">
-      <CareersHero roleCount={openCount} />
+      <CareersHero roleCount={countOpen(jobs)} />
 
       <div className="mx-auto w-full max-w-6xl">
-        <JobBrowser jobs={jobs} filterData={filterData} />
+        {jobs ? <JobBrowser jobs={jobs} filterData={filterData} /> : <Outage />}
       </div>
     </main>
   );

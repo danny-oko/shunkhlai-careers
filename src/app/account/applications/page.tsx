@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -10,30 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { FormMessage } from "@/components/ui/field";
 import { applications, toApiError } from "@/lib/api";
 import type { ApplicationRow } from "@/lib/api/applications";
-import { toSlug } from "@/lib/jobs/mapper";
-
-/**
- * The posting's title, linked to the advert the request was sent to.
- *
- * The href carries the same `<id>-<title>` slug the job list links to, and
- * `/careers/[id]` reads the id back out of it. A row that arrives without a
- * posting id stays plain text rather than becoming a dead link.
- */
-function JobTitle({ row }: { row: ApplicationRow }) {
-  if (!row.recruitmentorderid) {
-    return <p className="font-medium">{row.posname}</p>;
-  }
-
-  return (
-    <Link
-      href={`/careers/${toSlug(row.recruitmentorderid, row.posname)}`}
-      className="group inline-flex items-center gap-1.5 font-medium"
-    >
-      {row.posname}
-      <ArrowUpRight className="text-muted-foreground size-4 shrink-0 opacity-60 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
-    </Link>
-  );
-}
 
 /** Everything the applicant has sent, with the stage each one has reached. */
 export default function ApplicationsPage() {
@@ -112,7 +88,7 @@ export default function ApplicationsPage() {
             <li key={String(row.entryid)} className="space-y-3 px-5 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <JobTitle row={row} />
+                  <p className="font-medium">{row.posname}</p>
                   <p className="text-muted-foreground mt-0.5 text-sm">
                     {[row.companyname, row.locname].filter(Boolean).join(" · ")}
                   </p>

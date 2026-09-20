@@ -20,9 +20,14 @@ const fields: FieldDef[] = [
     required: true,
     load: (_values, query) => reference.jobTitles(query),
   },
-  { name: "fromdate", label: "Эхэлсэн", type: "date", required: true },
-  { name: "todate", label: "Дууссан", type: "date" },
-  { name: "isworking", label: "Одоо ажиллаж байгаа", type: "yesno" },
+  { name: "fromdate", label: "Ажилд орсон", type: "date", required: true },
+  {
+    // The backend derives "working" from this date and ignores `isworking`.
+    name: "todate",
+    label: "Ажлаас гарсан",
+    type: "date",
+    hint: "Хоосон бол одоо ажиллаж байгаа гэж тооцно.",
+  },
   { name: "basewage", label: "Үндсэн цалин", type: "number" },
   { name: "responsibility", label: "Гүйцэтгэсэн үүрэг", type: "textarea", wide: true },
   { name: "reason", label: "Гарсан шалтгаан", type: "text", wide: true },
@@ -43,12 +48,12 @@ export default function ExperiencePage() {
       description="Сүүлийн ажлаас эхлэн бичнэ үү."
       resource={sections.experience}
       fields={fields}
-      defaults={{ isworking: "N" }}
+      defaults={{}}
       primary={(row) => row.orgname || "Байгууллага"}
       secondary={(row) =>
         [
           row.jobname,
-          [row.fromdate, row.isworking === "Y" ? "одоо" : row.todate]
+          [row.fromdate, row.todate || "Ажиллаж байгаа"]
             .filter(Boolean)
             .join(" - "),
         ]

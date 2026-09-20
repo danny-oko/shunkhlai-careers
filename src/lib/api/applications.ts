@@ -12,8 +12,12 @@ export type ApplicationInput = {
   recruitmentorderid: number;
   /** Source channel, e.g. `WEB`. */
   sourcetype: string;
-  /** Salary expectation, in tögrög. */
-  salrequest: number;
+  /**
+   * Salary-level KEY — the `key` of a `getDropDownData.salarylevel` band, not
+   * an amount. The column is NUMBER(2): a tögrög figure fails with ORA-01438.
+   * Omit when the applicant chose none.
+   */
+  salrequest?: number;
   /** Earliest start date, `YYYY-MM-DD`. */
   poshiredate: string;
   /** "Where did you hear about us", from `reference.sources()`. */
@@ -24,8 +28,8 @@ export type ApplicationInput = {
 export type ApplicationRow = {
   /** The request's own id — this is what `withdraw` deletes. */
   entryid: number;
-  /** The posting the request was sent to, i.e. an `entryid` from the job list. */
-  recruitmentorderid?: number | string;
+  // No link back to the posting: the real list carries none, so a row can
+  // only be matched to a posting by name and location (see `jobs/apply.ts`).
   posname: string;
   companyname: string;
   locname: string;

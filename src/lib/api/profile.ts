@@ -7,6 +7,8 @@ import { apiGet, apiPost, apiUpload } from "./core/request";
  * is no separate endpoint for downloading a CV.
  */
 
+export type MaritalOption = { key: string; text: string };
+
 export type ApplicantProfile = {
   lastname?: string;
   firstname?: string;
@@ -29,6 +31,20 @@ export type ApplicantProfile = {
   relativeid2?: number | null;
   relativename2?: string;
   contactphone2?: string;
+  /** Driver's licence classes A-E. */
+  isa?: boolean;
+  isb?: boolean;
+  isc?: boolean;
+  isd?: boolean;
+  ise?: boolean;
+  /** The two free-text "Бусад" answers (relatives at the company / БВМ referral). */
+  custom1?: string | null;
+  custom2?: string | null;
+  /**
+   * The `maritalstatus[]` list the real backend returns beside the record.
+   * Client-side only — `getProfile` attaches it, it is never sent back.
+   */
+  maritalOptions?: MaritalOption[];
   /** Base64 profile photo. */
   picturedata?: string | null;
   /** CV file name and Base64 contents. */
@@ -61,39 +77,105 @@ export type ProfileInput = {
   contactname2?: string;
   relativeid2?: number | null;
   contactphone2?: string;
+  isa?: boolean;
+  isb?: boolean;
+  isc?: boolean;
+  isd?: boolean;
+  ise?: boolean;
+  custom1?: string;
+  custom2?: string;
 };
+
+type Wrapped = { applicantdata: ApplicantProfile[]; maritalstatus?: unknown };
+
+const isWrapped = (data: unknown): data is Wrapped =>
+  typeof data === "object" && data !== null && Array.isArray((data as Wrapped).applicantdata);
+
+const maritalList = (wrapped: Wrapped): MaritalOption[] | undefined =>
+  Array.isArray(wrapped.maritalstatus) ? (wrapped.maritalstatus as MaritalOption[]) : undefined;
+
+const fromWrapped = (wrapped: Wrapped): ApplicantProfile => ({
+  ...(wrapped.applicantdata[0] ?? {}),
+  maritalOptions: maritalList(wrapped),
+});
+
+/**
+ * The real backend nests the record under `applicantdata` (with siblings
+ * `recruitmentorders`, `maritalstatus`); the mock returns it flat. Unwrap so
+ * every field — name, regno, phone, email, address, contacts, picturedata —
+ * maps into the form either way.
+ */
+export function unwrapProfile(data: unknown): ApplicantProfile {
+  if (!isWrapped(data)) return (data ?? {}) as ApplicantProfile;
+  return fromWrapped(data);
+}
 
 /** GET /api/applicant/get */
 export async function getProfile(): Promise<ApplicantProfile> {
-  const data = await apiGet<unknown>(`${APPLICANT_BASE}/get`);
-  // The real backend nests the record under `applicantdata` (with siblings
-  // `recruitmentorders`, `maritalstatus`); the mock returns it flat. Unwrap so
-  // every field — name, regno, phone, email, address, contacts, picturedata —
-  // maps into the form either way.
-  if (data && typeof data === "object" && Array.isArray((data as { applicantdata?: unknown }).applicantdata)) {
-    const list = (data as { applicantdata: ApplicantProfile[] }).applicantdata;
-    return list[0] ?? {};
-  }
-  return (data ?? {}) as ApplicantProfile;
+  return unwrapProfile(await apiGet<unknown>(`${APPLICANT_BASE}/get`));
+}
+
+/**
+ * Loaded keys that are derived, display-only or heavy: never echoed back.
+ * Everything else the record carries IS echoed, because SaveHrApplicant is a
+ * full replace — an omitted field is reset (licence flags to false, custom1/2
+ * to null, addr2 to "").
+ */
+const NOT_ECHOED = new Set([
+  "maritalOptions",
+  "picturedata",
+  "filedata",
+  "filename",
+  "countryname",
+  "divisionname",
+  "districtname",
+  "relativename",
+  "relativename2",
+]);
+
+/**
+ * Fields where blank must be left out rather than sent. Identity: a blank
+ * regno/mobilephone would wipe the ERP's copy. Numeric ids: null and "" are
+ * HTTP 400 (relativeid) or a silent null (countryid).
+ */
+const OMIT_WHEN_BLANK = new Set([
+  "regno",
+  "mobilephone",
+  "relativeid",
+  "relativeid2",
+  "countryid",
+  "divisionid",
+  "districtid",
+]);
+
+const isCompletion = (key: string) => key.endsWith("per");
+
+const isEchoed = (key: string) => !NOT_ECHOED.has(key) && !isCompletion(key);
+
+const isNil = (value: unknown) => value === null || value === undefined;
+
+const isBlank = (value: unknown) => isNil(value) || String(value).trim() === "";
+
+const isSendable = (key: string, value: unknown) =>
+  !isNil(value) && !(OMIT_WHEN_BLANK.has(key) && isBlank(value));
+
+/**
+ * The exact body for `SaveHrApplicant`: the loaded record's echoed keys
+ * (including ones this client has no field for), overlaid by the edited
+ * values, with everything the backend would reject or misread left out.
+ */
+export function buildProfilePayload(
+  input: ProfileInput,
+  loaded?: ApplicantProfile | null,
+): Record<string, unknown> {
+  const echoed = Object.entries(loaded ?? {}).filter(([key]) => isEchoed(key));
+  const merged = { ...Object.fromEntries(echoed), ...input };
+  return Object.fromEntries(Object.entries(merged).filter(([key, v]) => isSendable(key, v)));
 }
 
 /** POST /api/applicant/SaveHrApplicant */
-export function saveProfile(body: ProfileInput) {
-  // The real backend rejects null for numeric fields (e.g. relativeid →
-  // System.Decimal), returning HTTP 400. Send only the fields that have a
-  // value; empty strings are fine for text. (The mock tolerated nulls.)
-  const payload = Object.fromEntries(
-    Object.entries(body).filter(([key, v]) => {
-      if (v === null || v === undefined) return false;
-      // Never send an EMPTY identity field: an empty regno/mobilephone would
-      // blank the applicant's identity on the ERP (a create-or-update endpoint).
-      if ((key === "regno" || key === "mobilephone") && String(v).trim() === "") {
-        return false;
-      }
-      return true;
-    }),
-  );
-  return apiPost<unknown>(`${APPLICANT_BASE}/SaveHrApplicant`, payload);
+export function saveProfile(body: ProfileInput, loaded?: ApplicantProfile | null) {
+  return apiPost<unknown>(`${APPLICANT_BASE}/SaveHrApplicant`, buildProfilePayload(body, loaded));
 }
 
 /** POST /api/applicant/SaveAppPicture — the server makes a full and a thumbnail copy. */
