@@ -10,9 +10,9 @@ import type { DropdownOption, DropdownQuery } from "@/lib/api";
 /**
  * A dropdown that asks the server what to show.
  *
- * The lists behind Албан тушаал and Сургууль are 1463 and 1069 rows. A native
- * `<select>` is the right control for the short reference lists — it is faster
- * on a phone and accessible for nothing — but it has no way to narrow those,
+ * The lists behind Албан тушаал and Сургууль are 1463 and 1069 rows. A plain
+ * `Select` is the right control for the short reference lists — every choice
+ * is one press away — but it has no way to narrow those,
  * so the whole table arrived on first paint and the applicant scrolled. Every
  * endpoint takes `search` for exactly this, and `ids` to name the rows it must
  * return regardless: without the second, a saved university could not be
