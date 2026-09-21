@@ -33,13 +33,16 @@ export function AdminBar() {
           <Button
             asChild
             variant="ghost"
-
             size="sm"
-            className="hidden sm:inline-flex"
           >
-            <Link href="/news" target="_blank" rel="noreferrer">
+            <Link
+              href="/news"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Нийтлэлүүдийг харах"
+            >
               <ExternalLink aria-hidden />
-              Нийтлэлүүдийг харах
+              <span className="hidden sm:inline">Нийтлэлүүдийг харах</span>
             </Link>
           </Button>
 
@@ -54,11 +57,11 @@ export function AdminBar() {
             <Button
               type="submit"
               variant="ghost"
-              size="icon-sm"
+              size="sm"
               aria-label="Гарах"
-              title="Гарах"
             >
               <LogOut aria-hidden />
+              <span className="hidden sm:inline">Гарах</span>
             </Button>
           </form>
         </div>

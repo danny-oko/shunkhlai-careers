@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import { bodyFromField } from "./legacy";
+import { LIMITS } from "./shared/limits";
+import { docText, isDocBlank } from "./shared/rich-text";
 import { NEWS_CATEGORIES, type NewsCategory } from "./types";
 
 /**
@@ -10,6 +13,10 @@ import { NEWS_CATEGORIES, type NewsCategory } from "./types";
  * `<textarea>` an employee types into, so the limits here exist to keep a
  * front page from breaking — a 400-character headline has no layout that
  * survives it — rather than to keep anything out.
+ *
+ * The body arrives as JSON from the rich-text editor and leaves as a sanitised
+ * `RichDoc`; the same `sanitizeDoc` the editor ran runs again here, because a
+ * server action is a POST anyone can make.
  *
  * Every message is Mongolian, because the person reading it is the editor.
  */
@@ -87,17 +94,31 @@ export const articleFormSchema = z.object({
       ARTICLE_LIMITS.coverAlt,
       `Зургийн тайлбар ${ARTICLE_LIMITS.coverAlt} тэмдэгтээс урт байж болохгүй.`,
     ),
-  body: z
-    .string()
-    .trim()
-    .min(1, "Мэдээний бичвэр шаардлагатай.")
-    .max(ARTICLE_LIMITS.body, "Бичвэр хэт урт байна."),
+  body: z.string().transform((raw, context) => {
+    // Bounded before it is parsed: the size check is what keeps a hostile
+    // multi-megabyte field from reaching JSON.parse at all.
+    if (raw.length > LIMITS.bodyBytes) {
+      context.addIssue({ code: "custom", message: "Бичвэр хэт урт байна." });
+      return z.NEVER;
+    }
+
+    const doc = bodyFromField(raw);
+    if (isDocBlank(doc)) {
+      context.addIssue({ code: "custom", message: "Мэдээний бичвэр шаардлагатай." });
+      return z.NEVER;
+    }
+    if (docText(doc).length > ARTICLE_LIMITS.body || JSON.stringify(doc).length > LIMITS.bodyBytes) {
+      context.addIssue({ code: "custom", message: "Бичвэр хэт урт байна." });
+      return z.NEVER;
+    }
+    return doc;
+  }),
   status: z.enum(["draft", "published"], { message: "Төлвийг сонгоно уу." }),
   featured: checkbox,
   removeCover: checkbox,
 });
 
-export type ArticleFormValues = z.infer<typeof articleFormSchema>;
+export type ArticleFormValues = z.output<typeof articleFormSchema>;
 
 /**
  * One message per field, keyed by the form's own input names.

@@ -178,3 +178,48 @@ describe("coverFileError", () => {
     expect(coverFileError(file("image/jpeg", 99_000_000))).toMatch(/[Ѐ-ӿ]/u);
   });
 });
+
+describe("body (rich text)", () => {
+  const doc = (...content: unknown[]) => JSON.stringify({ type: "doc", content });
+  const para = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+
+  it("parses the editor's JSON into a sanitised document", () => {
+    const heading = { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Гарчиг" }] };
+    const result = parse({ body: doc(heading, para("Бичвэр")) });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.body.content).toHaveLength(2);
+  });
+
+  it("still takes plain text, as an older client posts it", () => {
+    const result = parse({ body: "Нэг\n\nХоёр" });
+    expect(result.success && result.data.body.content).toHaveLength(2);
+  });
+
+  it("treats a document with no words as empty", () => {
+    expect(errorsFor({ body: doc({ type: "paragraph" }, { type: "paragraph" }) })).toHaveProperty("body");
+    expect(errorsFor({ body: doc() })).toHaveProperty("body");
+    expect(errorsFor({ body: "{}" })).toHaveProperty("body");
+  });
+
+  it("accepts a document that is only a picture", () => {
+    const image = { type: "image", attrs: { src: "https://example.com/a.jpg", alt: "", title: null } };
+    expect(parse({ body: doc(image) }).success).toBe(true);
+  });
+
+  it("re-sanitises: a crafted POST cannot carry a script link or a data image", () => {
+    const link = { type: "link", attrs: { href: "javascript:alert(1)" } };
+    const hostile = doc(
+      { type: "paragraph", content: [{ type: "text", text: "x", marks: [link] }] },
+      { type: "image", attrs: { src: "data:image/png;base64,AAAA" } },
+    );
+    const result = parse({ body: hostile });
+    expect(result.success).toBe(true);
+    expect(JSON.stringify(result.success && result.data.body)).not.toMatch(/javascript|data:/u);
+  });
+
+  it("refuses a body over the visible-text limit or the byte limit", () => {
+    expect(errorsFor({ body: doc(para("б".repeat(ARTICLE_LIMITS.body + 1))) })).toHaveProperty("body");
+    expect(errorsFor({ body: "x".repeat(600_000) })).toHaveProperty("body");
+  });
+});

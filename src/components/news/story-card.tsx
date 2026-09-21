@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 import { Dateline } from "@/components/news/dateline";
 import { Kicker } from "@/components/news/kicker";
@@ -51,6 +52,15 @@ export function StoryCard({
         </p>
 
         <Dateline article={article} className="mt-3" />
+
+        <span
+          aria-hidden
+          className="mt-3 inline-flex items-center gap-1.5 type-kicker font-semibold tracking-[0.14em] uppercase"
+          style={{ color: "var(--paper-accent)" }}
+        >
+          Үргэлжлүүлэн унших
+          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+        </span>
       </Link>
     </article>
   );

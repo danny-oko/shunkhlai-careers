@@ -1,4 +1,5 @@
-import type { NewsArticle } from "@/lib/news/types";
+import { blocksToDoc } from "@/lib/news/legacy";
+import type { NewsArticle, NewsBlock } from "@/lib/news/types";
 
 /**
  * The newsroom's starting content.
@@ -26,6 +27,17 @@ export function seedArticles(): Omit<
   NewsArticle,
   "id" | "slug" | "createdAt" | "updatedAt"
 >[] {
+  // The copy below is still written as blocks: it is placeholder text pending
+  // HR review, and rewriting it as document JSON would bury the words. The
+  // legacy converter turns it into the stored shape.
+  return seedDrafts().map((draft) => ({ ...draft, body: blocksToDoc(draft.body) }));
+}
+
+type SeedDraft = Omit<NewsArticle, "id" | "slug" | "createdAt" | "updatedAt" | "body"> & {
+  body: NewsBlock[];
+};
+
+function seedDrafts(): SeedDraft[] {
   return [
     {
       title: "Өвлийн шатахуун нийлүүлэлтийн бэлтгэл хангагдлаа",

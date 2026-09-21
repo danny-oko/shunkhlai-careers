@@ -10,6 +10,8 @@ import {
   categoryLabel,
   formatNewsDateShort,
   readingMinutes,
+  statusHint,
+  statusLabel,
 } from "@/lib/news/types";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +53,7 @@ export function ArticleRow({ article }: { article: NewsArticle }) {
       <div className="min-w-[10rem] flex-1 basis-0">
         <div className="flex flex-wrap items-center gap-2">
           <span
+            title={statusHint(article.status)}
             className={cn(
               "px-1.5 py-0.5 text-[0.5625rem] font-semibold tracking-[0.12em] uppercase",
               isPublished
@@ -58,7 +61,7 @@ export function ArticleRow({ article }: { article: NewsArticle }) {
                 : "border border-border text-muted-foreground",
             )}
           >
-            {isPublished ? "Нийтлэгдсэн" : "Ноорог"}
+            {statusLabel(article.status)}
           </span>
 
           {article.featured && (
@@ -98,11 +101,10 @@ export function ArticleRow({ article }: { article: NewsArticle }) {
           <Button
             type="submit"
             variant="ghost"
-            size="icon-sm"
-            aria-label={article.featured ? "Гол мэдээнээс хасах" : "Гол мэдээ болгох"}
-            title={article.featured ? "Гол мэдээнээс хасах" : "Гол мэдээ болгох"}
+            size="sm"
           >
             <Star aria-hidden className={article.featured ? "fill-current" : undefined} />
+            {article.featured ? "Гол мэдээнээс хасах" : "Гол мэдээ болгох"}
           </Button>
         </form>
 
@@ -115,18 +117,18 @@ export function ArticleRow({ article }: { article: NewsArticle }) {
         </form>
 
         {isPublished && (
-          <Button asChild variant="ghost" size="icon-sm" title="Нийтлэг харах">
+          <Button asChild variant="ghost" size="sm">
             <Link href={`/news/${article.slug}`} target="_blank" rel="noreferrer">
               <ExternalLink aria-hidden />
-              <span className="sr-only">Нийтлэг харах</span>
+              Нийтлэг харах
             </Link>
           </Button>
         )}
 
-        <Button asChild variant="ghost" size="icon-sm" title="Засах">
+        <Button asChild variant="outline" size="sm">
           <Link href={`/admin/news/${article.id}`}>
             <Pencil aria-hidden />
-            <span className="sr-only">Засах</span>
+            Засах
           </Link>
         </Button>
 

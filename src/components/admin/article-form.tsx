@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Eye, ImageOff, Loader2, PencilLine, Save, Upload } from "lucide-react";
+import { ExternalLink, Eye, ImageOff, Loader2, PencilLine, Save, Upload } from "lucide-react";
 
 import { type ArticleActionState, saveArticleAction } from "@/app/admin/news/actions";
 import { FieldShell } from "@/components/admin/field-shell";
@@ -15,15 +15,22 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { RichEditor } from "@/components/admin/rich-editor/rich-editor";
+import { prepareDoc } from "@/components/admin/rich-editor/commands";
+import { cleanForSave } from "@/components/admin/rich-editor/model";
 import { Textarea } from "@/components/ui/textarea";
-import { parseBody, serializeBody } from "@/lib/news/blocks";
+import { bodyFromField } from "@/lib/news/legacy";
 import { ARTICLE_LIMITS, COVER_TYPES } from "@/lib/news/schema";
+import { docText, isDocBlank } from "@/lib/news/shared/rich-text";
 import {
   NEWS_CATEGORIES,
   type NewsArticle,
   type NewsCategory,
   coverUrl,
+  statusHint,
+  statusLabel,
 } from "@/lib/news/types";
+import { confirmDiscard, useUnloadGuard } from "@/components/admin/unsaved-guard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -31,20 +38,13 @@ import { cn } from "@/lib/utils";
  *
  * Two halves that are the same content twice: the form on the left, and on the
  * right the article exactly as `/news/[slug]` will render it — same
- * `ArticleBody`, same measure, same drop cap, same paper. That is the point of
- * building the body as a block array over a tiny text syntax rather than as
- * rich text: the preview is not an approximation of the output, it *is* the
- * output, so there is nothing for the two to disagree about.
+ * `ArticleBody`, same measure, same drop cap, same paper. The body is a
+ * `RichDoc` edited in `RichEditor` and rendered by `ArticleBody` node by node,
+ * so the preview is not an approximation of the output, it *is* the output.
  *
  * On a phone the two halves become one, behind a toggle — side by side at
  * 390px would give each of them 180px, which is no use to either.
  */
-
-const BODY_HELP = [
-  "## Дэд гарчиг",
-  "> Ишлэл — Хэлсэн хүн",
-  "- Жагсаалтын мөр",
-].join("   ·   ");
 
 type Draft = {
   title: string;
@@ -53,6 +53,7 @@ type Draft = {
   author: string;
   publishedAt: string;
   coverAlt: string;
+  /** The sanitised document as JSON: comparable, and exactly what is posted. */
   body: string;
   status: "draft" | "published";
   featured: boolean;
@@ -68,6 +69,11 @@ function today(): string {
   }).format(new Date());
 }
 
+/** A document, as the JSON the form holds and posts. */
+function bodyJson(source: unknown): string {
+  return JSON.stringify(cleanForSave(prepareDoc(source)));
+}
+
 function initialDraft(article: NewsArticle | null, echoed?: Record<string, string>): Draft {
   // A rejected save echoes what was typed, and that wins over the stored
   // record: re-rendering the saved values would silently undo the edit the
@@ -80,7 +86,7 @@ function initialDraft(article: NewsArticle | null, echoed?: Record<string, strin
         author: article.author,
         publishedAt: article.publishedAt,
         coverAlt: article.coverAlt,
-        body: serializeBody(article.body),
+        body: bodyJson(article.body),
         status: article.status,
         featured: article.featured,
       }
@@ -91,7 +97,7 @@ function initialDraft(article: NewsArticle | null, echoed?: Record<string, strin
         author: "",
         publishedAt: today(),
         coverAlt: "",
-        body: "",
+        body: bodyJson(null),
         status: "draft",
         featured: false,
       };
@@ -106,7 +112,7 @@ function initialDraft(article: NewsArticle | null, echoed?: Record<string, strin
     author: echoed.author ?? base.author,
     publishedAt: echoed.publishedAt ?? base.publishedAt,
     coverAlt: echoed.coverAlt ?? base.coverAlt,
-    body: echoed.body ?? base.body,
+    body: echoed.body === undefined ? base.body : bodyJson(bodyFromField(echoed.body)),
     status: echoed.status === "published" ? "published" : "draft",
     featured: echoed.featured === "on",
   };
@@ -132,8 +138,39 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
+  // The baseline is what the form opened with, so "unsaved" means "differs
+  // from what is on the desk", not "was touched". A save redirects away, so
+  // there is no in-place "saved" state to track.
+  const [baseline] = React.useState<Draft>(draft);
+  const dirty =
+    removeCover ||
+    coverPreview !== null ||
+    (Object.keys(baseline) as Array<keyof Draft>).some((key) => baseline[key] !== draft[key]);
+
+  // Off while a save is in flight, so its redirect is never blocked.
+  useUnloadGuard(dirty && !isPending);
+
   const errors = state.fieldErrors ?? {};
-  const blocks = React.useMemo(() => parseBody(draft.body), [draft.body]);
+  const bodyDoc = React.useMemo(() => bodyFromField(draft.body), [draft.body]);
+  // The editor owns the document once mounted, so it is handed its starting
+  // point once and reports changes back through `onChange`.
+  const [initialBody] = React.useState(() => bodyFromField(draft.body));
+  const bodyBlank = isDocBlank(bodyDoc);
+
+  // The editor's toolbar sticks below the action bar, whose height changes when
+  // it wraps on a phone — so it is measured rather than guessed.
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const barRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const form = formRef.current;
+    const bar = barRef.current;
+    if (!form || !bar) return;
+    const measure = () => form.style.setProperty("--action-bar-h", `${bar.offsetHeight}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, []);
 
   const storedCover = coverUrl(article?.coverKey ?? null);
   const shownCover = coverPreview ?? (removeCover ? null : storedCover);
@@ -145,7 +182,14 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
   };
 
   return (
-    <form action={formAction} className="flex flex-1 flex-col">
+    <form
+      ref={formRef}
+      action={formAction}
+      // Errors live in the edit pane; a save from the preview would otherwise
+      // fail with the fields it names out of sight.
+      onSubmit={() => setPane("edit")}
+      className="flex flex-1 flex-col"
+    >
       {article && <input type="hidden" name="id" value={article.id} />}
       {/* The controls whose value lives in React state rather than in the
           input itself still have to reach the server. `status` is not among
@@ -157,11 +201,44 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
       {removeCover && <input type="hidden" name="removeCover" value="on" />}
 
       {/* --- action bar ------------------------------------------------- */}
-      <div className="sticky top-14 z-30 border-b border-border bg-background/95 backdrop-blur-md">
+      <div
+        ref={barRef}
+        className="sticky top-14 z-30 border-b border-border bg-background/95 backdrop-blur-md"
+      >
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-5 py-2.5 lg:px-8">
           <Button asChild variant="ghost" size="sm">
-            <Link href="/admin/news">← Буцах</Link>
+            <Link
+              href="/admin/news"
+              onClick={(event) => {
+                if (!confirmDiscard(dirty && !isPending)) event.preventDefault();
+              }}
+            >
+              ← Мэдээний удирдлага
+            </Link>
           </Button>
+
+          <p className="flex min-w-0 items-center gap-2 text-[0.75rem]">
+            <span className="font-medium">{article ? "Мэдээ засах" : "Шинэ мэдээ"}</span>
+            {article && (
+              <span
+                title={statusHint(article.status)}
+                className={cn(
+                  "px-1.5 py-0.5 text-[0.5625rem] font-semibold tracking-[0.12em] uppercase",
+                  article.status === "published"
+                    ? "bg-foreground text-background"
+                    : "border border-border text-muted-foreground",
+                )}
+              >
+                {statusLabel(article.status)}
+              </span>
+            )}
+            <span
+              aria-live="polite"
+              className={dirty ? "text-destructive" : "text-muted-foreground"}
+            >
+              {dirty ? "Хадгалаагүй өөрчлөлттэй" : ""}
+            </span>
+          </p>
 
           <div className="ml-auto flex items-center gap-2">
             {/* Compact segmented toggle. Only needed below lg, where the two
@@ -189,6 +266,20 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                 </button>
               ))}
             </div>
+
+            {article?.status === "published" && (
+              <Button asChild variant="ghost" size="sm">
+                <Link
+                  href={`/news/${article.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Нийтлэг харах"
+                >
+                  <ExternalLink aria-hidden />
+                  <span className="hidden sm:inline">Нийтлэг харах</span>
+                </Link>
+              </Button>
+            )}
 
             <Button
               type="submit"
@@ -421,21 +512,18 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
           <FieldShell
             id="body"
             label="Мэдээний бичвэр"
-            hint={BODY_HELP}
             error={errors.body}
-            value={draft.body}
+            value={docText(bodyDoc)}
             limit={ARTICLE_LIMITS.body}
             className="border-t border-border pt-6"
           >
-            <Textarea
-              id="body"
+            <RichEditor
               name="body"
-              rows={18}
-              required
-              value={draft.body}
-              onChange={(event) => set("body", event.target.value)}
-              aria-invalid={errors.body ? true : undefined}
-              className="font-mono text-[0.8125rem] leading-relaxed"
+              labelId="body-label"
+              describedBy={errors.body ? "body-error" : undefined}
+              invalid={Boolean(errors.body)}
+              initialDoc={initialBody}
+              onChange={(next) => set("body", JSON.stringify(next))}
             />
           </FieldShell>
 
@@ -485,7 +573,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                 ...(article ?? ({} as NewsArticle)),
                 author: draft.author || "Нийтлэлч",
                 publishedAt: draft.publishedAt,
-                body: blocks,
+                body: bodyDoc,
               }}
               long
               showReading
@@ -506,8 +594,8 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
             )}
 
             <div className="mt-7">
-              {blocks.length > 0 ? (
-                <ArticleBody blocks={blocks} />
+              {!bodyBlank ? (
+                <ArticleBody doc={bodyDoc} />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Бичвэр оруулахад энд харагдана.
