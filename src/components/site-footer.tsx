@@ -36,7 +36,12 @@ const columns = [
     links: [
       { href: "/news", label: "Мэдээ, сурвалжилга" },
       { href: "/about#history", label: "Бидний түүх" },
-      { href: "/about", label: "Бидний тухай" },
+      // The statements, not the top of the page. "Бидний тухай" is the name of
+      // the whole page, so it had been pointing at all of it and landing on
+      // the history timeline - which the link above it already goes to. The
+      // mission is the first of the three statements and `#mission` is the
+      // scroll position that shows it.
+      { href: "/about#mission", label: "Бидний тухай" },
       { href: "/about#life", label: "Ажилтны түүх" },
     ],
   },
@@ -202,6 +207,13 @@ export function SiteFooter() {
           than the page's ink at a tenth: the mark is drawn as scattered dots,
           not a solid, so only a fraction of each cell is inked and a tint that
           reads as faint on a solid shape disappears altogether here.
+
+          That fraction is the whole of why these numbers are as high as they
+          are. A dot of 0.26 of the pitch covers about a fifth of its cell, so
+          whatever alpha is asked for here is spent over a fifth of the area:
+          at a quarter, which is where this started, the mark carried about 5%
+          ink and was not so much quiet as absent. These land nearer 13%, which
+          is a tint you can see without it competing with the columns above it.
           The dark ground takes a little more of it than the light one, which
           is the usual asymmetry — light marks on dark read stronger.
 
@@ -214,11 +226,11 @@ export function SiteFooter() {
           text="ШУНХЛАЙ"
           id="dot-wordmark-screen-sm"
           pitch={0.04}
-          className="block w-full text-brand/25 sm:hidden dark:text-brand/35"
+          className="block w-full text-brand/60 sm:hidden dark:text-brand/70"
         />
         <DotWordmark
           text="ШУНХЛАЙ ХХК"
-          className="hidden w-full text-brand/25 sm:block dark:text-brand/35"
+          className="hidden w-full text-brand/60 sm:block dark:text-brand/70"
         />
       </div>
     </footer>

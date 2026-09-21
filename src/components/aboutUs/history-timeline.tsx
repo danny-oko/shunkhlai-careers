@@ -417,8 +417,19 @@ export function HistoryTimeline() {
                     index === active ? "opacity-100" : "opacity-0",
                   )}
                 >
+                  {/* The year after the name, in the brand orange.
+ 
+                      Inside the heading rather than over it, so a reader who
+                      cannot see the colour still gets "Жи Эс Би Капитал ББСБ
+                      2010" as one line and not a stray number beside it.
+                      `tabular-nums` because the twelve of these change on the
+                      same spot as the panel cross-fades, and lining figures
+                      keep that spot still. */}
                   <h3 className="text-lg leading-snug font-medium tracking-[-0.02em] text-balance sm:text-[1.375rem]">
                     {slide.entry.title}
+                    <span className="ml-3 font-semibold tabular-nums text-brand">
+                      {slide.entry.year}
+                    </span>
                   </h3>
                   <p className="mt-4 text-[0.875rem] leading-[1.7] text-foreground/65 hyphens-auto sm:mt-5 sm:text-[0.9375rem] sm:leading-[1.75] lg:text-justify">
                     {slide.entry.body}

@@ -26,7 +26,13 @@ export default function AboutPage() {
       <h1 className="sr-only">Бидний тухай - Шунхлай ХХК</h1>
 
       <HistoryTimeline />
+      {/* Closes on the Academy's 70/20/10 principle: the section's own label
+          takes the screen and breaks apart to leave it standing. What that
+          principle came to in figures is below the culture wall instead. */}
       <StatementBands />
+      {/* Closes on itself: the wall turns, the pictures gather into the
+          company's mark, and the Academy's figures for the year come up
+          behind it. */}
       <CultureSection />
       <LifeGallery />
     </main>

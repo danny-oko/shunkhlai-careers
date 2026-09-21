@@ -1,10 +1,20 @@
 import { FeatherLattice } from "@/components/brand/feather-lattice";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { Rise } from "@/components/brand/rise";
+import { WingFacets } from "@/components/brand/wing-facets";
 
 export function CareersHero({ roleCount }: { roleCount: number }) {
   return (
     <section className="relative isolate overflow-hidden">
+      {/* Two grounds, not one. The lattice is a texture - at 40% over white it
+          is very nearly nothing, which is why this screen read as a headline
+          on a blank page. The facets are the shape behind it: the eagle's wing
+          taken apart and spread across the corner the headline does not use.
+          Under the lattice, so the texture still runs over the top of them and
+          the two read as one ground rather than as a picture with a screen on
+          it. */}
+      <WingFacets className="-z-20" />
+
       <FeatherLattice
         className="-z-10 opacity-40 [mask-image:radial-gradient(ellipse_70%_60%_at_50%_35%,black_20%,transparent_100%)]"
         tone="brand"
