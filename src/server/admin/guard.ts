@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-
 import { ADMIN_COOKIE, verifyAdminSession } from "./session";
 
 export async function isAdminRequest(): Promise<boolean> {
@@ -11,4 +10,3 @@ export async function isAdminRequest(): Promise<boolean> {
 export async function requireAdmin(): Promise<void> {
   if (!(await isAdminRequest())) redirect("/admin/login");
 }
-
