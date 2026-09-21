@@ -19,7 +19,7 @@ import {
  *
  * Responses:
  *   401 — not signed in to Clerk
- *   409 — signed in but not linked yet (send them to /link); also
+ *   409 — signed in but not linked yet (/account shows the connect form); also
  *         `{ linked: false, reason: "relink" }` when the stored creds are
  *         unreadable and the user must re-link
  *   502 — `{ error: "erp_unavailable" }` for any other failure
@@ -33,7 +33,10 @@ export async function GET() {
 
   const link = await getLink(userId);
   if (!link || link.status !== "linked") {
-    return NextResponse.json({ linked: false }, { status: 409 });
+    // A link flagged unreadable stays "relink" on every request, not just the
+    // one that flagged it, so /account keeps explaining why re-entry is needed.
+    const relink = link?.status === "failed" && link.lastError === "credentials_unreadable";
+    return NextResponse.json(relink ? { linked: false, reason: "relink" } : { linked: false }, { status: 409 });
   }
 
   try {

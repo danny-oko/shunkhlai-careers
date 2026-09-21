@@ -53,6 +53,15 @@ describe("GET /api/erp/session", () => {
     expect(m.getToken).not.toHaveBeenCalled();
   });
 
+  it("409 reason:'relink' persists on later requests for a row flagged unreadable", async () => {
+    m.auth.mockResolvedValue({ userId: "u1" });
+    m.getLink.mockResolvedValue({ ...linked, status: "failed", lastError: "credentials_unreadable" });
+    const res = await GET();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ linked: false, reason: "relink" });
+    expect(m.getToken).not.toHaveBeenCalled();
+  });
+
   it("409 {linked:false, reason:'relink'} on ErpCredentialsUnreadableError", async () => {
     m.auth.mockResolvedValue({ userId: "u1" });
     m.getLink.mockResolvedValue(linked);

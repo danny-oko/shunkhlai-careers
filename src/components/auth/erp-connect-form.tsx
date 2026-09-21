@@ -2,30 +2,43 @@
 
 import * as React from "react";
 import { useActionState } from "react";
-import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { linkAccountAction, type LinkState } from "./actions";
+import { linkAccountAction, type LinkState } from "@/server/erp/link-actions";
+import { retryErpSession } from "./clerk-erp-bridge";
 
 const initial: LinkState = { ok: false };
 
-export function LinkForm({
-  defaults,
-}: {
-  defaults: { firstname: string; lastname: string; email: string };
-}) {
-  const router = useRouter();
+/**
+ * Connects the signed-in Clerk user to their ERP applicant (регистр + phone).
+ * On success the bridge re-fetches the ERP token so /account loads.
+ */
+export function ErpConnectForm({ notice = false }: { notice?: boolean }) {
+  const { user } = useUser();
   const [state, action, pending] = useActionState(linkAccountAction, initial);
 
   React.useEffect(() => {
-    if (state.ok) router.refresh(); // re-render the page into its "linked" state
-  }, [state.ok, router]);
+    if (state.ok) retryErpSession();
+  }, [state.ok]);
+
+  const defaults = {
+    firstname: user?.firstName ?? "",
+    lastname: user?.lastName ?? "",
+    email: user?.primaryEmailAddress?.emailAddress ?? "",
+  };
 
   return (
-    <form action={action} className="space-y-5">
+    <form key={user?.id ?? "anon"} action={action} className="space-y-5">
+      {notice ? (
+        <p role="status" className="text-sm text-amber-700 dark:text-amber-400">
+          Хадгалсан мэдээллийг уншиж чадсангүй. Регистр, утасны дугаараа дахин оруулна уу.
+        </p>
+      ) : null}
+
       <div className="grid gap-2">
         <Label htmlFor="regno">Регистрийн дугаар *</Label>
         <Input id="regno" name="regno" required autoComplete="off" placeholder="УБ99010101" />

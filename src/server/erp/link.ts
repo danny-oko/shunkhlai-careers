@@ -8,9 +8,7 @@ import {
   type ApplicantLink,
 } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/db/crypto";
-import { buildProfilePayload } from "@/lib/api/profile-payload";
-import type { ApplicantProfile, ProfileInput } from "@/lib/api/profile";
-import { erpLogin, erpGet, erpPost, type ErpSession } from "./client";
+import { erpLogin, erpGet, type ErpSession } from "./client";
 
 /** The ERP `/api/applicant/get` payload nests the record under `applicantdata`. */
 type ErpGetResponse = { applicantdata?: Array<Record<string, unknown>> };
@@ -101,72 +99,6 @@ export async function syncProfile(clerkUserId: string): Promise<ApplicantData | 
   return record;
 }
 
-/** Reads the mirrored personal data from our DB (null if never synced). */
-export async function getProfileSnapshot(
-  clerkUserId: string
-): Promise<{ data: ApplicantData; syncedAt: Date } | null> {
-  const db = getDb();
-  const [row] = await db
-    .select()
-    .from(applicantProfile)
-    .where(eq(applicantProfile.clerkUserId, clerkUserId));
-  if (!row) return null;
-  try {
-    return { data: JSON.parse(row.dataJson) as ApplicantData, syncedAt: row.syncedAt };
-  } catch {
-    return null;
-  }
-}
-
-/** The subset of personal fields this app lets a user edit. */
-export type ProfilePatch = {
-  lastname?: string;
-  firstname?: string;
-  email2?: string;
-  addr2?: string;
-  maritalstatus?: string | null;
-};
-
-/**
- * Writes edited personal data back to the ERP (`SaveHrApplicant`) and refreshes
- * the D1 mirror. The patch is merged OVER the current record, so required and
- * unedited fields are preserved and never blanked. (Its only caller today is
- * `updateProfileAction` in `src/app/link/actions.ts`.)
- */
-export async function saveProfile(
-  clerkUserId: string,
-  patch: ProfilePatch
-): Promise<ApplicantData | null> {
-  // Always the LIVE ERP record, never the D1 mirror: SaveHrApplicant is a full
-  // replace, so echoing a stale snapshot (an old mobilephone, contacts, licence
-  // flags edited elsewhere) would silently overwrite what the ERP now holds.
-  // If the live read fails or is empty we refuse to save rather than guess.
-  const current = await syncProfile(clerkUserId);
-  if (!current) throw new Error("Хувийн мэдээллийг уншиж чадсангүй. Дахин оролдоно уу.");
-
-  // Same builder as the browser client: SaveHrApplicant is a full replace, so
-  // the loaded record is echoed (licence flags isa..ise, custom1/custom2, …)
-  // and only the patched keys change. Derived/heavy keys and null ids are left
-  // out by the builder. The phone is the ERP password and is echoed unchanged.
-  const edits = Object.fromEntries(
-    Object.entries(patch).filter(([, v]) => v !== undefined)
-  );
-  const input = {
-    lastname: String(current.lastname ?? ""),
-    firstname: String(current.firstname ?? ""),
-    regno: String(current.regno ?? ""),
-    mobilephone: String(current.mobilephone ?? ""),
-    ...edits,
-  } as ProfileInput;
-  const payload = buildProfilePayload(input, current as ApplicantProfile);
-
-  const token = await getValidErpToken(clerkUserId);
-  await erpPost("/api/applicant/SaveHrApplicant", token, payload); // throws on rettype != 0
-
-  // Re-read from the ERP so our mirror reflects exactly what was saved.
-  return syncProfile(clerkUserId);
-}
-
 async function encryptSession(
   regno: string,
   phone: string,
@@ -200,7 +132,7 @@ export async function isLinked(clerkUserId: string): Promise<boolean> {
 
 /**
  * The stored credentials exist but cannot be decrypted (e.g. APP_ENCRYPTION_KEY
- * was rotated). Retrying cannot help; the user has to re-link via /link.
+ * was rotated). Retrying cannot help; the user has to re-link from /account.
  */
 export class ErpCredentialsUnreadableError extends Error {
   constructor(message = "Stored ERP credentials cannot be decrypted.") {
@@ -211,7 +143,7 @@ export class ErpCredentialsUnreadableError extends Error {
 
 /**
  * Flags the link as needing a re-link and drops the undecryptable session
- * columns. regno/phone are NOT NULL, so they stay until /link overwrites them.
+ * columns. regno/phone are NOT NULL, so they stay until the /account connect form overwrites them.
  */
 export async function markCredentialsUnreadable(clerkUserId: string): Promise<void> {
   await getDb()

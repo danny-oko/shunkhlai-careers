@@ -60,7 +60,7 @@ async function refreshTokens(
 
 // Only the ERP's own Mongolian retmsg is safe to persist: a D1/driver error can
 // embed the SQL and its bound params (the encrypted secret, the Clerk user id).
-// Unreadable stored creds keep the machine-readable marker /link looks for.
+// Unreadable stored creds keep the machine-readable marker the connect flow looks for.
 const messageOf = (e: unknown) =>
   e instanceof ErpError
     ? e.message
@@ -100,7 +100,7 @@ export async function changeErpPassword(
 /**
  * The ERP already holds the new password, so nothing below may surface as a
  * plain failure: if D1 cannot be written the stored credential is stale, and the
- * only honest answer is "re-link" (the /link form overwrites the row). The
+ * only honest answer is "re-link" (the /account connect form overwrites the row). The
  * `failed` flag is best effort, since D1 may be the thing that is down.
  */
 async function storeAfterChange(

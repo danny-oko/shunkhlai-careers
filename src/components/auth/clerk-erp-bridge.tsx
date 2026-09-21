@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 
 import { readAccessToken } from "@/lib/api/core/tokens";
@@ -11,6 +11,8 @@ export type ErpBridgeStatus = "idle" | "loading" | "ready" | "relink" | "error";
 
 // Tiny module-level store so the UI (e.g. /account) can react to the bridge.
 let bridgeStatus: ErpBridgeStatus = "idle";
+// The 409 body's `reason`: "relink" = stored creds went bad; null = not linked yet.
+let bridgeReason: "relink" | null = null;
 let bridgeAttempt = 0;
 const listeners = new Set<() => void>();
 
@@ -31,7 +33,15 @@ function subscribe(listener: () => void) {
   };
 }
 
+function setBridgeReason(next: "relink" | null) {
+  if (bridgeReason === next) return;
+  bridgeReason = next;
+  emit();
+}
+
 const getStatus = () => bridgeStatus;
+const getReason = () => bridgeReason;
+const getServerReason = (): "relink" | null => null;
 const getServerStatus = (): ErpBridgeStatus => "idle";
 const getAttempt = () => bridgeAttempt;
 const getServerAttempt = () => 0;
@@ -41,9 +51,15 @@ export function useErpBridgeStatus(): ErpBridgeStatus {
   return React.useSyncExternalStore(subscribe, getStatus, getServerStatus);
 }
 
+/** Why the bridge is in "relink": "relink" = stored credentials unreadable. */
+export function useErpBridgeReason(): "relink" | null {
+  return React.useSyncExternalStore(subscribe, getReason, getServerReason);
+}
+
 /** Resets the bridge and asks it to fetch /api/erp/session again. */
 export function retryErpSession() {
   bridgeStatus = "idle";
+  bridgeReason = null;
   bridgeAttempt += 1;
   emit();
 }
@@ -56,8 +72,8 @@ export function retryErpSession() {
  *
  *   - Clerk signed in + linked   → fetch the ERP token from /api/erp/session
  *                                   and store it, so /account works.
- *   - Clerk signed in + NOT linked → send the user to /link to connect their
- *                                   recruitment profile.
+ *   - Clerk signed in + NOT linked → status "relink"; /account renders the
+ *                                   inline connect form (ErpConnectForm).
  *   - Clerk signed out           → clear the app session too.
  *
  * The user's regno/phone never reach the browser — only the short-lived access
@@ -65,7 +81,7 @@ export function retryErpSession() {
  */
 export function ClerkErpBridge() {
   const { isLoaded, isSignedIn, userId } = useAuth();
-  const router = useRouter();
+  // Re-run on navigation so a cleared app session is re-established.
   const pathname = usePathname();
   const attempt = React.useSyncExternalStore(subscribe, getAttempt, getServerAttempt);
 
@@ -75,6 +91,7 @@ export function ClerkErpBridge() {
     // Signed out of Clerk → make sure the app session is gone as well.
     if (!isSignedIn) {
       if (readAccessToken()) clearSession("applicant");
+      setBridgeReason(null);
       setBridgeStatus("idle");
       return;
     }
@@ -93,10 +110,12 @@ export function ClerkErpBridge() {
         if (cancelled) return;
 
         if (res.status === 409) {
-          // Not linked yet, or the stored creds need re-linking. Only nudge to
-          // /link from protected pages; let them browse the public site freely.
+          // Not linked yet, or the stored creds need re-linking. /account
+          // shows the connect form; the public site stays browsable.
+          const body = (await res.json().catch(() => null)) as { reason?: string } | null;
+          if (cancelled) return;
+          setBridgeReason(body?.reason === "relink" ? "relink" : null);
           setBridgeStatus("relink");
-          if (pathname.startsWith("/account")) router.push("/link");
           return;
         }
         if (!res.ok) {
@@ -107,6 +126,7 @@ export function ClerkErpBridge() {
         const data = (await res.json()) as { accessToken?: string; refreshToken?: string };
         if (cancelled) return;
         if (data.accessToken) {
+          setBridgeReason(null);
           storeSession(
             { accessToken: data.accessToken, refreshToken: data.refreshToken ?? null },
             "applicant"
@@ -125,7 +145,7 @@ export function ClerkErpBridge() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, userId, pathname, router, attempt]);
+  }, [isLoaded, isSignedIn, userId, pathname, attempt]);
 
   return null;
 }

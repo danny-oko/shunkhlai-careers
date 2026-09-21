@@ -48,7 +48,6 @@ vi.mock("./client", () => ({
   erpGet: state.get,
 }));
 
-import { saveProfile } from "./link";
 import { changeErpPassword } from "./password";
 
 const session = { accessToken: "tok2", refreshToken: null, expiresAt: Date.now() + 3_600_000, appId: "a1" };
@@ -132,49 +131,5 @@ describe("changeErpPassword when D1 fails after the ERP accepted the change", ()
     state.post.mockResolvedValue({});
     state.failAllUpdates = true;
     await expect(changeErpPassword("u1", "oldpw", "newpw1")).resolves.toEqual({ relinkRequired: true });
-  });
-});
-
-describe("saveProfile", () => {
-  it("echoes licence and custom fields instead of wiping them", async () => {
-    // Snapshot read (no mirror row): getProfileSnapshot selects applicantProfile,
-    // which the stub answers from state.row, so seed a dataJson row for it.
-    const record = {
-      regno: "AA00000000",
-      mobilephone: "99000000",
-      lastname: "L",
-      firstname: "F",
-      isb: true,
-      custom1: "note",
-      custom2: null,
-      relativeid: null,
-      picturedata: "xxx",
-      totalper: 50,
-      addr2: "old",
-    };
-    // The D1 mirror is STALE (old phone, no licence): saveProfile must ignore it.
-    const stale = { ...record, mobilephone: "11111111", isb: false, custom1: null };
-    state.row = { ...state.row, dataJson: JSON.stringify(stale), syncedAt: new Date() };
-    state.post.mockResolvedValue({});
-    state.get.mockResolvedValue({ applicantdata: [record] });
-
-    await saveProfile("u1", { addr2: "new" });
-
-    const call = state.post.mock.calls.find((c) => c[0] === "/api/applicant/SaveHrApplicant");
-    expect(call).toBeDefined();
-    const payload = call![2] as Record<string, unknown>;
-    expect(payload).toMatchObject({ isb: true, custom1: "note", mobilephone: "99000000", addr2: "new" });
-    expect(payload).not.toHaveProperty("picturedata");
-    expect(payload).not.toHaveProperty("totalper");
-    expect(payload).not.toHaveProperty("relativeid");
-    expect(payload).not.toHaveProperty("custom2");
-  });
-
-  it("refuses to save when the live ERP record cannot be read", async () => {
-    state.row = { ...state.row, dataJson: JSON.stringify({ mobilephone: "11111111" }), syncedAt: new Date() };
-    state.get.mockResolvedValue({ applicantdata: [] });
-
-    await expect(saveProfile("u1", { addr2: "new" })).rejects.toThrow();
-    expect(state.post.mock.calls.some((c) => c[0] === "/api/applicant/SaveHrApplicant")).toBe(false);
   });
 });
