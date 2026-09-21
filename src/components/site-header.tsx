@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
 
 import { BrandMark } from "@/components/brand/brand-logo";
@@ -33,7 +34,10 @@ const links = [
 export function SiteHeader() {
   const pathname = usePathname();
   const { status } = useSession();
-  const isAuthenticated = status === "authenticated";
+  const { isSignedIn: isClerkSignedIn } = useAuth();
+  // Clerk can be signed in while the ERP token is missing (session call failed
+  // or account not linked); "Нэвтрэх" would then bounce straight back to "/".
+  const isAuthenticated = status === "authenticated" || isClerkSignedIn === true;
   const [isScrolled, setIsScrolled] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
 

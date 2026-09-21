@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { LogOut, Moon, Sun, User } from "lucide-react";
 
 import { displayName, useSession } from "@/components/auth/session-provider";
@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 export function ProfileMenu({ className }: { className?: string }) {
   const { profile, signOut } = useSession();
   const { signOut: clerkSignOut } = useClerk();
+  const { user: clerkUser } = useUser();
   const { resolvedTheme, setTheme } = useTheme();
 
   // Clear the app session, then end the Clerk session so the bridge doesn't
@@ -42,8 +43,10 @@ export function ProfileMenu({ className }: { className?: string }) {
     void clerkSignOut({ redirectUrl: "/" });
   };
 
-  const name = displayName(profile);
-  const photo = profile ? pictureSrc(profile) : null;
+  // The ERP profile is null when the ERP session is unavailable; fall back to
+  // the Clerk identity so the menu (and sign-out) still has a name and avatar.
+  const name = displayName(profile) || clerkUser?.fullName || "";
+  const photo = profile ? pictureSrc(profile) : (clerkUser?.imageUrl ?? null);
 
   return (
     <DropdownMenu>
