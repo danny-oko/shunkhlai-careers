@@ -5,7 +5,6 @@ import {
   type ClerkIdentity,
   type LoadedAccount,
   loadAccount,
-  readCv,
   readPicture,
   saveAccount,
 } from "./account-store";
@@ -42,7 +41,7 @@ import type { ApplicantDoc, Row } from "./handlers";
 const SAVE_TRIES = 3;
 const INLINE_PULL_BUDGET_MS = 8_000;
 
-type Files = { cv?: boolean; picture?: boolean };
+type Files = { picture?: boolean };
 
 /** Load → change → save, re-run on a lock conflict. `change` false = no write. */
 async function update(
@@ -225,11 +224,6 @@ function applyOutcome(
 
   if (outcome) {
     if (outcome.profileStamp && erp.profileDirty === outcome.profileStamp) delete erp.profileDirty;
-    if (outcome.cv && erp.cvDirty === outcome.cv.stamp) {
-      delete erp.cvDirty;
-      if (outcome.cv.hash) erp.cvHash = outcome.cv.hash;
-      else delete erp.cvHash;
-    }
     if (outcome.picture && erp.pictureDirty === outcome.picture.stamp) {
       delete erp.pictureDirty;
       if (outcome.picture.hash) erp.pictureHash = outcome.picture.hash;
@@ -336,7 +330,6 @@ export async function syncTask(
             identity: pushIdentity(identity),
             local: work.local,
             apps: work.apps,
-            loadCv: () => readCv(identity.email),
             loadPicture: () => readPicture(identity.email),
           })
         : null;

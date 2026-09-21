@@ -24,7 +24,6 @@ function doc(profile: Record<string, unknown> = {}): ApplicantDoc {
     relatives: [],
     interests: [],
     applications: [],
-    cv: null,
     picture: null,
   };
 }
@@ -40,9 +39,8 @@ const app = {
   sourcetype: "WEB",
 };
 
-const deps = (cv: { filename: string; data: string } | null = null) => ({
+const deps = () => ({
   identity: { firstname: "Бат", lastname: "Дорж", email: "a@b.mn" },
-  loadCv: async () => cv,
 });
 
 let calls: Call[];
@@ -96,7 +94,7 @@ describe("pushApplication", () => {
     edited.erp = { profileEdited: true }; // the applicant saved their profile here
     const result = await pushApplication(edited, app, deps());
 
-    expect(result).toMatchObject({ status: "sent", erpEntryId: 777, cvHash: undefined });
+    expect(result).toMatchObject({ status: "sent", erpEntryId: 777 });
     expect(calls.map((c) => c.endpoint)).toEqual([
       "auth/login",
       "get",
@@ -137,19 +135,6 @@ describe("pushApplication", () => {
     answer("getRecruitmenRequestList", ok([{ entryid: 9, recruitmentorderid: 55 }]));
     const result = await pushApplication(doc(), app, deps());
     expect(result).toMatchObject({ status: "sent", erpEntryId: 9 });
-  });
-
-  it("sends the CV only when its hash changed", async () => {
-    answer("auth/login", { access_token: "tok" });
-    const withCv = { ...doc(), cv: { filename: "cv.pdf", filedata: "" } };
-    const first = await pushApplication(withCv, app, deps({ filename: "cv.pdf", data: "QUJD" }));
-    expect(calls.some((c) => c.endpoint === "SaveAppCV")).toBe(true);
-    expect(first.cvHash).toMatch(/^[0-9a-f]{64}$/);
-
-    calls = [];
-    withCv.erp = { cvHash: first.cvHash };
-    await pushApplication(withCv, app, deps({ filename: "cv.pdf", data: "QUJD" }));
-    expect(calls.some((c) => c.endpoint === "SaveAppCV")).toBe(false);
   });
 
   it("reports a failed application without throwing", async () => {

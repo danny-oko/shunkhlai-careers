@@ -95,7 +95,7 @@ export async function apiPost<T>(
 
 /**
  * POST a single file as `multipart/form-data`. The collection names the field
- * `file` for both the profile picture and the CV.
+ * `file` for the profile picture.
  */
 export async function apiUpload<T>(
   path: string,

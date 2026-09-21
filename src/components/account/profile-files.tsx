@@ -1,16 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { FileText, ImageUp, Loader2, Trash2 } from "lucide-react";
+import { ImageUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { profile as profileApi, toApiError } from "@/lib/api";
 import { pictureSrc } from "@/lib/api/profile";
-import { describeCvFileError } from "@/lib/apply-schema";
 
-/** Profile photo and CV — the two things `SaveHrApplicant` does not carry. (Clerk owns the password.) */
+/** Profile photo — the one thing `SaveHrApplicant` does not carry. (Clerk owns the password.) */
 
 export function PhotoUpload() {
   const { profile, refresh } = useSession();
@@ -75,96 +74,6 @@ export function PhotoUpload() {
           onChange={onPick}
         />
       </div>
-    </div>
-  );
-}
-
-export function CvManager() {
-  const { profile, refresh } = useSession();
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const [isBusy, setIsBusy] = React.useState(false);
-
-  async function onPick(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    const fileError = describeCvFileError(file);
-    if (fileError) {
-      toast.error(fileError);
-      return;
-    }
-
-    setIsBusy(true);
-    try {
-      await profileApi.uploadCv(file);
-      toast.success("CV хавсаргалаа");
-      await refresh();
-    } catch (error) {
-      toast.error(toApiError(error).message);
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function onDelete() {
-    if (!window.confirm("CV-г устгах уу?")) return;
-    setIsBusy(true);
-    try {
-      await profileApi.deleteCv();
-      toast.success("CV устгагдлаа");
-      await refresh();
-    } catch (error) {
-      toast.error(toApiError(error).message);
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        <FileText className="text-muted-foreground size-5 shrink-0" />
-        <div className="min-w-0">
-          <p className="font-medium">CV</p>
-          <p className="text-muted-foreground truncate text-sm">
-            {profile?.filename || "Хавсаргаагүй байна. PDF, DOC эсвэл DOCX, 5MB хүртэл."}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isBusy}
-          onClick={() => inputRef.current?.click()}
-          className="h-9 rounded-full px-4"
-        >
-          {isBusy ? <Loader2 className="animate-spin" /> : null}
-          {profile?.filename ? "Солих" : "Хавсаргах"}
-        </Button>
-        {profile?.filename ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="CV устгах"
-            disabled={isBusy}
-            onClick={onDelete}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        ) : null}
-      </div>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".pdf,.doc,.docx"
-        hidden
-        onChange={onPick}
-      />
     </div>
   );
 }
