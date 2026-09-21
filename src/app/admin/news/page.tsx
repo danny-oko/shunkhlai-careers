@@ -112,34 +112,47 @@ export default async function AdminNewsPage({
           </p>
         </div>
 
-        {/* Compact by intent — the primary "Шинэ мэдээ" lives in the bar
-            above, and two identical buttons on one screen is one too many. */}
-        <nav aria-label="Төлвөөр шүүх" className="flex items-center gap-1">
-          {FILTERS.map((filter) => {
-            const count =
-              filter.value === "all"
-                ? everything.length
-                : everything.filter((article) => article.status === filter.value).length;
+        {/* The filters, and the one thing an editor comes to this screen to
+            do. The admin bar carries a "Шинэ мэдээ" button as well, but at
+            28px in a row of four controls it reads as chrome and was missed
+            entirely - so the duplication the earlier note here argued against
+            turns out to be worth it. This is the copy at the size a primary
+            action deserves. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <nav aria-label="Төлвөөр шүүх" className="flex items-center gap-1">
+            {FILTERS.map((filter) => {
+              const count =
+                filter.value === "all"
+                  ? everything.length
+                  : everything.filter((article) => article.status === filter.value).length;
 
-            return (
-              <Link
-                key={filter.value}
-                href={`/admin/news?status=${filter.value}`}
-                aria-current={status === filter.value ? "page" : undefined}
-                className={cn(
-                  "rounded-full border px-2.5 py-1 text-[0.6875rem] transition-colors",
-                  "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                  status === filter.value
-                    ? "border-transparent bg-foreground font-medium text-background"
-                    : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                {filter.label}
-                <span className="ml-1 tabular-nums opacity-60">{count}</span>
-              </Link>
-            );
-          })}
-        </nav>
+              return (
+                <Link
+                  key={filter.value}
+                  href={`/admin/news?status=${filter.value}`}
+                  aria-current={status === filter.value ? "page" : undefined}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[0.6875rem] transition-colors",
+                    "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                    status === filter.value
+                      ? "border-transparent bg-foreground font-medium text-background"
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  {filter.label}
+                  <span className="ml-1 tabular-nums opacity-60">{count}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          <Button asChild size="lg">
+            <Link href="/admin/news/new">
+              <Plus aria-hidden />
+              Шинэ мэдээ
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {articles.length > 0 ? (
