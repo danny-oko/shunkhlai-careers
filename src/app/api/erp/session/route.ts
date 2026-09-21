@@ -33,6 +33,7 @@ export async function GET() {
     const accessToken = await getValidErpToken(userId);
     return NextResponse.json({ linked: true, accessToken });
   } catch (e) {
+    console.error("[erp/session] token refresh failed", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "erp_error" },
       { status: 502 }
