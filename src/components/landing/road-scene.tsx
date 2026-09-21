@@ -241,13 +241,29 @@ export function RoadScene({
       {/* Sized to sit whole inside the dark band above the road. Width alone
           could not promise that — a short, wide window would push it past the
           bottom — so it is also capped against the viewport height: at a 2.79
-          ratio, 145svh of width is 52svh of height, inside the band's 60svh. */}
+          ratio, 145svh of width is 52svh of height, inside the band's 60svh.
+
+          Centred from `sm`, but sitting on the bottom edge below it. The map
+          is 2.79 times as wide as it is tall and it is sized off the window's
+          width, so on a phone it comes out 123px tall inside a box 479 tall —
+          a quarter of it — while on a 1280 screen the same rule fills 85%.
+          Centred, that quarter left two separate holes, one above the map and
+          one between it and the truck, and the two objects read as unrelated
+          things floating on a blank screen. There is no width that fills a
+          390-by-479 box with a 2.79 shape without cropping the country past
+          recognising, so the box is what gives: pushed to the bottom, the map
+          meets the road the truck stands on, the truck overlaps its lower half
+          the way it does on a desktop, and the leftover air collects in one
+          place above — under the readout, where the scroll cue lives. */}
       <div
         aria-hidden
-        className="absolute inset-x-0 top-0 flex items-center justify-center overflow-hidden opacity-60"
+        className="absolute inset-x-0 top-0 flex items-end justify-center overflow-hidden opacity-60 sm:items-center"
         style={{ height: `calc(100% - ${band})` }}
       >
-        <div className="w-[88vw] max-w-[145svh]">
+        {/* 104vw below `sm`: the dot field's own bounding box carries about 9%
+            of empty margin on each side, so this crops 2% of nothing and buys
+            back a little height. */}
+        <div className="w-[104vw] max-w-[145svh] sm:w-[88vw]">
           <MongoliaMap className="w-full" progress={drive} />
         </div>
       </div>
@@ -309,11 +325,11 @@ export function RoadScene({
                     them, so the colour they settled on was orange mixed with a
                     blue. Warm sheen on warm base keeps the whole sweep inside
                     the orange. */}
-                <span className="gleam-in text-3xl leading-none font-semibold tracking-[-0.04em] tabular-nums [--gleam-base:var(--brand)] [--gleam-sheen:var(--brand-2)] sm:text-5xl">
+                <span className="gleam-in type-figure font-semibold tracking-[-0.04em] tabular-nums [--gleam-base:var(--brand)] [--gleam-sheen:var(--brand-2)]">
                   {stat.value}
                   {stat.suffix}
                 </span>
-                <span className="gleam-in mt-2 block text-sm font-medium tracking-[-0.01em]">
+                <span className="gleam-in mt-2 block type-copy font-medium tracking-[-0.01em]">
                   {stat.label}
                 </span>
               </div>
@@ -353,10 +369,10 @@ export function RoadScene({
                 {/* The step up waits for xl. At lg the five columns are 189px wide and
                     "Чанарын хяналт" measures 159 at 20px, which wrapped that one
                     title and left the row uneven. */}
-                <h3 className="gleam-in text-base font-semibold tracking-[-0.025em] xl:text-xl">
+                <h3 className="gleam-in type-title font-semibold tracking-[-0.025em]">
                   {link.title}
                 </h3>
-                <p className="gleam-in mt-2 text-sm leading-relaxed text-pretty [--gleam-base:var(--ink-muted)]">
+                <p className="gleam-in mt-2 type-copy text-pretty [--gleam-base:var(--ink-muted)]">
                   {link.body}
                 </p>
               </article>

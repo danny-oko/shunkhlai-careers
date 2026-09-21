@@ -101,14 +101,30 @@ const near = (position: number, index: number) =>
  * pushed the values in by the width of the number, and hung outside it they
  * needed a gutter wider than the gap the column now sits on.
  */
-const SAYING = "text-xl leading-[1.3] font-semibold tracking-tight sm:text-2xl";
+const SAYING = "type-section leading-[1.3] font-semibold tracking-tight";
 
 function Statement({ step }: { step: Step }) {
   if (!step.list) {
     // Balanced where it is not justified: `text-balance` evens the lines of a
     // short sentence, which is the ragged edge's own way of looking set.
+    //
+    // And justified only from `xl`, which is the width the row closes on one
+    // line at and the only width both edges flush was ever for. Below it the
+    // sentence drops onto its own line inside `max-w-md`, and at 21px in the
+    // ~342px a phone leaves that is four or five words a line: justification
+    // then has nowhere to put the slack but between them, and the paragraph
+    // opens up rivers wide enough to read down instead of across. One ragged
+    // edge is what a measure that short wants.
+    //
+    // Which edge is ragged is decided a level up, not here: below `xl` the
+    // block is set flush right under a right-set word, so the left one gives.
     return (
-      <p className={cn(SAYING, step.justify ? "text-justify" : "text-balance")}>
+      <p
+        className={cn(
+          SAYING,
+          step.justify ? "text-pretty xl:text-justify" : "text-balance",
+        )}
+      >
         {step.statement}
       </p>
     );
@@ -260,7 +276,7 @@ export function StatementBands() {
           <article
             key={step.id}
             id={step.id}
-            className="relative isolate flex min-h-[70svh] scroll-mt-16 flex-col justify-center overflow-hidden px-6 py-20 text-ink-foreground lg:px-10"
+            className="relative isolate flex min-h-[70svh] scroll-mt-16 flex-col justify-center overflow-hidden px-6 py-section text-ink-foreground lg:px-10"
           >
             <Image
               src={step.image}
@@ -277,7 +293,7 @@ export function StatementBands() {
         <FeatherLattice className="-z-10 opacity-[0.18]" tone="brand" />
 
             <div className="mx-auto w-full max-w-6xl">
-              <p className="text-[0.6875rem] font-medium tracking-[0.16em] text-white/55 uppercase">
+              <p className="type-eyebrow font-medium tracking-[0.16em] text-white/55 uppercase">
                 Бидний
               </p>
               <h2 className={cn(WORD, "mt-4")}>{step.word}</h2>
@@ -360,20 +376,26 @@ export function StatementBands() {
               its unmeasured places whenever the measurement did not land, the
               kicker underneath the word. */}
           <div className="absolute inset-x-6 top-1/2 flex flex-wrap items-start gap-x-8 lg:inset-x-10">
+            {/* The label travels with the word below `xl`, and only there.
+                Everything in this row is set against the right gutter until
+                the sentence joins it, because that is the edge the words
+                change on. The label was the one piece left behind: held at
+                the left gutter while the word sat against the right one, it
+                opened a gap between the two of 90px on a phone, 252 at 768
+                and 425 at 1024 — on a laptop, nearly half the screen of
+                nothing between a word and the label that names it, which read
+                as two unrelated things rather than as one line. Given the same
+                `ml-auto`, the pair closes up and travels to the gutter
+                together; at `xl` both release it and the row packs from the
+                left as it always did. */}
             <p
               aria-hidden
-              className="mt-[0.9em] shrink-0 text-[0.6875rem] font-medium tracking-[0.16em] text-white/55 uppercase"
+              className="mt-[0.9em] ml-auto shrink-0 type-eyebrow font-medium tracking-[0.16em] text-white/55 uppercase xl:ml-0"
             >
               Бидний
             </p>
 
-            {/* Pushed to the right gutter until the sentence joins the row.
-                Below `xl` the sentence drops onto its own line and runs the
-                full measure, which left the word column stranded in the middle
-                with a void after the kicker and its right edge landing 62px
-                short of everything under it. Against the gutter, the word, the
-                rule and the justified sentence all close on one line. */}
-            <div className={cn(WORD_SIZE, "relative ml-auto shrink-0 xl:ml-0")}>
+            <div className={cn(WORD_SIZE, "relative shrink-0")}>
               {/* All three words in one grid cell, so the column is as wide as
                   the widest of them and never changes width. Sized to the word
                   at the line instead, the column breathed in and out by the
@@ -434,8 +456,16 @@ export function StatementBands() {
                 metrics — cap 0.69em on a 1.30em content box, the word at 56px
                 centred in a 1.25em slot, the sentence at 24px on 1.3 leading.
                 `basis-full` drops it onto its own line below `xl`, where the
-                Mongolian is long enough that the two would meet in the middle. */}
-            <div className="relative mt-20 max-w-md basis-full xl:mt-2 xl:basis-0 xl:grow">
+                Mongolian is long enough that the two would meet in the middle.
+
+                On that own line it takes the right gutter too, so the label,
+                the word and the sentence all close on the one edge instead of
+                the block sliding back to the left under a word set against the
+                right. At 1024 that puts its left edge within 3px of the word's
+                by itself. The gap above it was a flat 80px, which is about
+                right under a 56px word and half a screen of air under a 28px
+                one, so it is the fluid step now and shrinks with the type. */}
+            <div className="relative mt-block ml-auto max-w-md basis-full text-right xl:mt-2 xl:ml-0 xl:basis-0 xl:grow xl:text-left">
               {STEPS.map((step, index) => (
                 <div
                   key={step.id}

@@ -33,7 +33,7 @@ export function StoryNav({
             href={`/news/${article.slug}`}
             className="group flex flex-col gap-2 bg-background p-5 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:p-6"
           >
-            <span className="flex items-center gap-2 text-[0.625rem] tracking-[0.14em] text-muted-foreground uppercase">
+            <span className="flex items-center gap-2 type-kicker tracking-[0.14em] text-muted-foreground uppercase">
               {icon === "back" && <ArrowLeft aria-hidden className="size-3" />}
               {label}
               {icon === "forward" && <ArrowRight aria-hidden className="size-3" />}

@@ -32,7 +32,7 @@ export function Masthead({
       <div className="relative mx-auto max-w-6xl px-6 lg:px-10">
         {/* Folio line. `justify-between` with the middle item hidden on a
             phone keeps the date on the right edge where it is read. */}
-        <div className="flex items-baseline justify-between gap-4 border-b border-border py-3 text-[0.625rem] tracking-[0.16em] text-muted-foreground uppercase">
+        <div className="flex items-baseline justify-between gap-4 border-b border-border py-3 type-kicker tracking-[0.16em] text-muted-foreground uppercase">
           <span className="font-medium">Шунхлай ХХК</span>
           <span className="hidden sm:inline">Улаанбаатар</span>
           <span className="tabular-nums">{formatNewsDate(today)}</span>
@@ -42,14 +42,14 @@ export function Masthead({
           <h1 className="news-headline text-[clamp(2.125rem,8.5vw,5.25rem)] uppercase">
             Шунхлай Мэдээ
           </h1>
-          <p className="mx-auto mt-4 max-w-md text-[0.6875rem] tracking-[0.2em] text-muted-foreground uppercase sm:text-xs">
+          <p className="mx-auto mt-4 max-w-md type-kicker tracking-[0.2em] text-muted-foreground uppercase">
             Компанийн сурвалжилга · Салбарын мэдээ · Хүний нөөц
           </p>
         </div>
 
         <div className="news-rule-double" />
 
-        <p className="py-2.5 text-center text-[0.625rem] tracking-[0.16em] text-muted-foreground uppercase tabular-nums">
+        <p className="py-2.5 text-center type-kicker tracking-[0.16em] text-muted-foreground uppercase tabular-nums">
           {storyCount > 0 ? `Архивт ${storyCount} мэдээ` : "Архив хоосон"}
         </p>
       </div>

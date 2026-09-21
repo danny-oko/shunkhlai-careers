@@ -50,7 +50,7 @@ export function ArticleBody({ blocks }: { blocks: NewsBlock[] }) {
                 {block.text}
               </p>
               {block.attribution && (
-                <footer className="mt-2.5 text-[0.6875rem] tracking-[0.12em] text-muted-foreground uppercase not-italic">
+                <footer className="mt-2.5 type-kicker tracking-[0.12em] text-muted-foreground uppercase not-italic">
                   {block.attribution}
                 </footer>
               )}

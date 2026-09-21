@@ -95,7 +95,7 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
         ) : (
           /* An empty desk is a real state — a category can have nothing in it —
              so it gets a ruled panel rather than a blank page. */
-          <section className="border-y border-border py-20 text-center">
+          <section className="border-y border-border py-section text-center">
             <p className="news-headline text-xl">
               {deskName
                 ? `“${deskName}” бүлэгт мэдээ байхгүй байна.`

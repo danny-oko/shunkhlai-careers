@@ -10,8 +10,22 @@ import { cn } from "@/lib/utils";
 /** How much scroll one record is held for, once the stage is pinned. */
 const STEP_SVH = 60;
 
-/** Below this the stage is not pinned: the row stacks and outgrows a screen. */
+/** The same on a phone, where a screen is shorter and a flick carries less. */
+const NARROW_STEP_SVH = 45;
+
+/** Below this the row stacks: the photograph sits over the record, not beside. */
 const WIDE = "(min-width: 64rem)";
+
+/**
+ * Screens with the room to hold the pinned stage: the longest of the twelve
+ * records, the spans, the index and a photograph worth looking at, all inside
+ * one screen. Measured, not guessed - at 375x667 that leaves the photograph
+ * 210px and 24px to spare, and a screen narrower or shorter than the floor
+ * below runs the record past the fold. Those fall back to the plain stacked
+ * run instead, as a phone on its side does.
+ */
+const HOLDS_STAGE =
+  "(min-width: 64rem), (min-width: 22.5rem) and (min-height: 40rem)";
 
 /** The tile grid the photograph changes through. */
 const COLS = 8;
@@ -77,22 +91,25 @@ const tiles = Array.from({ length: TILES }, (_, index) => {
   };
 });
 
-function subscribeToWidth(onChange: () => void) {
-  const query = window.matchMedia(WIDE);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
 /**
- * Whether the window is wide enough to pin the stage. Assumes it is on the
- * server, which is the layout the markup is rendered for; a narrow client
- * corrects itself on its first paint and nothing visible depends on the
- * guess, since which index is read is the only thing that changes.
+ * Whether a media query holds, kept in sync if the window changes. Assumes it
+ * does on the server, which is the layout the markup is rendered for; a client
+ * it does not hold on corrects itself on its first paint, and nothing visible
+ * depends on the guess - it only decides which record is read.
  */
-function useIsWide() {
+function useMedia(query: string) {
+  const subscribe = React.useCallback(
+    (onChange: () => void) => {
+      const media = window.matchMedia(query);
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    },
+    [query],
+  );
+
   return React.useSyncExternalStore(
-    subscribeToWidth,
-    () => window.matchMedia(WIDE).matches,
+    subscribe,
+    () => window.matchMedia(query).matches,
     () => true,
   );
 }
@@ -117,10 +134,15 @@ function useIsWide() {
  *   down the column with the scroll rather than jumping between marks.
  * - The rings behind the stage turn, slowly, across the whole run.
  *
- * Below the large breakpoint the row stacks and no longer fits a screen, so
- * the stage is not pinned there and the rail and the index set the record
- * directly instead. Reduced motion takes the same path, for the same reason
- * it always does: nothing should need to be scrolled through to be read.
+ * Below the large breakpoint the row stacks into a column and the screen is
+ * still pinned, so the photograph holds and changes there as it does on a
+ * laptop. What the column leaves over is what the photograph is then sized
+ * to, so the record under it stays on the screen the stage is held in. Only a
+ * window without the room for one - a phone on its side, or one small enough
+ * that the longest record fills it by itself - drops the pin and lets the
+ * rail and the index set the record directly. Reduced motion takes that
+ * same path, for the reason it always does: nothing should need to be
+ * scrolled through to be read.
  *
  * Every record is in the markup at all times, stacked in one grid cell and
  * faded between. The box is then as tall as the longest of the twelve however
@@ -131,10 +153,12 @@ function useIsWide() {
 export function HistoryTimeline() {
   const sectionRef = React.useRef<HTMLElement>(null);
   const { progress, isReduced } = useScrollProgress(sectionRef);
-  const isWide = useIsWide();
+  const isWide = useMedia(WIDE);
+  const hasRoom = useMedia(HOLDS_STAGE);
   const [picked, setPicked] = React.useState(0);
 
-  const isPinned = isWide && !isReduced;
+  const isPinned = hasRoom && !isReduced;
+  const step = isWide ? STEP_SVH : NARROW_STEP_SVH;
 
   // Which record the scroll is on, and how far through it. Both come off the
   // same number, so the index cannot travel past a record still being read.
@@ -188,7 +212,7 @@ export function HistoryTimeline() {
       className="relative scroll-mt-16"
       style={
         isPinned
-          ? { height: `calc(100svh + ${slides.length * STEP_SVH}svh)` }
+          ? { height: `calc(100svh + ${slides.length * step}svh)` }
           : undefined
       }
     >
@@ -203,22 +227,38 @@ export function HistoryTimeline() {
           isPinned
             ? // pt-16 is the fixed header: the stage is pinned under it, so
               // the screen it centres its content in is the one below the
-              // header, not the whole window.
-              "sticky top-0 flex h-svh flex-col justify-center pt-16"
+              // header, not the whole window. Stacked, the column fills that
+              // screen rather than sitting in the middle of it, so the room
+              // the centring would have left it is asked for as padding.
+              "sticky top-0 flex h-svh flex-col justify-center pt-22 pb-6 lg:pt-16 lg:pb-0"
             : "py-20 lg:py-28",
         )}
       >
         <Rings turn={runProgress * RING_TURN} />
 
-        <div className="relative z-[1] mx-auto w-full max-w-6xl px-6 lg:px-10">
+        <div
+          className={cn(
+            "relative z-[1] mx-auto w-full max-w-6xl px-6 lg:px-10",
+            // Stacked and pinned - a phone - the column has one screen to
+            // fill and to stay inside, so it is laid out as a flex column
+            // and the photograph takes whatever the rest of it leaves.
+            isPinned && "flex min-h-0 flex-1 flex-col lg:block lg:flex-none",
+          )}
+        >
           <h2 className="text-center text-sm font-medium tracking-[0.01em]">
             Түүхэн замнал
           </h2>
 
-          <div className="mt-12 flex flex-col items-center gap-12 lg:mt-14 lg:flex-row lg:items-center lg:justify-between lg:gap-8 xl:gap-12">
+          <div
+            className={cn(
+              "mt-12 flex flex-col items-center gap-12 lg:mt-14 lg:flex-row lg:items-center lg:justify-between lg:gap-8 xl:gap-12",
+              isPinned &&
+                "mt-6 min-h-0 flex-1 justify-center gap-5 sm:mt-8 sm:gap-7 lg:mt-14 lg:flex-none lg:gap-8",
+            )}
+          >
             {/* The spans, right-aligned so their edge points at the
                 photograph rather than trailing off into the page gutter. */}
-            <ul className="flex w-full flex-wrap justify-center gap-x-7 gap-y-3 lg:w-auto lg:shrink-0 lg:flex-col lg:items-end lg:gap-7">
+            <ul className="flex w-full shrink-0 items-start justify-between gap-x-2 sm:justify-center sm:gap-x-8 lg:w-auto lg:flex-col lg:items-end lg:gap-7">
               {eras.map((era, index) => {
                 const isCurrent = index === current.eraIndex;
                 return (
@@ -228,7 +268,10 @@ export function HistoryTimeline() {
                       onClick={() => open(eraStart[index])}
                       aria-current={isCurrent ? "true" : undefined}
                       className={cn(
-                        "flex items-center gap-2.5 text-[0.9375rem] font-medium tracking-[-0.01em] whitespace-nowrap transition-opacity duration-500 outline-none motion-reduce:transition-none",
+                        // Four spans in one row on a phone, with the mark
+                        // under the label rather than beside it: the column
+                        // has the height to spare and none of the width.
+                        "flex flex-col-reverse items-center gap-1.5 text-[0.75rem] font-medium tracking-[-0.01em] whitespace-nowrap transition-opacity duration-500 outline-none sm:text-[0.875rem] lg:flex-row lg:gap-2.5 lg:text-[0.9375rem] motion-reduce:transition-none",
                         "focus-visible:underline focus-visible:underline-offset-[6px] focus-visible:opacity-100",
                         isCurrent ? "opacity-100" : "opacity-30 hover:opacity-70",
                       )}
@@ -250,8 +293,26 @@ export function HistoryTimeline() {
             {/* Photograph and index, bottom-aligned with each other. The
                 photograph is sized off the window's height as well as its
                 width, so the pinned screen holds it whole on a laptop. */}
-            <div className="flex shrink-0 items-end gap-4">
-              <div className="relative aspect-[900/1114] w-[min(var(--photo),52svh)] overflow-hidden rounded-[4px] bg-muted [--photo:15.5rem] sm:[--photo:19rem] lg:[--photo:21rem] xl:[--photo:24rem]">
+            <div
+              className={cn(
+                "flex items-end gap-4 lg:shrink-0",
+                // Whatever the rail and the record leave of the screen, down
+                // to a floor and up to a ceiling, so the frame neither
+                // swallows a tall screen nor crushes a short one.
+                isPinned &&
+                  "max-h-96 min-h-36 w-full flex-1 justify-center gap-3 sm:gap-4 lg:max-h-none lg:min-h-0 lg:w-auto lg:flex-none",
+              )}
+            >
+              <div
+                className={cn(
+                  "relative aspect-[900/1114] w-[min(var(--photo),52svh)] overflow-hidden rounded-[4px] bg-muted [--photo:15.5rem] sm:[--photo:19rem] lg:[--photo:21rem] xl:[--photo:24rem]",
+                  // Height first and width off the shape, which is the other
+                  // way round from the laptop: there the width is what is
+                  // scarce, here it is the height.
+                  isPinned &&
+                    "h-full w-auto lg:h-auto lg:w-[min(var(--photo),52svh)]",
+                )}
+              >
                 {/* The settled photograph. All four are in the frame rather
                     than only the open one, so that by the time a tile asks
                     for the next one it is already in the cache - a tile whose
@@ -339,7 +400,14 @@ export function HistoryTimeline() {
             </div>
 
             {/* The record. All twelve are here; one is shown. */}
-            <div className="grid w-full max-w-[28rem] lg:shrink">
+            <div
+              className={cn(
+                "grid w-full max-w-[28rem] lg:shrink",
+                // The record is read in full or the pin is not worth having,
+                // so it is the photograph above it that gives way, not this.
+                isPinned && "shrink-0",
+              )}
+            >
               {slides.map((slide, index) => (
                 <div
                   key={`${slide.era.period}-${slide.entry.title}`}
@@ -349,10 +417,10 @@ export function HistoryTimeline() {
                     index === active ? "opacity-100" : "opacity-0",
                   )}
                 >
-                  <h3 className="text-xl leading-snug font-medium tracking-[-0.02em] text-balance sm:text-[1.375rem]">
+                  <h3 className="text-lg leading-snug font-medium tracking-[-0.02em] text-balance sm:text-[1.375rem]">
                     {slide.entry.title}
                   </h3>
-                  <p className="mt-5 text-[0.9375rem] leading-[1.75] text-foreground/65 hyphens-auto lg:text-justify">
+                  <p className="mt-4 text-[0.875rem] leading-[1.7] text-foreground/65 hyphens-auto sm:mt-5 sm:text-[0.9375rem] sm:leading-[1.75] lg:text-justify">
                     {slide.entry.body}
                   </p>
                 </div>

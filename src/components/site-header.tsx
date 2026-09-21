@@ -67,7 +67,14 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        {/* `lg`, not `md`. The four Mongolian labels come to 874px with the
+            wordmark, the two toggles and the two buttons beside them, and `md`
+            turned them on at 768: the links wrapped to three lines inside a
+            64px bar, and the wordmark and "Нүүр" were drawn on top of each
+            other. They only sit on one line from about 1000px, so the bar
+            keeps the menu button until `lg` — which is where the container
+            also stops being the whole window. */}
+        <nav className="hidden items-center gap-1 lg:flex">
           {links.map((link) => {
             const isActive =
               link.href === "/"
@@ -79,7 +86,7 @@ export function SiteHeader() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "relative rounded-full px-3.5 py-2 text-sm transition-opacity",
+                  "relative rounded-full px-3.5 py-2 text-sm whitespace-nowrap transition-opacity",
                   isActive ? "opacity-100" : "opacity-65 hover:opacity-100",
                 )}
               >
@@ -131,7 +138,7 @@ export function SiteHeader() {
             aria-label={isOpen ? "Цэс хаах" : "Цэс нээх"}
             aria-expanded={isOpen}
             onClick={() => setIsOpen((open) => !open)}
-            className="rounded-full md:hidden"
+            className="rounded-full lg:hidden"
           >
             {isOpen ? <X className="size-4" /> : <Menu className="size-4" />}
           </Button>
@@ -139,7 +146,7 @@ export function SiteHeader() {
       </div>
 
       {isOpen && (
-        <nav className="border-t border-border/70 bg-background px-6 pb-5 text-foreground md:hidden">
+        <nav className="border-t border-border/70 bg-background px-6 pb-5 text-foreground lg:hidden">
           {links.map((link) => (
             <Link
               key={link.href}
