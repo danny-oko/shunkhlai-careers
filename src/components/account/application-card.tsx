@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import type { ApplicationRow } from "@/lib/api/applications";
 import {
-  formatApplicationDate,
+  displayApplicationDate,
   salaryText,
   statusLabel,
   statusTone,
@@ -83,8 +83,8 @@ export function ApplicationCard({
 
   const tone = statusTone(row.statusname);
   const salary = salaryText(row.salaryname);
-  const available = formatApplicationDate(row.availabledate);
-  const sent = formatApplicationDate(row.senddate);
+  const available = displayApplicationDate(row.availabledate);
+  const sent = displayApplicationDate(row.senddate);
   const place = [row.companyname, row.locname].filter(Boolean);
   const titleId = `application-${String(row.entryid)}-title`;
 
