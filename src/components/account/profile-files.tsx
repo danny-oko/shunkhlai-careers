@@ -59,9 +59,6 @@ export function PhotoUpload() {
 
       <div>
         <p className="font-medium">Профайл зураг</p>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Сервер талд автоматаар багасгаж хадгална.
-        </p>
         <Button
           type="button"
           variant="outline"

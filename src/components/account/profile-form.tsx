@@ -101,15 +101,17 @@ export const ProfileForm = () => {
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
+      <div className="flex flex-col items-end gap-2">
+        <SubmitButton isSaving={isSaving} />
+        <FormMessage message={error} />
+      </div>
+
       <PersonalSection values={values} set={set} profile={profile} />
       <LicenceSection values={values} toggle={toggle} />
       <AddressSection values={values} set={set} {...lists} />
       <ContactSection values={values} set={set} relatives={lists.relatives} />
       <OtherSection values={values} set={set} />
 
-      <FormMessage message={error} />
-
-      <SubmitButton isSaving={isSaving} />
     </form>
   );
 };
