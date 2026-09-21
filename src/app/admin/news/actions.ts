@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { parseBody } from "@/lib/news/blocks";
 import { articleFieldErrors, articleFormSchema, coverFileError } from "@/lib/news/schema";
 import { requireAdmin } from "@/server/admin/guard";
 import {
@@ -109,7 +108,7 @@ export async function saveArticleAction(
     coverPatch = { coverKey: null };
   }
 
-  const { body, removeCover: _removeCover, ...fields } = parsed.data;
+  const { removeCover: _removeCover, ...fields } = parsed.data;
 
   // There is one lead slot, so promoting from the editor has to demote the
   // incumbent the same way the star in the list does. Done before the save so
@@ -119,7 +118,6 @@ export async function saveArticleAction(
   const article = saveArticle({
     id,
     ...fields,
-    body: parseBody(body),
     ...coverPatch,
   });
 

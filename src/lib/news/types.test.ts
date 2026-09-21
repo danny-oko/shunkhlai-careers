@@ -10,6 +10,8 @@ import {
   isNewsCategory,
   readingMinutes,
 } from "./types";
+import { blocksToDoc } from "./legacy";
+import { emptyDoc } from "./shared/rich-text";
 import type { NewsBlock, NewsCategory } from "./types";
 
 /**
@@ -66,12 +68,14 @@ describe("formatNewsDateShort", () => {
 
 describe("readingMinutes", () => {
   /** `count` single-word paragraphs — the cheapest way to hit a word target. */
-  function words(count: number): NewsBlock[] {
-    return [{ kind: "paragraph", text: Array.from({ length: count }, () => "үг").join(" ") }];
+  function words(count: number) {
+    return blocksToDoc([
+      { kind: "paragraph", text: Array.from({ length: count }, () => "үг").join(" ") },
+    ]);
   }
 
   it("floors at one minute for an empty body", () => {
-    expect(readingMinutes([])).toBe(1);
+    expect(readingMinutes(emptyDoc())).toBe(1);
   });
 
   it("floors at one minute for a body far under 180 words", () => {
@@ -98,16 +102,17 @@ describe("readingMinutes", () => {
 
     // 181 words across three kinds: a counter that only reads paragraphs would
     // answer 1 here.
-    expect(readingMinutes(body)).toBe(2);
+    expect(readingMinutes(blocksToDoc(body))).toBe(2);
   });
 });
 
 describe("bodyExcerpt", () => {
-  const body: NewsBlock[] = [
+  const blocks: NewsBlock[] = [
     { kind: "paragraph", text: "Шунхлай Групп өнөөдөр шинэ терминалаа нээлээ." },
     { kind: "heading", text: "Хүчин чадал" },
     { kind: "paragraph", text: "Терминал 12 мянган тонн хүчин чадалтай." },
   ];
+  const body = blocksToDoc(blocks);
 
   it("returns plain text with no block syntax in it", () => {
     const excerpt = bodyExcerpt(body);
@@ -131,12 +136,12 @@ describe("bodyExcerpt", () => {
   });
 
   it("does not pad or truncate a body already under the max", () => {
-    expect(bodyExcerpt([{ kind: "paragraph", text: "Богино." }], 200)).toBe("Богино.");
+    expect(bodyExcerpt(blocksToDoc([{ kind: "paragraph", text: "Богино." }]), 200)).toBe("Богино.");
   });
 
   it("returns an empty string for an empty body", () => {
-    expect(bodyExcerpt([])).toBe("");
-    expect(bodyExcerpt([], 10)).toBe("");
+    expect(bodyExcerpt(emptyDoc())).toBe("");
+    expect(bodyExcerpt(emptyDoc(), 10)).toBe("");
   });
 
   it("does not throw when max is smaller than the first word", () => {

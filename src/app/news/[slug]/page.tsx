@@ -115,7 +115,7 @@ export default async function ArticlePage({ params }: PageProps<"/news/[slug]">)
           )}
 
           <div className="pb-14">
-            <ArticleBody blocks={article.body} />
+            <ArticleBody doc={article.body} />
           </div>
 
           <footer className="news-measure mx-auto pb-12">

@@ -2,11 +2,12 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
+import { coerceBody } from "@/lib/news/legacy";
+import type { RichDoc } from "@/lib/news/shared/rich-text";
 import { uniqueSlug } from "@/lib/news/shared/slug";
 import {
   NEWS_CATEGORIES,
   type NewsArticle,
-  type NewsBlock,
   type NewsCategory,
   type NewsStatus,
 } from "@/lib/news/types";
@@ -128,14 +129,25 @@ function nowIso(): string {
 
 /* --- load --------------------------------------------------------------- */
 
+/**
+ * Files written before rich text hold `NewsBlock[]` bodies. Reading them
+ * through `coerceBody` means an old `.mock-data/news.json` still loads; the
+ * next save writes the new shape.
+ */
+function withDocBodies(articles: NewsArticle[]): NewsArticle[] {
+  return articles.map((article) => ({ ...article, body: coerceBody(article.body) }));
+}
+
 function loadDb(): Db {
   const saved = readFile<PersistedArticles | NewsArticle[] | null>(articlesFile, null);
   const media = readFile<Record<string, MediaRecord>>(mediaFile, {});
 
   // An array is the shape an earlier build wrote. Reading it as already-seeded
   // is the right guess: it only exists because that build seeded it.
-  if (Array.isArray(saved)) return { articles: saved, media, seeded: true };
-  if (saved?.seeded) return { articles: saved.articles ?? [], media, seeded: true };
+  if (Array.isArray(saved)) return { articles: withDocBodies(saved), media, seeded: true };
+  if (saved?.seeded) {
+    return { articles: withDocBodies(saved.articles ?? []), media, seeded: true };
+  }
 
   // First run on this machine. The desk is seeded rather than empty because an
   // empty newsroom cannot be reviewed: there is no way to see the front page,
@@ -237,7 +249,7 @@ export type SaveInput = {
   author: string;
   publishedAt: string;
   coverAlt: string;
-  body: NewsBlock[];
+  body: RichDoc;
   status: NewsStatus;
   featured: boolean;
   /**
