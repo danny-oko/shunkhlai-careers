@@ -68,7 +68,7 @@ export default async function ArticlePage({ params }: PageProps<"/news/[slug]">)
             className="inline-flex items-center gap-1.5 type-kicker tracking-[0.14em] text-muted-foreground uppercase transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ArrowLeft aria-hidden className="size-3" />
-            Шунхлай Мэдээ
+            Бүх мэдээ
           </Link>
         </div>
 
@@ -119,8 +119,15 @@ export default async function ArticlePage({ params }: PageProps<"/news/[slug]">)
           </div>
 
           <footer className="news-measure mx-auto pb-12">
-            <p className="border-t border-border pt-4 type-kicker tracking-[0.14em] text-muted-foreground uppercase">
-              {categoryLabel(article.category)} · {article.author}
+            <p className="flex flex-wrap items-center gap-x-2 border-t border-border pt-4 type-kicker tracking-[0.14em] text-muted-foreground uppercase">
+              <Link
+                href={`/news?category=${article.category}`}
+                className="underline underline-offset-4 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                {categoryLabel(article.category)}
+              </Link>
+              <span aria-hidden>·</span>
+              {article.author}
             </p>
           </footer>
         </article>

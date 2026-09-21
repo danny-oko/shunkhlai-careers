@@ -5,18 +5,17 @@ import { CheckCircle2, FileText, Newspaper, Plus } from "lucide-react";
 import { ArticleRow } from "@/components/admin/article-row";
 import { Button } from "@/components/ui/button";
 import { getAdminArticles } from "@/lib/news/service";
-import type { NewsArticle } from "@/lib/news/types";
+import { NEWS_STATUSES, type NewsArticle, type NewsStatus } from "@/lib/news/types";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-const FILTERS = [
-  { value: "all", label: "Бүгд" },
-  { value: "published", label: "Нийтлэгдсэн" },
-  { value: "draft", label: "Ноорог" },
-] as const;
+type Filter = "all" | NewsStatus;
 
-type Filter = (typeof FILTERS)[number]["value"];
+const FILTERS: ReadonlyArray<{ value: Filter; label: string }> = [
+  { value: "all", label: "Бүгд" },
+  ...NEWS_STATUSES.map(({ value, label }) => ({ value, label })),
+];
 
 function read(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? "";
@@ -166,12 +165,19 @@ export default async function AdminNewsPage({
           <p className="news-headline text-lg">
             {status === "all" ? "Мэдээ байхгүй байна." : "Энэ төлөвт мэдээ байхгүй."}
           </p>
-          <Button asChild size="sm" className="mt-5">
-            <Link href="/admin/news/new">
-              <Plus aria-hidden />
-              Эхний мэдээг бичих
-            </Link>
-          </Button>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            {status !== "all" && (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/admin/news">Бүгд</Link>
+              </Button>
+            )}
+            <Button asChild size="sm">
+              <Link href="/admin/news/new">
+                <Plus aria-hidden />
+                {status === "all" ? "Эхний мэдээг бичих" : "Шинэ мэдээ"}
+              </Link>
+            </Button>
+          </div>
         </div>
       )}
     </main>

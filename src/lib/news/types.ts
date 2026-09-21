@@ -17,6 +17,28 @@ export type NewsBlock =
 
 export type NewsStatus = "draft" | "published";
 
+/**
+ * The two states, in the order the admin offers them. Labels and hints live
+ * here so the desk's filter, the row badge and the editor say the same thing
+ * about a story, and so the hint says what a reader can see.
+ */
+export const NEWS_STATUSES: ReadonlyArray<{
+  value: NewsStatus;
+  label: string;
+  hint: string;
+}> = [
+  { value: "published", label: "Нийтлэгдсэн", hint: "Сайтад харагдаж байна" },
+  { value: "draft", label: "Ноорог", hint: "Сайтад харагдахгүй" },
+];
+
+export function statusLabel(value: NewsStatus): string {
+  return NEWS_STATUSES.find((status) => status.value === value)?.label ?? "";
+}
+
+export function statusHint(value: NewsStatus): string {
+  return NEWS_STATUSES.find((status) => status.value === value)?.hint ?? "";
+}
+
 export type NewsArticle = {
   /** `art_` plus 10 hex. */
   id: string;

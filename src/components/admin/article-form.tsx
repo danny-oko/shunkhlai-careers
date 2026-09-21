@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Eye, ImageOff, Loader2, PencilLine, Save, Upload } from "lucide-react";
+import { ExternalLink, Eye, ImageOff, Loader2, PencilLine, Save, Upload } from "lucide-react";
 
 import { type ArticleActionState, saveArticleAction } from "@/app/admin/news/actions";
 import { FieldShell } from "@/components/admin/field-shell";
@@ -23,6 +23,8 @@ import {
   type NewsArticle,
   type NewsCategory,
   coverUrl,
+  statusHint,
+  statusLabel,
 } from "@/lib/news/types";
 import { cn } from "@/lib/utils";
 
@@ -132,6 +134,15 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
 
+  // The baseline is what the form opened with, so "unsaved" means "differs
+  // from what is on the desk", not "was touched". A save redirects away, so
+  // there is no in-place "saved" state to track.
+  const [baseline] = React.useState<Draft>(draft);
+  const dirty =
+    removeCover ||
+    coverPreview !== null ||
+    (Object.keys(baseline) as Array<keyof Draft>).some((key) => baseline[key] !== draft[key]);
+
   const errors = state.fieldErrors ?? {};
   const blocks = React.useMemo(() => parseBody(draft.body), [draft.body]);
 
@@ -145,7 +156,13 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
   };
 
   return (
-    <form action={formAction} className="flex flex-1 flex-col">
+    <form
+      action={formAction}
+      // Errors live in the edit pane; a save from the preview would otherwise
+      // fail with the fields it names out of sight.
+      onSubmit={() => setPane("edit")}
+      className="flex flex-1 flex-col"
+    >
       {article && <input type="hidden" name="id" value={article.id} />}
       {/* The controls whose value lives in React state rather than in the
           input itself still have to reach the server. `status` is not among
@@ -160,8 +177,31 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
       <div className="sticky top-14 z-30 border-b border-border bg-background/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-5 py-2.5 lg:px-8">
           <Button asChild variant="ghost" size="sm">
-            <Link href="/admin/news">← Буцах</Link>
+            <Link href="/admin/news">← Мэдээний удирдлага</Link>
           </Button>
+
+          <p className="flex min-w-0 items-center gap-2 text-[0.75rem]">
+            <span className="font-medium">{article ? "Мэдээ засах" : "Шинэ мэдээ"}</span>
+            {article && (
+              <span
+                title={statusHint(article.status)}
+                className={cn(
+                  "px-1.5 py-0.5 text-[0.5625rem] font-semibold tracking-[0.12em] uppercase",
+                  article.status === "published"
+                    ? "bg-foreground text-background"
+                    : "border border-border text-muted-foreground",
+                )}
+              >
+                {statusLabel(article.status)}
+              </span>
+            )}
+            <span
+              aria-live="polite"
+              className={dirty ? "text-destructive" : "text-muted-foreground"}
+            >
+              {dirty ? "Хадгалаагүй өөрчлөлттэй" : ""}
+            </span>
+          </p>
 
           <div className="ml-auto flex items-center gap-2">
             {/* Compact segmented toggle. Only needed below lg, where the two
@@ -189,6 +229,15 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                 </button>
               ))}
             </div>
+
+            {article?.status === "published" && (
+              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+                <Link href={`/news/${article.slug}`} target="_blank" rel="noreferrer">
+                  <ExternalLink aria-hidden />
+                  Нийтлэг харах
+                </Link>
+              </Button>
+            )}
 
             <Button
               type="submit"

@@ -54,11 +54,11 @@ export function AdminBar() {
             <Button
               type="submit"
               variant="ghost"
-              size="icon-sm"
+              size="sm"
               aria-label="Гарах"
-              title="Гарах"
             >
               <LogOut aria-hidden />
+              <span className="hidden sm:inline">Гарах</span>
             </Button>
           </form>
         </div>
