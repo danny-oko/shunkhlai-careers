@@ -37,7 +37,8 @@ export function SiteHeader() {
   const { isSignedIn: isClerkSignedIn } = useAuth();
   // The applicant session follows Clerk; reading Clerk directly as well keeps
   // "Нэвтрэх" hidden for a signed-in visitor during the first render.
-  const isAuthenticated = status === "authenticated" || isClerkSignedIn === true;
+  const isAuthenticated =
+    status === "authenticated" || isClerkSignedIn === true;
   const [isScrolled, setIsScrolled] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -49,8 +50,7 @@ export function SiteHeader() {
   }, []);
 
   const isLifted = isScrolled || isOpen;
-  const isCareers =
-    pathname === "/careers" || pathname.startsWith("/careers/");
+  const isCareers = pathname === "/careers" || pathname.startsWith("/careers/");
 
   return (
     <header

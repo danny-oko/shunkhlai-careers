@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Ubuntu_Sans, Ubuntu_Sans_Mono } from "next/font/google";
-import { ThemeProvider } from "@/components/theme-provider";
+  import { ThemeProvider } from "@/components/theme-provider";
 import { PaletteProvider } from "@/components/palette-provider";
 import { SessionProvider } from "@/components/auth/session-provider";
 // import { CursorRing } from "@/components/cursor-ring";
