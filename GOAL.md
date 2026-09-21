@@ -27,13 +27,21 @@ Each line is either true or false. No line should need a judgement call.
 - [ ] All candidate-facing copy is Mongolian, including errors and empty states
 - [ ] A backend outage shows a message, not a 500
 
+## In scope (added 2026-09-21 by the owner)
+
+- One consistent, designed **Select** and **DatePicker** replacing every native
+  `<select>` and `<input type="date">` (apply form, `/account/*`, admin article
+  form). Control swap only: no form logic, validation or payload changes.
+
 ## Not this cycle
 
 The part that lets the loop say **no**. Anything here gets reported as Noise,
 however tempting.
 
 - Visual polish on pages that already work — hero variants, animation, spacing
+  (exception: the shared Select / DatePicker work under "In scope" below)
 - The `/account/*` section beyond what applying requires
+  (exception: swapping its dropdowns and date inputs for the shared controls)
 - Admin or recruiter tooling
 - Test coverage beyond the three modules already covered, unless a bug lands
   in code that is on the critical path above
