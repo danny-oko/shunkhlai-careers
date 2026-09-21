@@ -261,16 +261,16 @@ export type ErpSnapshot = {
   applications: Row[] | null;
 };
 
-export type SnapshotEffect = { cv: boolean; picture: boolean };
+export type SnapshotEffect = { picture: boolean };
 
 /**
  * Merges a pull into the document. The profile is left alone while a local
- * edit is unpushed; files only change when their content hash changed and no
+ * edit is unpushed; the photo only changes when its content hash changed and no
  * local upload is waiting. Returns which files `saveAccount` must write.
  */
 export function applySnapshot(doc: ApplicantDoc, snap: ErpSnapshot, now: Date): SnapshotEffect {
   const erp: DocErp = (doc.erp ??= {});
-  const effect: SnapshotEffect = { cv: false, picture: false };
+  const effect: SnapshotEffect = { picture: false };
 
   if (snap.record && !erp.profileDirty) {
     const first = !erp.pulledAt;
@@ -297,7 +297,6 @@ export function applySnapshot(doc: ApplicantDoc, snap: ErpSnapshot, now: Date): 
   }
 
   if (snap.record) {
-    effect.cv = pullCv(doc, erp, snap.record);
     effect.picture = pullPicture(doc, erp, snap.record);
   }
 
@@ -305,27 +304,6 @@ export function applySnapshot(doc: ApplicantDoc, snap: ErpSnapshot, now: Date): 
   erp.pullFailures = 0;
   delete erp.pullFailedAt;
   return effect;
-}
-
-function pullCv(doc: ApplicantDoc, erp: DocErp, record: Row): boolean {
-  if (erp.cvDirty) return false;
-  const data = typeof record.filedata === "string" ? record.filedata : "";
-  if (data) {
-    const hash = hashOf(data);
-    if (hash === erp.cvHash && doc.cv) return false;
-    doc.cv = { filename: String(record.filename ?? "cv"), filedata: data };
-    erp.cvHash = hash;
-    return true;
-  }
-  if (!doc.cv) return false;
-  if (erp.cvHash) {
-    // It was in sync and the ERP no longer has it: removed there.
-    doc.cv = null;
-    delete erp.cvHash;
-    return true;
-  }
-  erp.cvDirty = Date.now(); // uploaded here, never pushed
-  return false;
 }
 
 function pullPicture(doc: ApplicantDoc, erp: DocErp, record: Row): boolean {
@@ -390,12 +368,6 @@ export function recordLocalChange(
 
   if (endpoint === "SaveHrApplicant") {
     erp.profileDirty = now;
-  } else if (endpoint === "SaveAppCV") {
-    erp.cvDirty = now;
-  } else if (endpoint === "deleteAppCV") {
-    // Only an ERP-held CV needs deleting there; a local-only one just goes.
-    if (erp.cvHash) erp.cvDirty = now;
-    else delete erp.cvDirty;
   } else if (endpoint === "SaveAppPicture") {
     erp.pictureDirty = now;
   } else if (endpoint === "DeleteOrderApp") {
@@ -415,7 +387,7 @@ export function recordLocalChange(
 /** Local non-application work waiting for the ERP. */
 export function hasLocalWork(doc: ApplicantDoc): boolean {
   const erp = doc.erp;
-  if (erp?.profileDirty || erp?.cvDirty || erp?.pictureDirty) return true;
+  if (erp?.profileDirty || erp?.pictureDirty) return true;
   if (erp?.pendingDeletes?.length) return true;
   return SECTIONS.some((s) => s.save && doc[s.key].some((row) => row.erp === "pending"));
 }

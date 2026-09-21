@@ -2,11 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, FileText } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 import { useRequestCount } from "@/components/account/use-request-count";
 import { displayName } from "@/components/auth/session-provider";
-import { Button } from "@/components/ui/button";
 import { pictureSrc, type ApplicantProfile } from "@/lib/api/profile";
 
 type ProfileProps = { profile: ApplicantProfile };
@@ -107,26 +106,3 @@ export const OverviewMeters = ({ profile }: ProfileProps) => (
     </ul>
   </section>
 );
-
-const CvName = ({ filename }: { filename: string }) => (
-  <p className="text-muted-foreground text-sm">{filename || "Хавсаргаагүй байна."}</p>
-);
-
-export const OverviewCv = ({ profile }: ProfileProps) => {
-  const filename = profile.filename ?? "";
-
-  return (
-    <section className="border-border/70 flex flex-wrap items-center justify-between gap-4 rounded-xl border p-6">
-      <div className="flex items-center gap-3">
-        <FileText className="text-muted-foreground size-5" />
-        <div>
-          <p className="font-medium">CV</p>
-          <CvName filename={filename} />
-        </div>
-      </div>
-      <Button asChild variant="outline" className="h-9 rounded-full px-4">
-        <Link href="/account/profile">{filename ? "Солих" : "Хавсаргах"}</Link>
-      </Button>
-    </section>
-  );
-};

@@ -105,7 +105,7 @@ export const applicantAccount = sqliteTable(
     id: text("id").primaryKey(),
     email: text("email").notNull(),
     clerkUserId: text("clerk_user_id"),
-    // profile, education, languages, …, applications, cv/picture metadata, nextEntryId
+    // profile, education, languages, …, applications, picture metadata, nextEntryId
     dataJson: text("data_json").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" })
       .notNull()
@@ -120,16 +120,15 @@ export const applicantAccount = sqliteTable(
 );
 
 /**
- * The CV and profile photo (base64), split into chunks: D1 caps a single value
- * / row at 2 MB and a CV may be up to 5 MB (MAX_CV_BYTES) — ~6.7 MB as base64.
+ * The profile photo (base64), split into chunks: D1 caps a single value / row
+ * at 2 MB.
  */
 export const applicantFile = sqliteTable(
   "applicant_file",
   {
     id: text("id").primaryKey(),
     email: text("email").notNull(),
-    kind: text("kind").notNull(), // cv | picture
-    filename: text("filename"),
+    kind: text("kind").notNull(), // picture
     chunkIndex: integer("chunk_index").notNull(),
     data: text("data").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" })

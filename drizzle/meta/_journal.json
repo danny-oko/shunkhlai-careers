@@ -15,6 +15,13 @@
       "when": 1789969649744,
       "tag": "0001_applicant_account",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789993187773,
+      "tag": "0002_drop_applicant_cv",
+      "breakpoints": true
     }
   ]
 }

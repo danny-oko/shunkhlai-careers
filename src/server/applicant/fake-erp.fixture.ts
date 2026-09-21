@@ -1,7 +1,7 @@
 /**
  * Test-only: a stateful fake of the live ERP (careers.shunkhlai.mn), served
  * through a `fetch` replacement. It holds the applicant's record, every list,
- * the CV/photo and the request list, assigns entry ids, and enforces the
+ * the photo and the request list, assigns entry ids, and enforces the
  * Postman collection's delete query-parameter casing. Nothing here talks to the
  * network.
  */
@@ -162,21 +162,10 @@ export class FakeErp {
         return env(L.requests.map(({ recruitmentorderid: _drop, ...row }) => row));
       case "SaveHrApplicant": {
         // Full replace: whatever is not sent is reset (files are separate).
-        const { filedata, filename, picturedata } = this.record;
-        this.record = { ...(body as Row), filedata, filename, picturedata };
+        const { picturedata } = this.record;
+        this.record = { ...(body as Row), picturedata };
         return env(true);
       }
-      case "SaveAppCV": {
-        const f = body as { filename: string; bytes: string } | null;
-        if (!f) return env(null, 1, "file not selected");
-        this.record.filedata = f.bytes;
-        this.record.filename = f.filename;
-        return env(true);
-      }
-      case "deleteAppCV":
-        this.record.filedata = null;
-        this.record.filename = null;
-        return env(true);
       case "SaveAppPicture": {
         const f = body as { bytes: string } | null;
         this.record.picturedata = f?.bytes ?? null;
