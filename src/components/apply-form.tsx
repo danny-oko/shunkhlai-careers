@@ -105,9 +105,6 @@ export const ApplyForm = ({
 
     <SheetFooter className="border-border/70 mt-0 gap-3 border-t px-6 py-4">
       <SubmitButton isSending={apply.isSending} />
-      <p className="text-muted-foreground text-center text-xs leading-relaxed">
-        Илгээснээр таны хадгалсан анкет энэ ажлын байранд хавсрагдана.
-      </p>
     </SheetFooter>
   </form>
 );
