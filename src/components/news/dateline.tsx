@@ -29,7 +29,7 @@ export function Dateline({
   return (
     <p
       className={cn(
-        "flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.6875rem] tracking-[0.08em] text-muted-foreground uppercase",
+        "flex flex-wrap items-center gap-x-2 gap-y-1 type-kicker tracking-[0.08em] text-muted-foreground uppercase",
         className,
       )}
     >

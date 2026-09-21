@@ -58,7 +58,7 @@ export function CategoryRail({
             href={item.href}
             aria-current={item.isActive ? "page" : undefined}
             className={cn(
-              "relative shrink-0 py-3 text-[0.6875rem] tracking-[0.14em] whitespace-nowrap uppercase transition-colors",
+              "relative shrink-0 py-3 type-kicker tracking-[0.14em] whitespace-nowrap uppercase transition-colors",
               "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
               item.isActive
                 ? "font-semibold text-foreground"
@@ -66,7 +66,7 @@ export function CategoryRail({
             )}
           >
             {item.label}
-            <span className="ml-1.5 text-[0.625rem] tabular-nums opacity-55">
+            <span className="ml-1.5 type-kicker tabular-nums opacity-55">
               {item.count}
             </span>
             {item.isActive && (

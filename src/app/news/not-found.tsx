@@ -11,8 +11,8 @@ export default function NewsNotFound() {
       data-newsroom
       className="flex flex-1 items-center bg-background pt-16 text-foreground"
     >
-      <div className="mx-auto w-full max-w-6xl px-6 py-24 lg:px-10">
-        <div className="border-y border-border py-16 text-center">
+      <div className="mx-auto w-full max-w-6xl px-6 py-section lg:px-10">
+        <div className="border-y border-border py-block text-center">
           <p className="news-kicker">404</p>
           <h1 className="news-headline mt-4 text-3xl sm:text-4xl">
             Мэдээ олдсонгүй
@@ -22,7 +22,7 @@ export default function NewsNotFound() {
           </p>
           <Link
             href="/news"
-            className="mt-7 inline-flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.14em] uppercase focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="mt-7 inline-flex items-center gap-1.5 type-kicker font-semibold tracking-[0.14em] uppercase focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             style={{ color: "var(--paper-accent)" }}
           >
             <ArrowLeft aria-hidden className="size-3.5" />

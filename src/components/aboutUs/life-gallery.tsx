@@ -39,7 +39,7 @@ export function LifeGallery() {
   return (
     <section
       id="life"
-      className="relative scroll-mt-20 bg-ink py-20 text-ink-foreground lg:py-28"
+      className="relative scroll-mt-20 bg-ink py-section text-ink-foreground"
     >
       <SectionRule />
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
@@ -51,10 +51,13 @@ export function LifeGallery() {
             and the list pushed down into the middle of nowhere. */}
         <div className="grid items-center gap-12 lg:grid-cols-[1.4fr_1fr] lg:gap-16">
           <Reveal>
-            <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-ink-muted uppercase">
+            {/* `type-eyebrow`, not `type-kicker`: this label was already set at
+                13px and the kicker step floors at 11, so the denser role would
+                have made it smaller on a phone than it is today. */}
+            <p className="type-eyebrow font-medium tracking-[0.14em] text-ink-muted uppercase">
               Ажилтны түүх · Life at Shunkhlai
             </p>
-            <h2 className="mt-5 text-xl font-semibold tracking-[-0.02em] sm:text-2xl">
+            <h2 className="mt-5 type-section font-semibold tracking-[-0.02em]">
               Бидний хамгийн…
             </h2>
 
@@ -75,7 +78,7 @@ export function LifeGallery() {
                     // than left to whoever cannot see which poster is up.
                     aria-label={`${claim(item.headline)} - ${item.name}, ${item.role}`}
                     className={cn(
-                      "block w-full py-4 text-left text-xl leading-[1.15] font-semibold tracking-[-0.03em] text-balance transition-colors duration-300 outline-none sm:text-[1.625rem] motion-reduce:transition-none",
+                      "block w-full py-4 text-left type-section leading-[1.15] font-semibold tracking-[-0.03em] text-balance transition-colors duration-300 outline-none motion-reduce:transition-none",
                       "focus-visible:text-brand",
                       index === active ? "text-ink-foreground" : "text-ink-foreground/30",
                     )}

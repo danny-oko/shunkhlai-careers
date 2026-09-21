@@ -62,6 +62,24 @@ const BOUNDS = { x: [130, 540], y: [60, 200], z: [130, 540] } as const;
 const TILE = 0.16;
 
 /**
+ * And never narrower than this, for the same reason the lockups have a floor.
+ *
+ * The share above is the reference's, and the reference is a desktop: it is
+ * taken of a radius that is itself already held at `BOUNDS.x`, so on a phone
+ * the two floors compound. A 390 screen gives the stage 342, the radius comes
+ * out at 123 and is held up to 130, and 16% of that is a picture of a person
+ * 21 pixels across - front tiles about 42, back ones 14. What the wall reads
+ * as at that size is not a wall of photographs, it is confetti: twelve specks
+ * scattered over an empty screen, which is what a phone had been showing.
+ *
+ * The note under LOGO_MIN says a photograph survives being small because it is
+ * still a picture of someone. That holds down to a point, and 21px is well
+ * under it. At the floor below, the same phone draws the front of the sphere
+ * at about 96px and the back at 32, which is a wall.
+ */
+const TILE_MIN = 48;
+
+/**
  * What a lockup tile takes of that instead.
  *
  * A photograph reads at a glance from any size; a wordmark has to be read, and
@@ -336,7 +354,7 @@ export function SphereGallery({
     }),
     [stage.w, stage.h],
   );
-  const tile = radius.x * TILE;
+  const tile = Math.max(radius.x * TILE, TILE_MIN);
 
   // Read by the frame loop, so holding a tile does not restart it: the loop
   // closes over this ref once and checks it sixty times a second.
@@ -441,7 +459,7 @@ export function SphereGallery({
                 pad="p-[6%]"
               />
             </span>
-            <span className="mt-2 block text-[0.6875rem] text-muted-foreground">
+            <span className="mt-2 block type-kicker text-muted-foreground">
               {item.title}
             </span>
           </button>
@@ -508,7 +526,7 @@ export function SphereGallery({
                 named where it is, the caption belongs to the tile the eye is
                 already on. `top-full` keeps it out of the tile's own box, so
                 it cannot push the picture off its point on the sphere. */}
-            <p className="absolute inset-x-[-3rem] top-full mt-2 text-center text-[0.6875rem] leading-snug tracking-[0.04em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <p className="absolute inset-x-[-3rem] top-full mt-2 text-center type-kicker leading-snug tracking-[0.04em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
               {item.title}
             </p>
           </div>

@@ -21,9 +21,19 @@ export type Stat = {
  * down to be rebuilt. Kept because this is HR's published copy, not scaffolding.
  */
 export const stats: Stat[] = [
-  { value: 30, suffix: "+", label: "жилийн туршлага", labelEn: "years of operation" },
+  {
+    value: 30,
+    suffix: "+",
+    label: "жилийн туршлага",
+    labelEn: "years of operation",
+  },
   { value: 21, label: "аймагт салбартай", labelEn: "provinces covered" },
-  { value: 99, suffix: "+", label: "шатахуун түгээх станц", labelEn: "fuel stations" },
+  {
+    value: 99,
+    suffix: "+",
+    label: "шатахуун түгээх станц",
+    labelEn: "fuel stations",
+  },
   { value: 8, label: "бүсийн агуулах", labelEn: "regional depots" },
 ];
 

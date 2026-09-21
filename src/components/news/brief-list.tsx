@@ -42,7 +42,7 @@ export function BriefList({
               <Dateline article={article} className="mt-1.5" />
             </span>
 
-            <span className="hidden shrink-0 text-[0.625rem] tracking-[0.14em] text-muted-foreground uppercase sm:block">
+            <span className="hidden shrink-0 type-kicker tracking-[0.14em] text-muted-foreground uppercase sm:block">
               {categoryLabel(article.category)}
             </span>
           </Link>

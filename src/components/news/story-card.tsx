@@ -46,7 +46,7 @@ export function StoryCard({
 
         {/* Three lines is the most a column of this width can hold without the
             card growing taller than its photograph is wide. */}
-        <p className="news-body mt-2 line-clamp-3 text-[0.9375rem] text-muted-foreground">
+        <p className="news-body news-body-card mt-2 line-clamp-3 text-muted-foreground">
           {article.lede}
         </p>
 

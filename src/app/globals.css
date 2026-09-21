@@ -45,6 +45,134 @@
   --radius-xl: calc(var(--radius) * 1.4);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
+
+  /* The fluid scale.
+
+     Every size here interpolates over the same runway — 360px of window to
+     1440px — so a step never lands at a different place on one page than on
+     another, and there is no breakpoint at which a whole screen of type
+     changes size at once.
+
+     It exists because the site had drifted into three habits at the same
+     time: fixed rem sizes that never grew (the newsroom's 10px kickers read
+     the same on a 1536 monitor as on a phone), `text-x sm:text-y` pairs that
+     jumped at one breakpoint and nowhere else, and bare `vw` sizes with no
+     floor. The roles below are the ones the pages actually use, named after
+     the job rather than the size, and each carries its own line height so a
+     caller never has to remember the pair.
+
+     The floor of every reading size is 15px and of every label 11px. Below
+     that Cyrillic at these weights stops being small and starts being a
+     texture — which is what 0.625rem was doing to the bylines.
+
+     The sizes themselves are declared as ordinary properties on `:root`
+     below, and the roles that use them are `@utility type-*` rules under
+     that. Two deliberate choices there, both forced by what else is in this
+     project:
+
+     - The numbers are `:root` properties rather than literals, because the
+       newsroom's `.news-*` rules are hand-written CSS that has to reach the
+       same sizes and cannot go through a Tailwind class.
+     - The roles are `type-kicker`, not `text-kicker`, because `cn` — this
+       repo's clsx + tailwind-merge — reads any `text-<name>` it does not
+       recognise as a *colour*. Given `cn("... text-kicker ...",
+       "text-muted-foreground")` it drops the size and keeps the colour, with
+       no error and nothing in the markup to show for it. Under its own
+       prefix the role is a class `cn` has no opinion about, so it survives.
+       The same trap is why `--spacing-section` is spent through `py-section`
+       and never combined with another `py-*` on one element: `cn` cannot
+       merge those two either, and the cascade, not the class list, would
+       decide the winner. */
+
+  /* Vertical rhythm, on the same runway.
+
+     `py-section` is the air around a whole section and `py-block` the air
+     between two things inside one. The pages had been reaching for `py-20`
+     and `py-28` — 80px and 112px flat — which is a desktop measure spent on
+     a phone, where it is most of a screen of nothing. */
+  --spacing-section: var(--fluid-section-space);
+  --spacing-block: var(--fluid-block-space);
+}
+
+/* The fluid scale's own numbers.
+
+   Each is `clamp(floor, intercept + slope, ceiling)` solved over 360px to
+   1440px of window, so every step reaches its floor and its ceiling at the
+   same two widths and the page never changes size in one place but not
+   another. Read the pairs as "phone, then desktop":
+
+     kicker   11 → 13      eyebrow  13 → 15      copy     15 → 17
+     read     17 → 19      lead     17 → 21      title    17 → 22
+     section  21 → 28      figure   30 → 48      display  34 → 84
+
+     section-space 48 → 112        block-space 32 → 64
+
+   `read` is the newsroom's serif and has no Tailwind role of its own; the
+   `.news-body` rule below is its only caller. */
+:root {
+  --fluid-kicker: clamp(0.6875rem, 0.6458rem + 0.1852vw, 0.8125rem);
+  --fluid-eyebrow: clamp(0.8125rem, 0.7708rem + 0.1852vw, 0.9375rem);
+  --fluid-copy: clamp(0.9375rem, 0.8958rem + 0.1852vw, 1.0625rem);
+  /* The newsroom's serif reading face, which runs a step above `copy`
+     because a serif at the same em reads smaller than the sans does. */
+  --fluid-read: clamp(1.0625rem, 1.0208rem + 0.1852vw, 1.1875rem);
+  --fluid-lead: clamp(1.0625rem, 0.9792rem + 0.3704vw, 1.3125rem);
+  --fluid-title: clamp(1.0625rem, 0.9583rem + 0.463vw, 1.375rem);
+  /* 21 → 28, not the 24 → 40 a scale of this shape would usually give it.
+     The site's own section headings were all written between 20 and 26, and a
+     step tuned against a generic ladder rather than against the pages it has
+     to sit on would have been a redesign wearing a fluid scale's clothes. */
+  --fluid-section: clamp(1.3125rem, 1.1667rem + 0.6481vw, 1.75rem);
+  --fluid-figure: clamp(1.875rem, 1.5rem + 1.6667vw, 3rem);
+  --fluid-display: clamp(2.125rem, 1.0833rem + 4.6296vw, 5.25rem);
+  --fluid-section-space: clamp(3rem, 1.6667rem + 5.9259vw, 7rem);
+  --fluid-block-space: clamp(2rem, 1.3333rem + 2.963vw, 4rem);
+}
+
+/* The roles, named after the job rather than the size. Each carries its own
+   line height, so a caller never has to remember the pair. */
+
+/* Uppercase, tracked labels: kickers, datelines, column headings. */
+@utility type-kicker {
+  font-size: var(--fluid-kicker);
+  line-height: 1.45;
+}
+/* The label over a section's own heading - "Бидний", "Ажилтны түүх". One step
+   up from a kicker, because it is read on its own rather than as part of a
+   dense run of metadata, and it is the only thing above the heading. */
+@utility type-eyebrow {
+  font-size: var(--fluid-eyebrow);
+  line-height: 1.45;
+}
+/* Card and caption copy. */
+@utility type-copy {
+  font-size: var(--fluid-copy);
+  line-height: 1.6;
+}
+/* Standfirsts and section intros - the paragraph that carries a section. */
+@utility type-lead {
+  font-size: var(--fluid-lead);
+  line-height: 1.55;
+}
+/* The name on a card: chain links, story cards, tile titles. */
+@utility type-title {
+  font-size: var(--fluid-title);
+  line-height: 1.3;
+}
+/* A section's own heading. */
+@utility type-section {
+  font-size: var(--fluid-section);
+  line-height: 1.15;
+}
+/* Figures that are read as a shape before they are read as a number. */
+@utility type-figure {
+  font-size: var(--fluid-figure);
+  line-height: 1;
+}
+/* The one-per-page display line: a newsroom masthead, a page title. */
+@utility type-display {
+  font-size: var(--fluid-display);
+  line-height: 1.02;
 }
 
 :root {
@@ -1022,7 +1150,7 @@
 .news-kicker {
   color: var(--paper-accent);
   font-family: var(--font-sans);
-  font-size: 0.6875rem;
+  font-size: var(--fluid-kicker);
   font-weight: 600;
   letter-spacing: 0.14em;
   line-height: 1;
@@ -1042,20 +1170,30 @@
 
 /* Reading type. 1.0625rem on a phone is the smallest body a long Mongolian
    paragraph stays comfortable at; the measure caps at 34em so a line never
-   runs past the ~75 characters the eye can track back from. */
+   runs past the ~75 characters the eye can track back from.
+
+   It used to step to 1.1875rem at 48rem and hold there. The step is now the
+   fluid one, so the paragraph grows with the window rather than jumping once
+   at a tablet and then staying a phone's size on everything wider. */
 .news-body {
   font-family: var(--font-serif);
-  font-size: 1.0625rem;
-  line-height: 1.75;
+  font-size: var(--fluid-read);
+  line-height: 1.72;
   letter-spacing: 0.003em;
   text-wrap: pretty;
 }
 
-@media (width >= 48rem) {
-  .news-body {
-    font-size: 1.1875rem;
-    line-height: 1.72;
-  }
+/* The same reading face at card size.
+
+   A card's lede is a summary in a column, not the article, and it was asking
+   for that with `text-[0.9375rem]`. It never got it: these `.news-*` rules sit
+   outside `@layer`, and unlayered CSS beats every layered one, so `.news-body`
+   was quietly overriding the utility and the ledes rendered at full reading
+   size - 19px where 15 was written. The size belongs in the same place the
+   rule it loses to is, so here it is. */
+.news-body-card {
+  font-size: var(--fluid-copy);
+  line-height: 1.6;
 }
 
 .news-measure {

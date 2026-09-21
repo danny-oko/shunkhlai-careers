@@ -4,10 +4,22 @@ import { BrandLockup } from "@/components/brand/brand-logo";
 import { DotWordmark } from "@/components/brand/dot-wordmark";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { SectionRule } from "@/components/brand/section-rule";
+import { cn } from "@/lib/utils";
 
 /** The label over each column of the footer. */
 const HEADING =
-  "text-[0.8125rem] font-medium tracking-[0.12em] text-muted-foreground uppercase";
+  "type-eyebrow font-medium tracking-[0.12em] text-muted-foreground uppercase";
+
+/**
+ * One row of any of the three lists.
+ *
+ * On the `li`, not on the link inside it. The two link columns used to put
+ * `text-sm` on the anchor and leave the `li` to inherit the body's 24px line,
+ * while the contact column put it on the `li` and got 20px — so the same
+ * 14px type stepped 34px in two columns and 30px in the third, three lists
+ * side by side on two different rhythms.
+ */
+const ROW = "text-sm";
 
 const columns = [
   {
@@ -52,20 +64,69 @@ const contact: Array<{ label: string; value: string; href?: string }> = [
   },
 ];
 
+/** The registered office, as it is printed at the foot of the page. */
+const OFFICE = "Капитал Хаус, Чингисийн өргөн чөлөө 48/1, Улаанбаатар-36";
+
+/**
+ * The company's own Google Maps listing - Шунхлай ХХК, at 47.8986222,
+ * 106.9027632.
+ *
+ * The listing, not a search for the address above it. Searching was tried
+ * first and was wrong: handed the printed address, Maps answers with a Capital
+ * House at 47.9144669, 106.9155284, which is two kilometres from where the
+ * company actually is. The address as printed and the place as pinned are not
+ * the same thing, and only the second of them can be linked to reliably.
+ *
+ * `cid` is that listing's own id - `0x126a828b13a3ad7` in the hex Maps writes
+ * into its URLs, in decimal here because that is the form `?cid=` takes. It
+ * opens the company's card rather than a dropped pin, and it keeps working if
+ * the wording of the address ever changes.
+ */
+const OFFICE_MAP = "https://www.google.com/maps?cid=82938535878474455";
+
 export function SiteFooter() {
   return (
     <footer className="relative bg-secondary/40">
       <SectionRule />
       <div className="mx-auto max-w-6xl px-6 py-14 lg:px-10">
+        {/* The mark stands above the columns rather than inside the first of
+            them. In the column it was 119px of artwork sitting where the other
+            three put a heading, so the description under it began a hundred
+            pixels below the first link in every other list and no two columns
+            started on the same line. Lifted out, the row below it holds four
+            things that all begin with type, and they begin together. */}
+        <BrandLockup className="h-20" sizes="132px" />
+        <GradientRule className="mt-3 max-w-20 rounded-full" />
+
         {/* Four equal columns left the whitespace lopsided: the lists are much
             shorter than the brand and contact blocks, so the slack all piled up
             on the right (53px, 128px, then 180px between them). Sized to their
-            content and spread instead, the four sit on even gaps. */}
-        <div className="grid gap-10 sm:grid-cols-2 lg:flex lg:justify-between">
+            content and spread instead, the four sit on even gaps.
+
+            Pulled up rather than merely un-spaced. The sentence has to carry a
+            heading's worth of blank above it to stay on the line the links
+            start on, so on its own that blank is a floor the gap under the
+            rule cannot go below - 53px, most of it invisible. Lifting the
+            whole row instead moves the labels and the sentence together, so
+            the alignment survives and the rule closes up on the sentence. The
+            labels end up level with the foot of the lockup, which costs
+            nothing: they are three columns away from it and there is nothing
+            above them. Only from `sm` - stacked, there is nothing to pull up
+            to. */}
+        <div className="mt-5 grid gap-10 sm:-mt-6 sm:grid-cols-2 lg:flex lg:justify-between">
           <div>
-            <BrandLockup className="h-20" sizes="132px" />
-            <GradientRule className="mt-4 max-w-[5rem] rounded-full" />
-            <p className="mt-5 max-w-xs text-sm leading-relaxed text-muted-foreground">
+            {/* A heading's worth of space, drawn in a heading so it is exactly
+                that and stays exactly that: the label is fluid, so any number
+                written here instead would be right at one window width and
+                wrong at every other. The sentence below then starts on the
+                line the first link of every other column starts on - which is
+                what the eye reads as the columns beginning together, not the
+                labels above them. Kept out of the flow below `sm`, where the
+                columns stack and there is nothing beside it to line up with. */}
+            <p className={cn(HEADING, "invisible hidden sm:block")} aria-hidden>
+              &nbsp;
+            </p>
+            <p className="max-w-xs text-sm leading-relaxed text-muted-foreground sm:mt-4">
               Хөдөлмөр - хөгжлийн хөдөлгүүр. 1993 оноос хойш Монгол улсын эрчим
               хүч, логистикийн дэд бүтцийг бүтээж байна.
             </p>
@@ -76,10 +137,10 @@ export function SiteFooter() {
               <p className={HEADING}>{column.title}</p>
               <ul className="mt-4 space-y-2.5">
                 {column.links.map((link) => (
-                  <li key={link.href + link.label}>
+                  <li key={link.href + link.label} className={ROW}>
                     <Link
                       href={link.href}
-                      className="text-sm text-muted-foreground transition-colors hover:text-brand"
+                      className="text-muted-foreground transition-colors hover:text-brand"
                     >
                       {link.label}
                     </Link>
@@ -96,7 +157,7 @@ export function SiteFooter() {
             <p className={HEADING}>Холбоо барих</p>
             <ul className="mt-4 space-y-2.5">
               {contact.map((item) => (
-                <li key={item.value} className="text-sm wrap-break-word">
+                <li key={item.value} className={cn(ROW, "wrap-break-word")}>
                   <span className="text-muted-foreground">{item.label}: </span>
                   {item.href ? (
                     <a
@@ -119,13 +180,19 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-2 border-t border-border/70 pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-12 flex flex-col gap-2 border-t border-border/70 pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-x-8">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Шунхлай ХХК
+            © {new Date().getFullYear()} Шунхлай ХХК. Бүх эрх хуулиар
+            хамгаалагдсан.
           </p>
-          <p className="text-sm text-muted-foreground">
-            Капитал Хаус, Чингисийн өргөн чөлөө 48/1, Улаанбаатар-36
-          </p>
+          <a
+            href={OFFICE_MAP}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-sm text-muted-foreground transition-colors hover:text-brand"
+          >
+            {OFFICE}
+          </a>
         </div>
       </div>
 

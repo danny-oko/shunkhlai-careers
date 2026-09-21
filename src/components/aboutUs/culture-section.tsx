@@ -160,7 +160,7 @@ export function CultureSection() {
       <div
         className={
           isReduced
-            ? "relative isolate overflow-hidden py-20"
+            ? "relative isolate overflow-hidden py-section"
             : "sticky top-0 isolate h-svh overflow-hidden"
         }
       >

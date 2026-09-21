@@ -50,7 +50,7 @@ export function LeadStory({ article }: { article: NewsArticle }) {
 
         <p
           aria-hidden
-          className="mt-5 flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.14em] uppercase"
+          className="mt-5 flex items-center gap-1.5 type-kicker font-semibold tracking-[0.14em] uppercase"
           style={{ color: "var(--paper-accent)" }}
         >
           Үргэлжлүүлэн унших
