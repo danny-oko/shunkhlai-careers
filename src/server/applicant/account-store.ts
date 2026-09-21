@@ -145,6 +145,7 @@ function parseStored(json: string): StoredDoc {
   base.cv = raw.cv?.filename ? { filename: raw.cv.filename } : null;
   base.picture = raw.picture === true;
   base.nextEntryId = Number(raw.nextEntryId) || FIRST_ENTRY_ID;
+  if (raw.erp && typeof raw.erp === "object") base.erp = raw.erp;
   return base;
 }
 
@@ -328,4 +329,10 @@ async function writeFile(
         createdAt: now,
       });
   }
+}
+
+/** The stored CV (base64) for this account, or null — used by the ERP push. */
+export async function readCv(email: string): Promise<{ filename: string; data: string } | null> {
+  const file = await readFile(normalizeEmail(email), "cv");
+  return file ? { filename: file.filename ?? "cv", data: file.data } : null;
 }

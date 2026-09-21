@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
 import {
@@ -15,6 +15,14 @@ import {
 } from "@/server/applicant/handlers";
 import { referenceDeps } from "@/server/applicant/reference";
 import { readJson, readUpload } from "@/server/applicant/request-body";
+import {
+  hasDuePushes,
+  pendingErp,
+  pushSubmitted,
+  retryDue,
+  withdrawSubmitted,
+} from "@/server/applicant/erp-sync";
+import type { ApplicationErp } from "@/server/applicant/erp-push";
 import { MAX_CV_BYTES } from "@/lib/apply-schema";
 
 /**
@@ -26,6 +34,12 @@ import { MAX_CV_BYTES } from "@/lib/apply-schema";
  * (see `src/server/applicant/account-store.ts`). The endpoint logic is shared
  * with the dev mock (`src/server/applicant/handlers.ts`). Always same-origin —
  * `NEXT_PUBLIC_API_URL` only decides where labels and postings are looked up.
+ *
+ * Applications are also pushed to the live ERP, best-effort and never on the
+ * request path: saved in D1 as `erp.status: "pending"`, pushed in `after()`,
+ * retried in `after()` on later `get` calls, and withdrawn there on
+ * `DeleteOrderApp` (see `src/server/applicant/erp-sync.ts`). The extra `erp`
+ * field on application rows is ignored by the UI.
  */
 
 export const dynamic = "force-dynamic";
@@ -42,6 +56,19 @@ const FILE_ENDPOINTS: Record<string, "cv" | "picture"> = {
   deleteAppCV: "cv",
   SaveAppPicture: "picture",
 };
+
+/**
+ * Runs ERP work after the response. Never lets scheduling fail the request:
+ * outside a request scope (tests) it is dropped — pending rows are picked up
+ * by the retry on a later `get`.
+ */
+function later(task: () => Promise<void>) {
+  try {
+    after(task);
+  } catch (error) {
+    console.error("[erp-push]", "after_unavailable", "-", String(error));
+  }
+}
 
 function envelope(retmsg: string, status: number) {
   return NextResponse.json(envelopeFail(retmsg), { status });
@@ -99,6 +126,21 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
       withFiles: method === "GET" && endpoint === "get",
     });
 
+    // Withdrawing: note the ERP copy's id before the row is removed.
+    const withdrawn =
+      method === "POST" && endpoint === "DeleteOrderApp"
+        ? account.doc.applications.find(
+            (row) =>
+              Number(row.entryid) ===
+              Number(
+                url.searchParams.get("entryid") ??
+                  url.searchParams.get("ENTRYID") ??
+                  url.searchParams.get("entryID"),
+              ),
+          )
+        : undefined;
+    const withdrawnErpId = (withdrawn?.erp as ApplicationErp | undefined)?.erpEntryId;
+
     let nextEntryId = account.nextEntryId;
     const result = await handleApplicantRequest(
       { endpoint, method, query: url.searchParams, body, upload },
@@ -113,9 +155,29 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
     );
     if (!result) return envelope(`Тодорхойгүй хүсэлт: ${endpoint}`, 404);
 
+    // A new application is saved as pending; the ERP push runs after the reply.
+    const submitted =
+      method === "POST" && endpoint === "SaveHrRecruitmentOrderApp" && result.mutated
+        ? (result.envelope.retdata as Record<string, unknown>)
+        : null;
+    if (submitted) {
+      submitted.sourcetype = (body as { sourcetype?: unknown } | null)?.sourcetype ?? "WEB";
+      submitted.erp = pendingErp();
+    }
+
     if (result.mutated) {
       const file = FILE_ENDPOINTS[endpoint];
       await saveAccount(account, identity!, nextEntryId, file ? { [file]: true } : {});
+    }
+
+    if (submitted) {
+      const entryid = Number(submitted.entryid);
+      later(() => pushSubmitted(identity!, entryid));
+    } else if (method === "GET" && endpoint === "get" && hasDuePushes(account.doc)) {
+      later(() => retryDue(identity!));
+    } else if (result.mutated && withdrawnErpId) {
+      const doc = account.doc;
+      later(() => withdrawSubmitted(doc, withdrawnErpId));
     }
     return NextResponse.json(result.envelope, { status: result.status });
   }

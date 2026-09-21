@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * /api/me against a REAL SQLite engine (node:sqlite, in memory) driven through
@@ -30,8 +30,17 @@ const state = vi.hoisted(() => {
     },
     users: new Map<string, { firstName: string; lastName: string; email: string | null }>(),
     userId: null as string | null,
+    // Callbacks handed to next/server `after()`; run them with flushAfter().
+    after: [] as Array<() => unknown>,
   };
 });
+
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (task: unknown) => {
+    state.after.push(typeof task === "function" ? (task as () => unknown) : () => task);
+  },
+}));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@clerk/nextjs/server", () => ({
@@ -112,6 +121,7 @@ const profileOf = async () => (await get("get")).body.retdata as Record<string, 
 beforeEach(async () => {
   state.users.clear();
   state.userId = null;
+  state.after = [];
   vi.spyOn(console, "error").mockImplementation(() => {});
   freshDb();
 });
@@ -459,5 +469,199 @@ describe("unknown endpoint", () => {
     expect(r.body.rettype).not.toBe(0);
     const c = await post("changeUserInfo", { type: "PASSWORD", oldpassword: "", newpassword: "123456" });
     expect(c.body.rettype).not.toBe(0);
+  });
+});
+
+/* --- ERP push (after()) -------------------------------------------------- */
+
+async function flushAfter() {
+  while (state.after.length) await state.after.shift()!();
+}
+
+describe("ERP push via after()", () => {
+  const REGNO = "УБ99010101";
+  const PHONE = "99112233";
+  const TOKEN = "tok-ROUTE-SECRET";
+  type ErpCall = { endpoint: string; query: string; body: unknown };
+  let erpCalls: ErpCall[];
+  let erpMode: "ok" | "down";
+  let logs: string[];
+
+  beforeEach(() => {
+    erpCalls = [];
+    erpMode = "ok";
+    logs = [];
+    // Only the push reads this at call time; reference data stays on the mock.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://erp.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = new URL(String(input));
+        const endpoint = url.pathname.replace(/^\/api\/applicant\//, "");
+        const raw = init?.body;
+        erpCalls.push({ endpoint, query: url.search, body: typeof raw === "string" ? JSON.parse(raw) : null });
+        if (erpMode === "down") throw new TypeError("fetch failed");
+        const env = (retdata: unknown) => new Response(JSON.stringify({ rettype: 0, retmsg: "", retdata }));
+        switch (endpoint) {
+          case "auth/login":
+            return new Response(JSON.stringify({ access_token: TOKEN }));
+          case "get":
+            return env({ applicantdata: [{ regno: REGNO, mobilephone: PHONE, addr2: "ERP" }] });
+          case "getRecruitmenRequestList":
+            return env([{ entryid: 4242, recruitmentorderid: 786 }]);
+          default:
+            return env(true);
+        }
+      }),
+    );
+    const capture = (...a: unknown[]) => logs.push(a.map((x) => (x instanceof Error ? `${x.message} ${x.stack}` : String(x))).join(" "));
+    for (const level of ["log", "info", "warn", "error", "debug"] as const) {
+      vi.spyOn(console, level).mockImplementation(capture);
+    }
+  });
+
+  afterEach(() => {
+    const all = logs.join("\n");
+    expect(all).not.toContain(REGNO);
+    expect(all).not.toContain(PHONE);
+    expect(all).not.toContain(TOKEN);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  const erpOf = async () => {
+    const [row] = (await get("getRecruitmenRequestList")).body.retdata as Array<Record<string, unknown>>;
+    return row?.erp as Record<string, unknown> | undefined;
+  };
+
+  async function ready() {
+    as("u1");
+    await post("SaveHrApplicant", { regno: REGNO, mobilephone: PHONE });
+  }
+
+  it("submit replies before any ERP call, saves pending, then after() marks it sent with the ERP id", async () => {
+    await ready();
+    const r = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    expect(r.status).toBe(200);
+    expect(r.body.rettype).toBe(0);
+    expect(erpCalls).toEqual([]); // nothing on the request path
+    expect(state.after).toHaveLength(1);
+    expect((await erpOf())?.status).toBe("pending");
+
+    await flushAfter();
+    expect(erpCalls.map((c) => c.endpoint)).toEqual([
+      "auth/login",
+      "get",
+      "SaveHrApplicant",
+      "SaveHrRecruitmentOrderApp",
+      "getRecruitmenRequestList",
+    ]);
+    expect(await erpOf()).toMatchObject({ status: "sent", erpEntryId: 4242 });
+  });
+
+  it("ERP down: D1 row saved, response rettype 0, erp status failed, after() does not throw", async () => {
+    await ready();
+    erpMode = "down";
+    const r = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    expect(r.body.rettype).toBe(0);
+    await expect(flushAfter()).resolves.toBeUndefined();
+    const list = (await get("getRecruitmenRequestList")).body.retdata as unknown[];
+    expect(list).toHaveLength(1);
+    expect((await erpOf())?.status).toBe("failed");
+  });
+
+  it("a later get retries a due failed row (failed → sent) and the attempts cap holds", async () => {
+    await ready();
+    erpMode = "down";
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await flushAfter();
+    expect((await erpOf())?.status).toBe("failed");
+
+    // Not due yet (backoff): get schedules nothing.
+    state.after = [];
+    await get("get");
+    expect(state.after).toHaveLength(0);
+
+    // 11 minutes later the ERP is back: get schedules a retry that succeeds.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 11 * 60_000);
+    erpMode = "ok";
+    await get("get");
+    expect(state.after.length).toBeGreaterThan(0);
+    await flushAfter();
+    expect(await erpOf()).toMatchObject({ status: "sent", erpEntryId: 4242 });
+    vi.useRealTimers();
+  });
+
+  it("stops retrying after 5 attempts", async () => {
+    await ready();
+    erpMode = "down";
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await flushAfter();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    let now = Date.now();
+    for (let i = 0; i < 10; i += 1) {
+      now += 60 * 60_000;
+      vi.setSystemTime(now);
+      await get("get");
+      await flushAfter();
+    }
+    const erp = await erpOf();
+    expect(erp?.status).toBe("failed");
+    expect(erp?.attempts).toBe(5);
+    const logins = erpCalls.filter((c) => c.endpoint === "auth/login").length;
+    expect(logins).toBeLessThanOrEqual(5 * 2); // login + login-after-register per attempt
+    vi.useRealTimers();
+  });
+
+  it("DeleteOrderApp removes the D1 row and cancels in the ERP with erpEntryId", async () => {
+    await ready();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await flushAfter();
+    const [row] = (await get("getRecruitmenRequestList")).body.retdata as Array<Record<string, unknown>>;
+    erpCalls = [];
+    state.after = [];
+
+    const del = await post("DeleteOrderApp", undefined, `?entryID=${row.entryid}`);
+    expect(del.body.rettype).toBe(0);
+    expect(erpCalls).toEqual([]); // not on the request path
+    await flushAfter();
+    const cancel = erpCalls.find((c) => c.endpoint === "DeleteOrderApp");
+    expect(cancel).toBeDefined();
+    expect(new URLSearchParams(cancel!.query).get("entryID")).toBe("4242");
+    expect((await get("getRecruitmenRequestList")).body.retdata).toEqual([]);
+  });
+
+  it("no ERP delete for a row that never reached the ERP", async () => {
+    await ready();
+    erpMode = "down";
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await flushAfter();
+    const [row] = (await get("getRecruitmenRequestList")).body.retdata as Array<Record<string, unknown>>;
+    erpMode = "ok";
+    erpCalls = [];
+    await post("DeleteOrderApp", undefined, `?entryID=${row.entryid}`);
+    await flushAfter();
+    expect(erpCalls.filter((c) => c.endpoint === "DeleteOrderApp")).toEqual([]);
+  });
+
+  it("the applicant's data is never deleted in the ERP by submit/retry/profile saves", async () => {
+    await ready();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await flushAfter();
+    await post("SaveHrApplicant", { addr2: "" });
+    await get("get");
+    await flushAfter();
+    expect(erpCalls.filter((c) => /delete/i.test(c.endpoint))).toEqual([]);
+  });
+
+  it("API URL unset → submit works, nothing is fetched", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    await ready();
+    const r = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    expect(r.body.rettype).toBe(0);
+    await flushAfter();
+    expect(erpCalls).toEqual([]);
+    expect((await erpOf())?.status).toBe("skipped");
   });
 });

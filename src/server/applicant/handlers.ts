@@ -30,6 +30,9 @@ export type ApplicantDoc = {
   applications: Row[];
   cv: { filename: string; filedata: string } | null;
   picture: string | null;
+  /** ERP push bookkeeping (`/api/me` only): the hash of the CV last sent. */
+  /** ERP sync state; profileEdited = the applicant saved their profile here. */
+  erp?: { cvHash?: string; profileEdited?: boolean };
 };
 
 export type Envelope = {
@@ -288,6 +291,7 @@ async function handlePost(
   switch (endpoint) {
     case "SaveHrApplicant": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
+      doc.erp = { ...doc.erp, profileEdited: true };
       doc.profile = {
         ...doc.profile,
         ...body,
