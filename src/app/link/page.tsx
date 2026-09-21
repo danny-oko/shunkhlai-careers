@@ -83,6 +83,11 @@ export default async function LinkPage() {
         ERP (careers.shunkhlai.mn) дахь анкеттайгаа холбохын тулд регистр, утасны
         дугаараа оруулна уу. Мэдээллийг шалгаад шифрлэн хадгална.
       </p>
+      {link?.status === "failed" && link.lastError === "credentials_unreadable" ? (
+        <p role="status" className="-mt-4 mb-8 text-sm text-amber-700 dark:text-amber-400">
+          Хадгалсан мэдээллийг уншиж чадсангүй. Регистр, утасны дугаараа дахин оруулна уу.
+        </p>
+      ) : null}
       <LinkForm
         defaults={{
           firstname: user?.firstName ?? "",

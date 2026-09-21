@@ -2,9 +2,14 @@ import "server-only";
 import { eq } from "drizzle-orm";
 
 import { getDb, applicantLink, type ApplicantLink } from "@/lib/db";
-import { encryptSecret, decryptSecret } from "@/lib/db/crypto";
+import { encryptSecret } from "@/lib/db/crypto";
 import { ErpError, erpLogin, erpPost, type ErpSession } from "./client";
-import { getLink, getValidErpToken } from "./link";
+import {
+  ErpCredentialsUnreadableError,
+  decryptLinkSecret,
+  getLink,
+  getValidErpToken,
+} from "./link";
 
 export type PasswordChangeResult = { relinkRequired: boolean };
 
@@ -48,14 +53,20 @@ async function refreshTokens(
   row: ApplicantLink,
   newpassword: string,
 ): Promise<void> {
-  const regno = await decryptSecret(row.regnoEnc);
+  const regno = await decryptLinkSecret(clerkUserId, row.regnoEnc);
   const session = await erpLogin(regno, newpassword);
   await patchLink(clerkUserId, await sessionColumns(session, row));
 }
 
 // Only the ERP's own Mongolian retmsg is safe to persist: a D1/driver error can
 // embed the SQL and its bound params (the encrypted secret, the Clerk user id).
-const messageOf = (e: unknown) => (e instanceof ErpError ? e.message : RELINK_MESSAGE);
+// Unreadable stored creds keep the machine-readable marker /link looks for.
+const messageOf = (e: unknown) =>
+  e instanceof ErpError
+    ? e.message
+    : e instanceof ErpCredentialsUnreadableError
+      ? "credentials_unreadable"
+      : RELINK_MESSAGE;
 
 /**
  * Changes the ERP password (`changeUserInfo` type PASSWORD) and keeps the stored

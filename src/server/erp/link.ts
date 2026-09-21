@@ -199,10 +199,63 @@ export async function isLinked(clerkUserId: string): Promise<boolean> {
 }
 
 /**
+ * The stored credentials exist but cannot be decrypted (e.g. APP_ENCRYPTION_KEY
+ * was rotated). Retrying cannot help; the user has to re-link via /link.
+ */
+export class ErpCredentialsUnreadableError extends Error {
+  constructor(message = "Stored ERP credentials cannot be decrypted.") {
+    super(message);
+    this.name = "ErpCredentialsUnreadableError";
+  }
+}
+
+/**
+ * Flags the link as needing a re-link and drops the undecryptable session
+ * columns. regno/phone are NOT NULL, so they stay until /link overwrites them.
+ */
+export async function markCredentialsUnreadable(clerkUserId: string): Promise<void> {
+  await getDb()
+    .update(applicantLink)
+    .set({
+      status: "failed",
+      lastError: "credentials_unreadable",
+      erpAccessTokenEnc: null,
+      erpRefreshTokenEnc: null,
+      erpTokenExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(applicantLink.clerkUserId, clerkUserId));
+}
+
+/**
+ * Decrypts a stored link secret; on failure marks the link unreadable and
+ * throws `ErpCredentialsUnreadableError`.
+ */
+export async function decryptLinkSecret(
+  clerkUserId: string,
+  value: string,
+): Promise<string> {
+  try {
+    return await decryptSecret(value);
+  } catch (e) {
+    // Only a wrong key / tampered ciphertext (OperationError) or corrupt base64
+    // (InvalidCharacterError) means the row is unreadable. Anything else — e.g.
+    // APP_ENCRYPTION_KEY missing — is a config fault and must not flag users.
+    const name = (e as { name?: string } | null)?.name;
+    if (name !== "OperationError" && name !== "InvalidCharacterError") throw e;
+    await markCredentialsUnreadable(clerkUserId).catch((err) =>
+      console.error("[erp/link] could not flag unreadable credentials", err)
+    );
+    throw new ErpCredentialsUnreadableError();
+  }
+}
+
+/**
  * Returns a valid ERP access token for a linked user, reusing the stored one
  * until ~1 min before expiry and otherwise re-authenticating with the stored
  * (decrypted) regno + phone and persisting the fresh token. Throws if the user
- * has no link.
+ * has no link, or `ErpCredentialsUnreadableError` (after flagging the row) if
+ * the stored secrets cannot be decrypted. `erpLogin` errors propagate as-is.
  */
 export async function getValidErpToken(clerkUserId: string): Promise<string> {
   const row = await getLink(clerkUserId);
@@ -214,12 +267,12 @@ export async function getValidErpToken(clerkUserId: string): Promise<string> {
     row.erpTokenExpiresAt &&
     row.erpTokenExpiresAt.getTime() - skewMs > Date.now()
   ) {
-    return decryptSecret(row.erpAccessTokenEnc);
+    return decryptLinkSecret(clerkUserId, row.erpAccessTokenEnc);
   }
 
   // Refresh by re-logging in with the stored creds.
-  const regno = await decryptSecret(row.regnoEnc);
-  const phone = await decryptSecret(row.phoneEnc);
+  const regno = await decryptLinkSecret(clerkUserId, row.regnoEnc);
+  const phone = await decryptLinkSecret(clerkUserId, row.phoneEnc);
   const session = await erpLogin(regno, phone);
 
   const db = getDb();

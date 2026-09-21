@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
-import { getLink, getValidErpToken } from "@/server/erp/link";
+import {
+  ErpCredentialsUnreadableError,
+  getLink,
+  getValidErpToken,
+} from "@/server/erp/link";
 
 /**
  * Bridge: hands the signed-in Clerk user their current ERP access token.
@@ -15,7 +19,10 @@ import { getLink, getValidErpToken } from "@/server/erp/link";
  *
  * Responses:
  *   401 — not signed in to Clerk
- *   409 — signed in but not linked yet (send them to /link)
+ *   409 — signed in but not linked yet (send them to /link); also
+ *         `{ linked: false, reason: "relink" }` when the stored creds are
+ *         unreadable and the user must re-link
+ *   502 — `{ error: "erp_unavailable" }` for any other failure
  *   200 — { accessToken }
  */
 export async function GET() {
@@ -33,10 +40,10 @@ export async function GET() {
     const accessToken = await getValidErpToken(userId);
     return NextResponse.json({ linked: true, accessToken });
   } catch (e) {
+    if (e instanceof ErpCredentialsUnreadableError) {
+      return NextResponse.json({ linked: false, reason: "relink" }, { status: 409 });
+    }
     console.error("[erp/session] token refresh failed", e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "erp_error" },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "erp_unavailable" }, { status: 502 });
   }
 }

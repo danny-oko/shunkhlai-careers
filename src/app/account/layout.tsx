@@ -7,6 +7,8 @@ import { useAuth } from "@clerk/nextjs";
 import { Loader2 } from "lucide-react";
 
 import { useSession } from "@/components/auth/session-provider";
+import { retryErpSession, useErpBridgeStatus } from "@/components/auth/clerk-erp-bridge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const sections = [
@@ -23,6 +25,7 @@ const sections = [
 export default function AccountLayout({ children }: LayoutProps<"/account">) {
   const { status } = useSession();
   const { isLoaded, isSignedIn } = useAuth();
+  const bridgeStatus = useErpBridgeStatus();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -34,6 +37,35 @@ export default function AccountLayout({ children }: LayoutProps<"/account">) {
       router.replace("/sign-in");
     }
   }, [isLoaded, isSignedIn, status, router]);
+
+  if (status !== "authenticated" && (bridgeStatus === "error" || bridgeStatus === "relink")) {
+    const relink = bridgeStatus === "relink";
+    return (
+      <main className="flex flex-1 items-center justify-center pt-16">
+        <div role="alert" className="flex flex-col items-center gap-3 py-32 text-center text-sm">
+          <p className="text-muted-foreground">
+            {relink ? "Анкетаа дахин холбох шаардлагатай." : "Алдаа гарлаа. Дахин оролдоно уу."}
+          </p>
+          <div className="flex items-center gap-2">
+            {relink ? (
+              <Button asChild size="sm" className="rounded-full px-3">
+                <Link href="/link">Анкетаа холбох</Link>
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" className="rounded-full px-3" onClick={retryErpSession}>
+                  Дахин оролдох
+                </Button>
+                <Button asChild variant="ghost" size="sm" className="rounded-full px-3">
+                  <Link href="/link">Анкетаа холбох</Link>
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (status !== "authenticated") {
     return (
