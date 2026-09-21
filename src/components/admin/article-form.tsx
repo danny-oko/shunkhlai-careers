@@ -30,6 +30,7 @@ import {
   statusHint,
   statusLabel,
 } from "@/lib/news/types";
+import { confirmDiscard, useUnloadGuard } from "@/components/admin/unsaved-guard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -146,6 +147,9 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
     coverPreview !== null ||
     (Object.keys(baseline) as Array<keyof Draft>).some((key) => baseline[key] !== draft[key]);
 
+  // Off while a save is in flight, so its redirect is never blocked.
+  useUnloadGuard(dirty && !isPending);
+
   const errors = state.fieldErrors ?? {};
   const bodyDoc = React.useMemo(() => bodyFromField(draft.body), [draft.body]);
   // The editor owns the document once mounted, so it is handed its starting
@@ -203,7 +207,14 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
       >
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-5 py-2.5 lg:px-8">
           <Button asChild variant="ghost" size="sm">
-            <Link href="/admin/news">← Мэдээний удирдлага</Link>
+            <Link
+              href="/admin/news"
+              onClick={(event) => {
+                if (!confirmDiscard(dirty && !isPending)) event.preventDefault();
+              }}
+            >
+              ← Мэдээний удирдлага
+            </Link>
           </Button>
 
           <p className="flex min-w-0 items-center gap-2 text-[0.75rem]">
@@ -257,10 +268,15 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
             </div>
 
             {article?.status === "published" && (
-              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-                <Link href={`/news/${article.slug}`} target="_blank" rel="noreferrer">
+              <Button asChild variant="ghost" size="sm">
+                <Link
+                  href={`/news/${article.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Нийтлэг харах"
+                >
                   <ExternalLink aria-hidden />
-                  Нийтлэг харах
+                  <span className="hidden sm:inline">Нийтлэг харах</span>
                 </Link>
               </Button>
             )}

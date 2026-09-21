@@ -33,13 +33,16 @@ export function AdminBar() {
           <Button
             asChild
             variant="ghost"
-
             size="sm"
-            className="hidden sm:inline-flex"
           >
-            <Link href="/news" target="_blank" rel="noreferrer">
+            <Link
+              href="/news"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Нийтлэлүүдийг харах"
+            >
               <ExternalLink aria-hidden />
-              Нийтлэлүүдийг харах
+              <span className="hidden sm:inline">Нийтлэлүүдийг харах</span>
             </Link>
           </Button>
 
