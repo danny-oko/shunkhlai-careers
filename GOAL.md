@@ -36,12 +36,17 @@ Each line is either true or false. No line should need a judgement call.
   (position, salary band, status, dates, cancel). Presentation only: no
   changes to `lib/api/applications.ts` or the server.
 
+- A simpler, more comprehensive **job filter** on `/careers` (sidebar summary,
+  active-filter chips, mobile drawer). Presentation only: no changes to the
+  filtering logic, URL params, `lib/jobs/*` or the API.
+
 ## Not this cycle
 
 The part that lets the loop say **no**. Anything here gets reported as Noise,
 however tempting.
 
 - Visual polish on pages that already work — hero variants, animation, spacing
+  (exception: the job-filter redesign under "In scope" below)
   (exception: the shared Select / DatePicker work under "In scope" below)
 - The `/account/*` section beyond what applying requires
   (exception: the applications list card redesign under "In scope" below)
