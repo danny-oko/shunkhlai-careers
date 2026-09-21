@@ -11,3 +11,4 @@ export async function isAdminRequest(): Promise<boolean> {
 export async function requireAdmin(): Promise<void> {
   if (!(await isAdminRequest())) redirect("/admin/login");
 }
+
