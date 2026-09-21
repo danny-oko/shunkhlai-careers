@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { CheckCircle2, FileText, Newspaper, Plus } from "lucide-react";
 
 import { ArticleRow } from "@/components/admin/article-row";
 import { Button } from "@/components/ui/button";
 import { getAdminArticles } from "@/lib/news/service";
+import type { NewsArticle } from "@/lib/news/types";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,52 @@ type Filter = (typeof FILTERS)[number]["value"];
 
 function read(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? "";
+}
+
+/* The ruled strip the three outcomes below are all printed on. */
+function NoticeShell({ children }: { children: ReactNode }) {
+  return (
+    <p className="mb-6 flex items-center gap-2 border border-border bg-muted/50 px-4 py-2.5 text-[0.8125rem]">
+      <CheckCircle2 aria-hidden className="size-4 shrink-0" />
+      {children}
+    </p>
+  );
+}
+
+/**
+ * What just happened to the story that was saved.
+ *
+ * `/news/[slug]` serves published articles only, so a draft has no public URL
+ * to offer — the link used to be printed either way, which put a 404 behind a
+ * tick mark on the one screen that had just told the editor the save worked.
+ */
+function SavedNotice({ article }: { article: NewsArticle }) {
+  if (article.status !== "published") {
+    return <NoticeShell>Мэдээ ноорогт хадгалагдлаа.</NoticeShell>;
+  }
+
+  return (
+    <NoticeShell>
+      Мэдээ хадгалагдлаа.{" "}
+      <Link
+        href={`/news/${article.slug}`}
+        target="_blank"
+        rel="noreferrer"
+        className="underline underline-offset-4"
+      >
+        Нийтлэг харах
+      </Link>
+    </NoticeShell>
+  );
+}
+
+/* The outcome of the last action, stated rather than toasted: a redirect has
+   already replaced the page, so a toast would be announcing something the
+   editor can no longer see the source of. */
+function ActionNotice({ saved, deleted }: { saved?: NewsArticle; deleted: boolean }) {
+  if (saved) return <SavedNotice article={saved} />;
+  if (deleted) return <NoticeShell>Мэдээ хасагдлаа.</NoticeShell>;
+  return null;
 }
 
 export default async function AdminNewsPage({
@@ -39,31 +87,15 @@ export default async function AdminNewsPage({
   const saved = read(params.saved);
   const deleted = read(params.deleted);
 
+  // Looked up rather than taken from the query string: the banner needs the
+  // story's status to know whether it has a public URL yet, and a hand-typed
+  // `?saved=` should not be able to conjure a link to something that is not
+  // there. An empty `saved` matches no slug, so this is `undefined` then too.
+  const savedArticle = everything.find((article) => article.slug === saved);
+
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 lg:px-8">
-      {/* The outcome of the last action, stated rather than toasted: a
-          redirect has already replaced the page, so a toast would be
-          announcing something the editor can no longer see the source of. */}
-      {(saved || deleted) && (
-        <p className="mb-6 flex items-center gap-2 border border-border bg-muted/50 px-4 py-2.5 text-[0.8125rem]">
-          <CheckCircle2 aria-hidden className="size-4 shrink-0" />
-          {saved ? (
-            <>
-              Мэдээ хадгалагдлаа.{" "}
-              <Link
-                href={`/news/${saved}`}
-                target="_blank"
-                rel="noreferrer"
-                className="underline underline-offset-4"
-              >
-                Нийтлэг харах
-              </Link>
-            </>
-          ) : (
-            "Мэдээ хасагдлаа."
-          )}
-        </p>
-      )}
+      <ActionNotice saved={savedArticle} deleted={Boolean(deleted)} />
 
       <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-b-[var(--rule-strong)] pb-4">
         <div>
