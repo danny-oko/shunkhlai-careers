@@ -6,7 +6,7 @@
  * "Careers Web API — Үндсэн"; `README.md` maps each module to its requests.
  *
  *   auth          sign-up / sign-in (one endpoint, as in the collection)
- *   profile       core record, photo, CV, completion percentages
+ *   profile       core record, photo, completion percentages
  *   sections      the CV sections, over three bundle endpoints
  *   reference     every dropdown
  *   jobs          open postings, detail, filter data

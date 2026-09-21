@@ -31,14 +31,12 @@ export type FlushInput = {
   local: boolean;
   /** Application rows (by D1 entryid) claimed for this run. */
   apps: number[];
-  loadCv: () => Promise<{ filename: string; data: string } | null>;
   loadPicture: () => Promise<string | null>;
 };
 
 export type FlushOutcome = {
   /** Local work that went through, keyed by the stamp/snapshot pushed. */
   profileStamp?: number;
-  cv?: { stamp: number; hash: string | null };
   picture?: { stamp: number; hash: string | null };
   deletesDone: PendingDelete[];
   pushed: Partial<Record<SectionKey, Set<string>>>;
@@ -123,17 +121,6 @@ async function flushProfile({ input, out, failed }: Ctx, record: Row) {
   }
 }
 
-async function sendCv(input: FlushInput, stamp: number): Promise<FlushOutcome["cv"]> {
-  if (!input.doc.cv) {
-    await erpPost("deleteAppCV", input.token);
-    return { stamp, hash: null };
-  }
-  const cv = await input.loadCv();
-  if (!cv?.data) return undefined;
-  await erpUpload("SaveAppCV", input.token, { filename: cv.filename, base64: cv.data });
-  return { stamp, hash: hashOf(cv.data) };
-}
-
 async function sendPicture(input: FlushInput, stamp: number): Promise<FlushOutcome["picture"]> {
   const picture = input.doc.picture !== null ? await input.loadPicture() : null;
   // No ERP endpoint deletes a photo; a removed one has nothing to send.
@@ -144,13 +131,6 @@ async function sendPicture(input: FlushInput, stamp: number): Promise<FlushOutco
 
 async function flushFiles({ input, out, failed }: Ctx) {
   const erp = input.doc.erp ?? {};
-  if (erp.cvDirty) {
-    try {
-      out.cv = await sendCv(input, erp.cvDirty);
-    } catch (error) {
-      failed("erp_cv_failed", error);
-    }
-  }
   if (erp.pictureDirty) {
     try {
       out.picture = await sendPicture(input, erp.pictureDirty);
@@ -211,7 +191,7 @@ async function flushSections(ctx: Ctx) {
 }
 
 async function flushApplications({ input, out }: Ctx) {
-  // The login (and any profile/CV work) already happened above.
+  // The login (and any profile work) already happened above.
   const batch = {
     login: Promise.resolve({ ok: true as const, value: input.token }),
     sync: Promise.resolve({ ok: true as const, value: undefined }),
@@ -226,7 +206,6 @@ async function flushApplications({ input, out }: Ctx) {
     if (!app) continue;
     const result = await pushApplication(working, app, {
       identity: input.identity,
-      loadCv: input.loadCv,
       batch,
       appliedOrderIds: out.appliedOrderIds,
     });

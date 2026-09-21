@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  OverviewCv,
   OverviewHeader,
   OverviewMeters,
 } from "@/components/account/overview-sections";
@@ -21,7 +20,6 @@ export default function AccountOverviewPage() {
     <div className="space-y-10">
       <OverviewHeader profile={profile} />
       <OverviewMeters profile={profile} />
-      <OverviewCv profile={profile} />
     </div>
   );
 }

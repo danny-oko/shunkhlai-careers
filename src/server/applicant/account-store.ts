@@ -7,13 +7,12 @@ import type { ApplicantDoc, Row } from "./handlers";
 
 /**
  * D1 persistence for `/api/me`: one `applicant_account` row per lowercased
- * Clerk email, holding the applicant document as JSON. The CV and photo are
+ * Clerk email, holding the applicant document as JSON. The photo is
  * kept out of that JSON, in chunked `applicant_file` rows (see schema.ts).
  */
 
 /** What `data_json` holds: the document minus file contents. */
-type StoredDoc = Omit<ApplicantDoc, "cv" | "picture"> & {
-  cv: { filename: string } | null;
+type StoredDoc = Omit<ApplicantDoc, "picture"> & {
   picture: boolean;
   nextEntryId: number;
 };
@@ -34,7 +33,7 @@ export class AccountConflictError extends Error {
   }
 }
 
-type FileKind = "cv" | "picture";
+type FileKind = "picture";
 
 /** D1 caps a row at 2 MB; stay well under it per chunk. */
 const CHUNK_CHARS = 500_000;
@@ -130,7 +129,6 @@ function emptyStored(profile: Row): StoredDoc {
   return {
     profile,
     ...(lists as Pick<StoredDoc, (typeof LIST_KEYS)[number]>),
-    cv: null,
     picture: false,
     nextEntryId: FIRST_ENTRY_ID,
   };
@@ -147,7 +145,6 @@ function parseStored(json: string): StoredDoc {
   for (const key of LIST_KEYS) {
     if (Array.isArray(raw[key])) base[key] = raw[key] as Row[];
   }
-  base.cv = raw.cv?.filename ? { filename: raw.cv.filename } : null;
   base.picture = raw.picture === true;
   // Older documents counted from 1000; move them into the local range.
   base.nextEntryId = Math.max(Number(raw.nextEntryId) || 0, FIRST_ENTRY_ID);
@@ -208,7 +205,7 @@ async function createAccount(email: string, identity: ClerkIdentity): Promise<vo
     })
     .onConflictDoNothing({ target: applicantAccount.email });
 
-  if (picture) await writeFile(email, "picture", null, picture);
+  if (picture) await writeFile(email, "picture", picture);
 }
 
 /**
@@ -231,16 +228,14 @@ export async function loadAccount(
   if (!row) throw new Error("applicant_account: could not create the account row");
 
   const stored = parseStored(row.dataJson);
-  const { nextEntryId, cv, picture, ...rest } = stored;
+  const { nextEntryId, picture, ...rest } = stored;
 
   const doc: ApplicantDoc = {
     ...rest,
-    cv: cv ? { filename: cv.filename, filedata: "" } : null,
     picture: picture ? "" : null,
   };
 
   if (withFiles) {
-    if (doc.cv) doc.cv.filedata = (await readFile(email, "cv"))?.data ?? "";
     if (picture) doc.picture = (await readFile(email, "picture"))?.data ?? null;
   }
 
@@ -252,14 +247,13 @@ export async function saveAccount(
   account: LoadedAccount,
   identity: ClerkIdentity,
   nextEntryId: number,
-  files: { cv?: boolean; picture?: boolean } = {},
+  files: { picture?: boolean } = {},
 ): Promise<void> {
   const { email, doc } = account;
 
-  const { cv, picture, ...rest } = doc;
+  const { picture, ...rest } = doc;
   const stored: StoredDoc = {
     ...rest,
-    cv: cv ? { filename: cv.filename } : null,
     picture: picture !== null,
     nextEntryId,
   };
@@ -283,12 +277,8 @@ export async function saveAccount(
     .returning({ id: applicantAccount.id });
   if (written.length === 0) throw new AccountConflictError();
 
-  if (files.cv) {
-    if (doc.cv) await writeFile(email, "cv", doc.cv.filename, doc.cv.filedata);
-    else await deleteFile(email, "cv");
-  }
   if (files.picture) {
-    if (doc.picture) await writeFile(email, "picture", null, doc.picture);
+    if (doc.picture) await writeFile(email, "picture", doc.picture);
     else await deleteFile(email, "picture");
   }
 }
@@ -298,14 +288,14 @@ export async function saveAccount(
 async function readFile(
   email: string,
   kind: FileKind,
-): Promise<{ filename: string | null; data: string } | null> {
+): Promise<{ data: string } | null> {
   const rows = await getDb()
     .select()
     .from(applicantFile)
     .where(and(eq(applicantFile.email, email), eq(applicantFile.kind, kind)))
     .orderBy(asc(applicantFile.chunkIndex));
   if (rows.length === 0) return null;
-  return { filename: rows[0].filename, data: rows.map((row) => row.data).join("") };
+  return { data: rows.map((row) => row.data).join("") };
 }
 
 async function deleteFile(email: string, kind: FileKind): Promise<void> {
@@ -317,7 +307,6 @@ async function deleteFile(email: string, kind: FileKind): Promise<void> {
 async function writeFile(
   email: string,
   kind: FileKind,
-  filename: string | null,
   data: string,
 ): Promise<void> {
   await deleteFile(email, kind);
@@ -329,18 +318,11 @@ async function writeFile(
         id: crypto.randomUUID(),
         email,
         kind,
-        filename,
         chunkIndex: index,
         data: data.slice(offset, offset + CHUNK_CHARS),
         createdAt: now,
       });
   }
-}
-
-/** The stored CV (base64) for this account, or null — used by the ERP push. */
-export async function readCv(email: string): Promise<{ filename: string; data: string } | null> {
-  const file = await readFile(normalizeEmail(email), "cv");
-  return file ? { filename: file.filename ?? "cv", data: file.data } : null;
 }
 
 /** The stored profile photo (a data URL), or null — used by the ERP flush. */

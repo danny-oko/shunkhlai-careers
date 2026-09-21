@@ -27,7 +27,6 @@ import {
 } from "@/server/applicant/erp-sync";
 import { hasErp } from "@/server/applicant/erp";
 import { recordLocalChange, sectionByRemove, syncScheduled } from "@/server/applicant/erp-model";
-import { MAX_CV_BYTES } from "@/lib/apply-schema";
 
 /**
  * The signed-in applicant's own data, on the ERP's endpoint names
@@ -49,16 +48,15 @@ import { MAX_CV_BYTES } from "@/lib/apply-schema";
 
 export const dynamic = "force-dynamic";
 
-// The browser already refuses files over 5 MB (apply-schema); this is the
-// server-side backstop for direct POSTs, so the fallback copy stays generic.
-const MAX_UPLOAD_REQUEST_BYTES = MAX_CV_BYTES + 64 * 1024; // multipart overhead
+// Server-side backstop for direct photo POSTs (5 MB), so the fallback copy
+// stays generic.
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + 64 * 1024; // multipart overhead
 const FILE_TOO_LARGE_MESSAGE = "Алдаа гарлаа. Дахин оролдоно уу.";
 
 type Ctx = RouteContext<"/api/me/[...path]">;
 
-const FILE_ENDPOINTS: Record<string, "cv" | "picture"> = {
-  SaveAppCV: "cv",
-  deleteAppCV: "cv",
+const FILE_ENDPOINTS: Record<string, "picture"> = {
   SaveAppPicture: "picture",
 };
 
@@ -107,7 +105,7 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
     return envelope(FILE_TOO_LARGE_MESSAGE, 413);
   }
   const upload = isUpload ? await readUpload(request) : null;
-  if (upload && Buffer.byteLength(upload.data, "base64") > MAX_CV_BYTES) {
+  if (upload && Buffer.byteLength(upload.data, "base64") > MAX_UPLOAD_BYTES) {
     return envelope(FILE_TOO_LARGE_MESSAGE, 413);
   }
   const body = method === "POST" && !isUpload ? await readJson(request) : null;

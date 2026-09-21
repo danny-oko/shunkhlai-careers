@@ -184,16 +184,15 @@ describe("account document", () => {
     await post("SaveHrAppEducation", { entryid: 0, schoolname: "A school" });
     await post("SaveAppFamily", [{ entryid: 0, firstname: "A-relative" }]);
     await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
-    const cv = new FormData();
-    cv.set("file", new File([new Uint8Array([1, 2, 3])], "a-cv.pdf"));
-    await post("SaveAppCV", cv);
+    const photo = new FormData();
+    photo.set("file", new File([new Uint8Array([1, 2, 3])], "a-me.jpg"));
+    await post("SaveAppPicture", photo);
 
     as("uB", "b@x.mn");
     const p = await profileOf();
     expect(p.addr2).not.toBe("A-гийн хаяг");
     expect(p.regno).not.toBe("АА00000001");
-    expect(p.filename).toBeNull();
-    expect(p.filedata).toBeNull();
+    expect(p.picturedata).toBeNull();
     const edu = (await get("GetHrAppEducationData")).body.retdata as Record<string, unknown[]>;
     expect(edu.hrappedulist).toEqual([]);
     const fam = (await get("GetHrAppFamilyData")).body.retdata as Record<string, unknown[]>;
@@ -328,43 +327,47 @@ describe.each(sections)("section $name", (s) => {
 /* --- files --------------------------------------------------------------- */
 
 describe("files", () => {
-  it("rejects a CV over MAX_CV_BYTES server-side and stores nothing", async () => {
+  it("rejects an upload over the 5 MB backstop server-side and stores nothing", async () => {
     as("u1");
     const fd = new FormData();
-    fd.set("file", new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.pdf", { type: "application/pdf" }));
-    const res = await post("SaveAppCV", fd);
+    fd.set("file", new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.jpg", { type: "image/jpeg" }));
+    const res = await post("SaveAppPicture", fd);
     expect(res.status).toBe(413);
     expect(res.body.rettype).not.toBe(0);
     expect(rows("select count(*) as n from applicant_file")[0].n).toBe(0);
   });
 
-  it("CV larger than one D1 chunk round-trips byte-exact, then deletes", async () => {
+  it("a photo larger than one D1 chunk round-trips byte-exact, then a later mutation keeps it", async () => {
     as("u1");
     const bytes = new Uint8Array(1_200_000).map((_, i) => (i * 31) % 256); // ~1.6 MB base64
     const fd = new FormData();
-    fd.set("file", new File([bytes], "cv.pdf", { type: "application/pdf" }));
-    expect((await post("SaveAppCV", fd)).body.rettype).toBe(0);
+    fd.set("file", new File([bytes], "me.jpg", { type: "image/jpeg" }));
+    expect((await post("SaveAppPicture", fd)).body.rettype).toBe(0);
 
-    const chunks = rows("select chunk_index, length(data) as n from applicant_file where kind = 'cv' order by chunk_index");
+    const chunks = rows("select chunk_index, length(data) as n from applicant_file where kind = 'picture' order by chunk_index");
     expect(chunks.length).toBeGreaterThan(1);
     for (const c of chunks) expect(Number(c.n)).toBeLessThan(2_000_000);
     // data_json stays small — the blob is not inlined.
     expect(String(rows("select data_json from applicant_account")[0].data_json).length).toBeLessThan(100_000);
 
     const p = await profileOf();
-    expect(p.filename).toBe("cv.pdf");
-    expect(Buffer.from(String(p.filedata), "base64").equals(Buffer.from(bytes))).toBe(true);
+    const prefix = "data:image/jpeg;base64,";
+    expect(String(p.picturedata).startsWith(prefix)).toBe(true);
+    expect(Buffer.from(String(p.picturedata).slice(prefix.length), "base64").equals(Buffer.from(bytes))).toBe(true);
 
     // A non-"get" mutation must not wipe the file (files load only on "get").
     await post("SaveHrApplicant", { addr2: "x" });
     const p2 = await profileOf();
-    expect(p2.filename).toBe("cv.pdf");
-    expect(String(p2.filedata).length).toBe(String(p.filedata).length);
+    expect(String(p2.picturedata).length).toBe(String(p.picturedata).length);
+  });
 
-    expect((await post("deleteAppCV")).body.rettype).toBe(0);
-    const p3 = await profileOf();
-    expect(p3.filename).toBeNull();
-    expect(rows("select * from applicant_file where kind = 'cv'")).toEqual([]);
+  it("CV endpoints no longer exist: 404 and nothing stored", async () => {
+    as("u1");
+    const fd = new FormData();
+    fd.set("file", new File([new Uint8Array([1, 2, 3])], "cv.pdf", { type: "application/pdf" }));
+    expect((await post("SaveAppCV", fd)).status).toBe(404);
+    expect((await post("deleteAppCV")).status).toBe(404);
+    expect(rows("select * from applicant_file")).toEqual([]);
   });
 
   it("picture upload is served back as a data URL", async () => {
@@ -377,7 +380,7 @@ describe("files", () => {
 
   it("upload with no file → failure envelope, nothing stored", async () => {
     as("u1");
-    const r = await post("SaveAppCV", new FormData());
+    const r = await post("SaveAppPicture", new FormData());
     expect(r.body.rettype).not.toBe(0);
     expect(rows("select * from applicant_file")).toEqual([]);
   });

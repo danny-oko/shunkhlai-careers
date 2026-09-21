@@ -3,26 +3,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  MAX_CV_BYTES,
   PHONE_PATTERN,
   REGISTER_ID_PATTERN,
   MAX_SALARY_LEVEL_KEY,
   applicationSchema,
-  describeCvFileError,
   salaryLevelKeySchema,
 } from "./apply-schema";
 
 /**
  * This schema is the gate in front of real applicant data. Loosening a
- * pattern or a size limit here is a security change wearing the clothes of a
+ * pattern here is a security change wearing the clothes of a
  * cleanup, so the boundaries are pinned down.
  */
-
-function cv(name = "cv.pdf", type = "application/pdf", size = 1024): File {
-  const file = new File(["x"], name, { type });
-  Object.defineProperty(file, "size", { value: size });
-  return file;
-}
 
 function values(over: Record<string, unknown> = {}) {
   return {
@@ -31,7 +23,6 @@ function values(over: Record<string, unknown> = {}) {
     phone: "99112233",
     registerId: "УБ99112233",
     note: "",
-    cv: cv(),
     ...over,
   };
 }
@@ -78,28 +69,6 @@ describe("PHONE_PATTERN", () => {
   });
 });
 
-describe("describeCvFileError", () => {
-  it("passes the accepted document types", () => {
-    expect(describeCvFileError(cv("cv.pdf", "application/pdf"))).toBeNull();
-    expect(describeCvFileError(cv("cv.doc", "application/msword"))).toBeNull();
-  });
-
-  it("accepts a known extension when the browser reports no type", () => {
-    expect(describeCvFileError(cv("cv.docx", ""))).toBeNull();
-  });
-
-  it("rejects other formats", () => {
-    expect(describeCvFileError(cv("cv.png", "image/png"))).toMatch(/PDF/);
-  });
-
-  it("holds the size limit at exactly 5 MB", () => {
-    expect(describeCvFileError(cv("cv.pdf", "application/pdf", MAX_CV_BYTES))).toBeNull();
-    expect(
-      describeCvFileError(cv("cv.pdf", "application/pdf", MAX_CV_BYTES + 1)),
-    ).toMatch(/5 MB/);
-  });
-});
-
 describe("applicationSchema", () => {
   it("accepts a complete application", () => {
     expect(applicationSchema.safeParse(values()).success).toBe(true);
@@ -108,18 +77,6 @@ describe("applicationSchema", () => {
   it("upper-cases the register id so casing never reaches the backend", () => {
     const parsed = applicationSchema.parse(values({ registerId: "уб99112233" }));
     expect(parsed.registerId).toBe("УБ99112233");
-  });
-
-  it("requires a CV", () => {
-    const result = applicationSchema.safeParse(values({ cv: null }));
-    expect(result.success).toBe(false);
-    expect(result.error?.issues.some((i) => i.path[0] === "cv")).toBe(true);
-  });
-
-  it("surfaces the file error on the cv field, not as a form-level error", () => {
-    const result = applicationSchema.safeParse({ ...values(), cv: cv("a.png", "image/png") });
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.path).toEqual(["cv"]);
   });
 
   it("rejects a bad email, phone or register id", () => {
