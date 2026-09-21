@@ -68,7 +68,7 @@ export const SelectField = ({
       id={name}
       value={String(values[name])}
       disabled={disabled || isLoading}
-      onChange={(event) => set(name, event.target.value)}
+      onValueChange={(next) => set(name, next)}
     >
       <option value="">{isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
       {options.map((option) => (

@@ -149,8 +149,8 @@ export default function InterestsPage() {
                 id="posgroup"
                 value={group}
                 disabled={groups.isLoading}
-                onChange={(event) => {
-                  setGroup(event.target.value);
+                onValueChange={(next) => {
+                  setGroup(next);
                   setPosition("");
                   setChosen(null);
                 }}

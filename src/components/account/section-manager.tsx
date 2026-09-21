@@ -12,6 +12,7 @@ import { useDropdown } from "@/components/account/use-dropdown";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toApiError } from "@/lib/api";
@@ -106,7 +107,7 @@ function SelectField({
       value={value}
       disabled={!ready || isLoading}
       aria-busy={isLoading}
-      onChange={(event) => onChange(event.target.value)}
+      onValueChange={onChange}
     >
       <option value="">{placeholder}</option>
       {options.map((option) => (
@@ -242,11 +243,13 @@ function EntryForm({
                 <Select
                   id={id}
                   value={value || "N"}
-                  onChange={(event) => set(field.name, event.target.value)}
+                  onValueChange={(next) => set(field.name, next)}
                 >
                   <option value="N">Үгүй</option>
                   <option value="Y">Тийм</option>
                 </Select>
+              ) : field.type === "date" ? (
+                <DatePicker id={id} value={value} onChange={(next) => set(field.name, next)} />
               ) : field.type === "textarea" ? (
                 <Textarea
                   id={id}
@@ -258,7 +261,7 @@ function EntryForm({
               ) : (
                 <Input
                   id={id}
-                  type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+                  type={field.type === "number" ? "number" : "text"}
                   placeholder={field.placeholder}
                   value={value}
                   onChange={(event) => set(field.name, event.target.value)}
