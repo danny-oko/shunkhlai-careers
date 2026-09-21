@@ -6,7 +6,7 @@ import type { DropdownOption } from "@/lib/api";
 import type { useApplyForm, useApplyOptions } from "@/components/use-apply-form";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
 import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { JobDetail } from "@/lib/jobs/types";
@@ -28,7 +28,7 @@ const LoadedSelect = ({
     id={id}
     value={value}
     disabled={source.isLoading}
-    onChange={(event) => onChange(event.target.value)}
+    onValueChange={onChange}
   >
     <option value="">{source.isLoading ? "Ачаалж байна…" : "- Сонгох -"}</option>
     {source.options.map((option) => (
@@ -83,11 +83,10 @@ export const ApplyForm = ({
       </Field>
 
       <Field label="Ажилд орох боломжтой огноо" htmlFor="poshiredate" required>
-        <Input
+        <DatePicker
           id="poshiredate"
-          type="date"
           value={apply.form.poshiredate}
-          onChange={(event) => apply.setField("poshiredate")(event.target.value)}
+          onChange={apply.setField("poshiredate")}
         />
       </Field>
 

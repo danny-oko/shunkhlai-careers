@@ -11,6 +11,7 @@ import { ArticleBody } from "@/components/news/article-body";
 import { Dateline } from "@/components/news/dateline";
 import { Kicker } from "@/components/news/kicker";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -289,13 +290,11 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
             </FieldShell>
 
             <FieldShell id="publishedAt" label="Огноо" error={errors.publishedAt}>
-              <Input
+              <DatePicker
                 id="publishedAt"
                 name="publishedAt"
-                type="date"
-                required
                 value={draft.publishedAt}
-                onChange={(event) => set("publishedAt", event.target.value)}
+                onChange={(next) => set("publishedAt", next)}
                 aria-invalid={errors.publishedAt ? true : undefined}
               />
             </FieldShell>
