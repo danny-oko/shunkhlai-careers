@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 
 import { applicantAccount, applicantFile, applicantProfile, getDb } from "@/lib/db";
+import { LOCAL_ID_BASE } from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
@@ -37,7 +38,11 @@ type FileKind = "cv" | "picture";
 
 /** D1 caps a row at 2 MB; stay well under it per chunk. */
 const CHUNK_CHARS = 500_000;
-const FIRST_ENTRY_ID = 1000;
+/**
+ * Rows created on this site get ids from `LOCAL_ID_BASE` up, so they can never
+ * collide with the ERP's own entry ids (which rows pulled from the ERP keep).
+ */
+const FIRST_ENTRY_ID = LOCAL_ID_BASE;
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -144,7 +149,8 @@ function parseStored(json: string): StoredDoc {
   }
   base.cv = raw.cv?.filename ? { filename: raw.cv.filename } : null;
   base.picture = raw.picture === true;
-  base.nextEntryId = Number(raw.nextEntryId) || FIRST_ENTRY_ID;
+  // Older documents counted from 1000; move them into the local range.
+  base.nextEntryId = Math.max(Number(raw.nextEntryId) || 0, FIRST_ENTRY_ID);
   if (raw.erp && typeof raw.erp === "object") base.erp = raw.erp;
   return base;
 }
@@ -335,4 +341,9 @@ async function writeFile(
 export async function readCv(email: string): Promise<{ filename: string; data: string } | null> {
   const file = await readFile(normalizeEmail(email), "cv");
   return file ? { filename: file.filename ?? "cv", data: file.data } : null;
+}
+
+/** The stored profile photo (a data URL), or null — used by the ERP flush. */
+export async function readPicture(email: string): Promise<string | null> {
+  return (await readFile(normalizeEmail(email), "picture"))?.data ?? null;
 }

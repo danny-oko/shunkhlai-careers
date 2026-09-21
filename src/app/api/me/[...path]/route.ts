@@ -16,13 +16,17 @@ import {
 import { referenceDeps } from "@/server/applicant/reference";
 import { readJson, readUpload } from "@/server/applicant/request-body";
 import {
-  hasDuePushes,
+  type InlinePull,
+  markScheduled,
   pendingErp,
-  pushSubmitted,
-  retryDue,
-  withdrawSubmitted,
+  pullInline,
+  syncDue,
+  syncTask,
+  wantsBackgroundPull,
+  wantsInlinePull,
 } from "@/server/applicant/erp-sync";
-import type { ApplicationErp } from "@/server/applicant/erp-push";
+import { hasErp } from "@/server/applicant/erp";
+import { recordLocalChange, sectionByRemove, syncScheduled } from "@/server/applicant/erp-model";
 import { MAX_CV_BYTES } from "@/lib/apply-schema";
 
 /**
@@ -35,11 +39,12 @@ import { MAX_CV_BYTES } from "@/lib/apply-schema";
  * with the dev mock (`src/server/applicant/handlers.ts`). Always same-origin —
  * `NEXT_PUBLIC_API_URL` only decides where labels and postings are looked up.
  *
- * Applications are also pushed to the live ERP, best-effort and never on the
- * request path: saved in D1 as `erp.status: "pending"`, pushed in `after()`,
- * retried in `after()` on later `get` calls, and withdrawn there on
- * `DeleteOrderApp` (see `src/server/applicant/erp-sync.ts`). The extra `erp`
- * field on application rows is ignored by the UI.
+ * Two-way sync with the live ERP (see `src/server/applicant/erp-sync.ts`),
+ * never blocking a save: every mutation is recorded as local work (pending
+ * rows, queued deletes, dirty profile/files) and written through in `after()`.
+ * `get` pulls the ERP анкет — inline and time-boxed the first time, in
+ * `after()` when stale — and retries due work. The `erp` markers on rows are
+ * ignored by the UI. Without `NEXT_PUBLIC_API_URL` none of this runs.
  */
 
 export const dynamic = "force-dynamic";
@@ -107,6 +112,24 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
   }
   const body = method === "POST" && !isUpload ? await readJson(request) : null;
 
+  // First visit with the ERP configured: bring the ERP анкет in before
+  // answering (bounded; past the budget it finishes in the background).
+  let inline: InlinePull | null = null;
+  if (method === "GET" && endpoint === "get" && hasErp()) {
+    try {
+      const pre = await loadAccount(identity);
+      if (wantsInlinePull(pre.doc)) inline = await pullInline(identity, pre.doc);
+    } catch (error) {
+      console.error("[erp-sync]", "inline_pull_failed", "-", String(error));
+    }
+    if (inline && "pending" in inline) {
+      const pending = inline.pending;
+      later(async () => {
+        await pending;
+      });
+    }
+  }
+
   try {
     // A save that loses the optimistic-lock race re-runs against the fresh row.
     for (let attempt = 0; ; attempt += 1) {
@@ -126,20 +149,20 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
       withFiles: method === "GET" && endpoint === "get",
     });
 
-    // Withdrawing: note the ERP copy's id before the row is removed.
-    const withdrawn =
-      method === "POST" && endpoint === "DeleteOrderApp"
-        ? account.doc.applications.find(
-            (row) =>
-              Number(row.entryid) ===
-              Number(
-                url.searchParams.get("entryid") ??
-                  url.searchParams.get("ENTRYID") ??
-                  url.searchParams.get("entryID"),
-              ),
-          )
-        : undefined;
-    const withdrawnErpId = (withdrawn?.erp as ApplicationErp | undefined)?.erpEntryId;
+    // A delete: note the row before it goes, to queue its ERP delete.
+    const removedList =
+      endpoint === "DeleteOrderApp"
+        ? account.doc.applications
+        : sectionByRemove(endpoint)
+          ? account.doc[sectionByRemove(endpoint)!.key]
+          : null;
+    const removedId = Number(
+      url.searchParams.get("entryid") ??
+        url.searchParams.get("ENTRYID") ??
+        url.searchParams.get("entryID"),
+    );
+    const removed =
+      method === "POST" ? removedList?.find((row) => Number(row.entryid) === removedId) : undefined;
 
     let nextEntryId = account.nextEntryId;
     const result = await handleApplicantRequest(
@@ -165,21 +188,36 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
       submitted.erp = pendingErp();
     }
 
+    // Local work for the ERP; one scheduled sync per account at a time.
+    let schedule = false;
     if (result.mutated) {
+      const recorded =
+        hasErp() && recordLocalChange(account.doc, endpoint, result.envelope.retdata, removed);
+      if ((recorded || submitted) && !syncScheduled(account.doc)) {
+        markScheduled(account.doc);
+        schedule = true;
+      }
       const file = FILE_ENDPOINTS[endpoint];
       await saveAccount(account, identity!, nextEntryId, file ? { [file]: true } : {});
     }
 
-    if (submitted) {
-      const entryid = Number(submitted.entryid);
-      later(() => pushSubmitted(identity!, entryid));
-    } else if (method === "GET" && endpoint === "get" && hasDuePushes(account.doc)) {
-      later(() => retryDue(identity!));
-    } else if (result.mutated && withdrawnErpId) {
-      const doc = account.doc;
-      later(() => withdrawSubmitted(doc, withdrawnErpId));
+    if (schedule) {
+      later(() => syncTask(identity!, { mode: "mutation" }));
+    } else if (method === "GET" && endpoint === "get") {
+      scheduleVisitSync(account.doc);
     }
     return NextResponse.json(result.envelope, { status: result.status });
+  }
+
+  /** On a visit: retry due work and refresh a stale pull, in one background task. */
+  function scheduleVisitSync(doc: Parameters<typeof syncDue>[0]) {
+    if (inline && "pending" in inline) return; // the first pull is still running
+    if (inline && "ok" in inline && !inline.ok) return; // login just failed; back off
+    const token = inline && "ok" in inline && inline.ok ? inline.token : undefined;
+    const pull = !token && wantsBackgroundPull(doc);
+    if (pull || syncDue(doc)) {
+      later(() => syncTask(identity!, { mode: "retry", pull, token }));
+    }
   }
 }
 

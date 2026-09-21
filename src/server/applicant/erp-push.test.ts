@@ -96,7 +96,7 @@ describe("pushApplication", () => {
     edited.erp = { profileEdited: true }; // the applicant saved their profile here
     const result = await pushApplication(edited, app, deps());
 
-    expect(result).toEqual({ status: "sent", erpEntryId: 777, cvHash: undefined });
+    expect(result).toMatchObject({ status: "sent", erpEntryId: 777, cvHash: undefined });
     expect(calls.map((c) => c.endpoint)).toEqual([
       "auth/login",
       "get",

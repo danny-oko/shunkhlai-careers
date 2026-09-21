@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { buildProfilePayload } from "@/lib/api/profile-payload";
 import type { ApplicantProfile, ProfileInput } from "@/lib/api/profile";
 import { ErpError, erpGet, erpLogin, erpPost, erpUpload, hasErp } from "./erp";
+import { CLAIM_TTL_MS, MAX_ATTEMPTS, PROFILE_KEYS, RETRY_FAILED_AFTER_MS, RETRY_PENDING_AFTER_MS, erpIdOfApplication } from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
@@ -28,6 +29,8 @@ export type ApplicationErp = {
   /** ISO timestamp. */
   lastAttemptAt: string;
   erpEntryId?: number;
+  /** A sync task is pushing this row (ISO); others leave it alone for a while. */
+  claimedAt?: string;
 };
 
 export type PushResult = {
@@ -36,6 +39,8 @@ export type PushResult = {
   erpEntryId?: number;
   /** Set when the CV was sent; persist as `doc.erp.cvHash`. */
   cvHash?: string;
+  /** The ERP request list read after submitting (for the re-pull). */
+  erpList?: Row[];
 };
 
 export type PushIdentity = { firstname: string; lastname: string; email: string };
@@ -46,9 +51,11 @@ export type PushDeps = {
   loadCv: () => Promise<{ filename: string; data: string } | null>;
   /** Shared by the pushes of one batch: one login, one profile/CV sync. */
   batch?: PushBatch;
+  /** Postings the ERP already has an application for (`/get` recruitmentorders). */
+  appliedOrderIds?: number[];
 };
 
-type Step<T> = { ok: true; value: T } | { ok: false; error: string };
+export type Step<T> = { ok: true; value: T } | { ok: false; error: string };
 
 export type PushBatch = {
   login?: Promise<Step<string>>;
@@ -68,27 +75,6 @@ function logFailure(code: string, error: unknown) {
   console.error("[erp-push]", code, endpoint, status);
 }
 
-/** Fields `SaveHrApplicant` takes (see `ProfileInput`). */
-const PROFILE_KEYS = [
-  "lastname",
-  "firstname",
-  "regno",
-  "mobilephone",
-  "maritalstatus",
-  "email2",
-  "addr2",
-  "countryid",
-  "divisionid",
-  "districtid",
-  "contactname",
-  "relativeid",
-  "contactphone",
-  "contactname2",
-  "relativeid2",
-  "contactphone2",
-  "custom1",
-  "custom2",
-] as const;
 const LICENCE_KEYS = ["isa", "isb", "isc", "isd", "ise"] as const;
 
 /**
@@ -166,7 +152,8 @@ function entryIdFrom(retdata: unknown): number | undefined {
 
 /* --- steps -------------------------------------------------------------- */
 
-async function login(doc: ApplicantDoc): Promise<Step<string>> {
+/** One ERP login with the applicant's регистр + phone. Never throws. */
+export async function loginFor(doc: ApplicantDoc): Promise<Step<string>> {
   const regno = str(doc.profile.regno);
   const phone = str(doc.profile.mobilephone);
   // No auto-register: the ERP answers "not registered" and "wrong phone" with
@@ -226,7 +213,7 @@ export async function pushApplication(
   }
 
   const batch = deps.batch ?? createPushBatch();
-  batch.login ??= login(doc);
+  batch.login ??= loginFor(doc);
   const session = await batch.login;
   if (!session.ok) return { status: "failed", error: session.error };
   const token = session.value;
@@ -235,6 +222,18 @@ export async function pushApplication(
   const synced = await batch.sync;
   if (!synced.ok) return { status: "failed", error: synced.error };
   const cvHash = synced.value;
+
+  // Already applied (per the ERP's own record): never submit it twice.
+  if ((deps.appliedOrderIds ?? []).includes(Number(app.recruitmentorderid))) {
+    return { status: "sent", cvHash };
+  }
+
+  // The request list carries no recruitmentorderid, so the new application is
+  // the one id that was not there before. "Before" = the ERP ids this document
+  // already knows (from the last pull), which saves a call per push.
+  const known = new Set(
+    doc.applications.map(erpIdOfApplication).filter((id): id is number => id !== undefined),
+  );
 
   let erpEntryId: number | undefined;
   try {
@@ -248,17 +247,24 @@ export async function pushApplication(
     }
   }
 
-  if (erpEntryId === undefined) {
-    try {
-      const rows = await erpGet<Row[] | null>("getRecruitmenRequestList", token);
-      erpEntryId = findErpEntryId(Array.isArray(rows) ? rows : [], app);
-    } catch (error) {
-      // Sent all the same; only the id for a later withdrawal is missing.
-      logFailure("erp_list_failed", error);
+  let erpList: Row[] | undefined;
+  try {
+    const rows = await erpGet<Row[] | null>("getRecruitmenRequestList", token);
+    erpList = Array.isArray(rows) ? rows : [];
+    if (erpEntryId === undefined) {
+      const added = erpList
+        .map((row) => Number(row.entryid))
+        .filter((id) => id > 0 && !known.has(id));
+      // Exactly one new id is unambiguous; otherwise fall back to an exact
+      // recruitmentorderid match (when the list carries it), else leave unset.
+      erpEntryId = added.length === 1 ? added[0] : findErpEntryId(erpList, app);
     }
+  } catch (error) {
+    // Sent all the same; only the id for a later withdrawal is missing.
+    logFailure("erp_list_failed", error);
   }
 
-  return { status: "sent", erpEntryId, cvHash };
+  return { status: "sent", erpEntryId, cvHash, erpList };
 }
 
 /** Withdraws the ERP copy of an application. Best-effort; never throws. */
@@ -279,15 +285,15 @@ export async function withdrawFromErp(
 
 /* --- retry policy ------------------------------------------------------- */
 
-export const MAX_ATTEMPTS = 5;
-const RETRY_FAILED_AFTER_MS = 10 * 60_000;
-const RETRY_PENDING_AFTER_MS = 60_000;
+export { MAX_ATTEMPTS };
 
 /** Rows due another push: pending/failed, under the cap, and old enough. */
 export function isDue(app: Row, now = Date.now()): boolean {
   const erp = app.erp as ApplicationErp | undefined;
   if (!erp || (erp.status !== "pending" && erp.status !== "failed")) return false;
   if ((erp.attempts ?? 0) >= MAX_ATTEMPTS) return false;
+  const claimed = Date.parse(erp.claimedAt ?? "");
+  if (Number.isFinite(claimed) && now - claimed < CLAIM_TTL_MS) return false;
   const last = Date.parse(erp.lastAttemptAt ?? "");
   const wait = erp.status === "pending" ? RETRY_PENDING_AFTER_MS : RETRY_FAILED_AFTER_MS;
   return !Number.isFinite(last) || now - last >= wait;

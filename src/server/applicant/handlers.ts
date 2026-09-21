@@ -30,9 +30,39 @@ export type ApplicantDoc = {
   applications: Row[];
   cv: { filename: string; filedata: string } | null;
   picture: string | null;
-  /** ERP push bookkeeping (`/api/me` only): the hash of the CV last sent. */
-  /** ERP sync state; profileEdited = the applicant saved their profile here. */
-  erp?: { cvHash?: string; profileEdited?: boolean };
+  /** ERP sync state (`/api/me` only; see `erp-sync.ts`). */
+  erp?: DocErp;
+};
+
+/** A queued ERP delete: the endpoint and the ERP's own entry id. */
+export type PendingDelete = { endpoint: string; entryid: number };
+
+/**
+ * Two-way ERP sync bookkeeping, kept inside the document (`data_json`).
+ * `*Dirty` values are stamps (ms) of the latest local change not yet pushed;
+ * a flush clears one only if it is still the stamp it pushed.
+ */
+export type DocErp = {
+  /** Hash of the CV / photo content D1 and the ERP last agreed on. */
+  cvHash?: string;
+  pictureHash?: string;
+  /** The applicant saved their profile on this site at least once. */
+  profileEdited?: boolean;
+  profileDirty?: number;
+  cvDirty?: number;
+  pictureDirty?: number;
+  /** Deletes of ERP rows made here, waiting to be sent. */
+  pendingDeletes?: PendingDelete[];
+  /** Last successful pull (ISO) and pull failure backoff. */
+  pulledAt?: string;
+  pullFailures?: number;
+  pullFailedAt?: string;
+  /** Write-through attempts for the non-application work. */
+  flush?: { attempts: number; lastAttemptAt: string; error?: string; claimedAt?: string };
+  /** A sync task was scheduled and has not started yet (dedupes scheduling). */
+  scheduledAt?: string;
+  /** Postings the ERP says this applicant already applied to (`/get`). */
+  appliedOrderIds?: number[];
 };
 
 export type Envelope = {
@@ -408,7 +438,10 @@ async function handlePost(
       const order = await deps.jobOrder(orderId);
       if (!order) return fail("Ажлын байр олдсонгүй.");
 
-      if (doc.applications.some((row) => Number(row.recruitmentorderid) === orderId)) {
+      if (
+        doc.applications.some((row) => Number(row.recruitmentorderid) === orderId) ||
+        (doc.erp?.appliedOrderIds ?? []).includes(orderId)
+      ) {
         return fail("Та энэ ажлын байранд аль хэдийн анкет илгээсэн байна.");
       }
 
