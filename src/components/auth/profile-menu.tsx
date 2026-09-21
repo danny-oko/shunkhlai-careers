@@ -36,15 +36,14 @@ export function ProfileMenu({ className }: { className?: string }) {
   const { user: clerkUser } = useUser();
   const { resolvedTheme, setTheme } = useTheme();
 
-  // Clear the app session, then end the Clerk session so the bridge doesn't
-  // immediately re-establish it.
+  // Clear the app session, then end the Clerk session.
   const handleSignOut = () => {
     signOut();
     void clerkSignOut({ redirectUrl: "/" });
   };
 
-  // The ERP profile is null when the ERP session is unavailable; fall back to
-  // the Clerk identity so the menu (and sign-out) still has a name and avatar.
+  // The profile is null until /api/me/get answers (or when it fails); fall back
+  // to the Clerk identity so the menu (and sign-out) still has a name and avatar.
   const name = displayName(profile) || clerkUser?.fullName || "";
   const photo = profile ? pictureSrc(profile) : (clerkUser?.imageUrl ?? null);
 

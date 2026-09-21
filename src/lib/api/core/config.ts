@@ -44,4 +44,16 @@ export const API_TIMEOUT_MS = 15_000;
 
 /* Every path in the collection hangs off this one base. */
 export const APPLICANT_BASE = "/api/applicant";
+
+/**
+ * The signed-in applicant's own data (profile, CV sections, applications):
+ * served by this app from D1 on the collection's endpoint names, identified by
+ * the Clerk session cookie. Always same-origin, whatever `NEXT_PUBLIC_API_URL`
+ * says — only public reference data and postings go to the ERP.
+ */
+export const ME_BASE = "/api/me";
+
+export function isMePath(url: string | undefined): boolean {
+  return url === ME_BASE || (url ?? "").startsWith(`${ME_BASE}/`);
+}
 export const SYSTEM_BASE = "/api/system";

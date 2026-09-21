@@ -6,14 +6,11 @@ import { toast } from "sonner";
 
 import { useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
-import { Field, FormMessage } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { profile as profileApi, toApiError } from "@/lib/api";
 import { pictureSrc } from "@/lib/api/profile";
-import { postPasswordChange } from "@/lib/account-password";
 import { describeCvFileError } from "@/lib/apply-schema";
 
-/** Profile photo, CV and password — the three things `SaveHrApplicant` does not carry. */
+/** Profile photo and CV — the two things `SaveHrApplicant` does not carry. (Clerk owns the password.) */
 
 export function PhotoUpload() {
   const { profile, refresh } = useSession();
@@ -169,80 +166,5 @@ export function CvManager() {
         onChange={onPick}
       />
     </div>
-  );
-}
-
-export function PasswordForm() {
-  const [oldpassword, setOld] = React.useState("");
-  const [newpassword, setNew] = React.useState("");
-  const [confirm, setConfirm] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [isBusy, setIsBusy] = React.useState(false);
-
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-
-    if (newpassword.length < 6) {
-      setError("Шинэ нууц үг дор хаяж 6 тэмдэгттэй байна.");
-      return;
-    }
-    if (newpassword !== confirm) {
-      setError("Шинэ нууц үг хоёр хоорондоо таарахгүй байна.");
-      return;
-    }
-
-    setIsBusy(true);
-    try {
-      await postPasswordChange(oldpassword, newpassword);
-      setOld("");
-      setNew("");
-      setConfirm("");
-    } catch (submitError) {
-      setError(toApiError(submitError).message);
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="space-y-5" noValidate>
-      <div className="grid gap-5 sm:grid-cols-3">
-        <Field label="Одоогийн нууц үг" htmlFor="oldpassword" required>
-          <Input
-            id="oldpassword"
-            type="password"
-            autoComplete="current-password"
-            value={oldpassword}
-            onChange={(event) => setOld(event.target.value)}
-          />
-        </Field>
-        <Field label="Шинэ нууц үг" htmlFor="newpassword" required>
-          <Input
-            id="newpassword"
-            type="password"
-            autoComplete="new-password"
-            value={newpassword}
-            onChange={(event) => setNew(event.target.value)}
-          />
-        </Field>
-        <Field label="Шинэ нууц үг давтах" htmlFor="confirm" required>
-          <Input
-            id="confirm"
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-          />
-        </Field>
-      </div>
-
-      <FormMessage message={error} />
-
-      <Button type="submit" variant="outline" disabled={isBusy} className="h-9 rounded-full px-5">
-        {isBusy ? <Loader2 className="animate-spin" /> : null}
-        Нууц үг солих
-      </Button>
-    </form>
   );
 }

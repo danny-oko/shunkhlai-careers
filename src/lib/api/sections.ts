@@ -1,4 +1,4 @@
-import { APPLICANT_BASE } from "./core/config";
+import { ME_BASE } from "./core/config";
 import { type SectionEntry, createSection } from "./core/factories";
 
 /**
@@ -14,7 +14,7 @@ import { type SectionEntry, createSection } from "./core/factories";
  * either read one section or take the whole bundle in a single call.
  */
 
-const p = (name: string) => `${APPLICANT_BASE}/${name}`;
+const p = (name: string) => `${ME_BASE}/${name}`;
 
 const EDUCATION_BUNDLE = p("GetHrAppEducationData");
 const EXPERIENCE_BUNDLE = p("GetHrAppExperienceData");

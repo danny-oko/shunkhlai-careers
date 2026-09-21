@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   type Account,
-  type Row,
   accountFromToken,
-  completion,
   createAccount,
   defaultCountry,
   dropdownRows,
@@ -15,10 +13,17 @@ import {
   jobItem,
   jobList,
   labelFor,
-  removeRow,
+  nextEntryId,
   saveDb,
-  upsert,
 } from "@/server/mock/store";
+import {
+  type HandlerDeps,
+  type HandlerRequest,
+  UNAUTHORIZED_MESSAGE,
+  UPLOAD_ENDPOINTS,
+  handleApplicantRequest,
+} from "@/server/applicant/handlers";
+import { readJson, readUpload } from "@/server/applicant/request-body";
 
 /**
  * A stand-in for the recruitment backend.
@@ -27,6 +32,10 @@ import {
  * the same `{ rettype, retmsg, retdata }` envelope, so the client API layer
  * cannot tell the two apart. Set `NEXT_PUBLIC_API_URL` and every call goes to
  * the real origin instead; these routes simply stop being reached.
+ *
+ * The per-account endpoints are shared with `/api/me` (see
+ * `src/server/applicant/handlers.ts`); this route adds the public reference
+ * data, sign-up/sign-in and the password change on top.
  *
  * State is in memory (see `src/server/mock/store.ts`), and in development it
  * is mirrored to `.mock-data/db.json` so a dev-server restart does not sign
@@ -67,7 +76,20 @@ function fail(retmsg: string, status = 200, rettype = 1) {
 }
 
 function unauthorized() {
-  return fail("Нэвтрэх шаардлагатай.", 401);
+  return fail(UNAUTHORIZED_MESSAGE, 401);
+}
+
+/** Reference data for the shared handler: the bundled mock lists. */
+const mockDeps: HandlerDeps = {
+  nextEntryId,
+  label: (dropdown, key) => labelFor(dropdown, key),
+  jobOrder: (entryID) => jobItem(entryID)?.hrrecruitmentorder[0] ?? null,
+};
+
+async function shared(request: HandlerRequest, account: Account) {
+  const result = await handleApplicantRequest(request, account, mockDeps);
+  if (!result) return fail(`Тодорхойгүй хүсэлт: ${request.endpoint}`, 404);
+  return NextResponse.json(result.envelope, { status: result.status });
 }
 
 function requireAccount(request: Request): Account | null {
@@ -87,30 +109,6 @@ function num(value: string | null, fallback = 0): number {
  */
 function dropdown(name: string, url: URL) {
   return ok(dropdownRows(name, url.searchParams));
-}
-
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    const text = await request.text();
-    return text ? JSON.parse(text) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function readUpload(request: Request): Promise<{ name: string; data: string } | null> {
-  try {
-    const form = await request.formData();
-    for (const value of form.values()) {
-      if (value instanceof File && value.size > 0) {
-        const buffer = Buffer.from(await value.arrayBuffer());
-        return { name: value.name, data: buffer.toString("base64") };
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -147,61 +145,10 @@ export async function GET(request: Request, ctx: Ctx) {
   const account = requireAccount(request);
   if (!account) return unauthorized();
 
-  switch (endpoint) {
-    case "get":
-      return ok({
-        ...account.profile,
-        picturedata: account.picture,
-        filename: account.cv?.filename ?? null,
-        filedata: account.cv?.filedata ?? null,
-        ...completion(account),
-      });
-
-    case "GetHrAppEducationData":
-      return ok({
-        hrappedulist: account.education,
-        hrapplanglist: account.languages,
-        hrappquallist: account.qualifications,
-        hrappcomplist: account.skills,
-      });
-
-    case "GetHrAppExperienceData":
-      return ok({
-        hrappexplist: account.experience,
-        hrappprojectlist: account.projects,
-        hrappinternlist: account.internships,
-      });
-
-    case "GetHrAppFamilyData":
-      return ok({
-        hrappfamilylist: account.family,
-        hrapprelativelist: account.relatives,
-      });
-
-    case "GetHrAppEducation":
-      return ok(one(account.education, num(url.searchParams.get("entryid"))));
-    case "GetAppForLanguage":
-      return ok(one(account.languages, num(url.searchParams.get("entryid"))));
-    case "GetAppSkillComp":
-      return ok(one(account.skills, num(url.searchParams.get("entryid"))));
-    case "GetAppExperience":
-      return ok(one(account.experience, num(url.searchParams.get("entryid"))));
-    case "GetAppFamily":
-      return ok(one(account.family, num(url.searchParams.get("entryid"))));
-
-    case "getInterestedJobsList":
-      return ok(account.interests);
-
-    case "getRecruitmenRequestList":
-      return ok(account.applications);
-
-    default:
-      return fail(`Тодорхойгүй хүсэлт: ${endpoint}`, 404);
-  }
-}
-
-function one(rows: Row[], entryid: number): Row | null {
-  return rows.find((row) => Number(row.entryid) === entryid) ?? null;
+  return shared(
+    { endpoint, method: "GET", query: url.searchParams, body: null },
+    account,
+  );
 }
 
 /* ---------------------------------------------------------------------- */
@@ -260,28 +207,7 @@ async function post(request: Request, ctx: Ctx) {
   const account = requireAccount(request);
   if (!account) return unauthorized();
 
-  const entryid = num(
-    url.searchParams.get("entryid") ??
-      url.searchParams.get("ENTRYID") ??
-      url.searchParams.get("entryID"),
-  );
-
   switch (endpoint) {
-    case "SaveHrApplicant": {
-      const body = (await readJson(request)) as Row | null;
-      if (!body) return fail("Мэдээлэл дутуу байна.");
-      account.profile = {
-        ...account.profile,
-        ...body,
-        countryname: labelFor("GetCountryDropDown", body.countryid),
-        divisionname: labelFor("GetDivisionDropDown", body.divisionid),
-        districtname: labelFor("GetDistrictDropDown", body.districtid),
-        relativename: labelFor("GetRelativeDropDown", body.relativeid),
-        relativename2: labelFor("GetRelativeDropDown", body.relativeid2),
-      };
-      return ok(account.profile);
-    }
-
     case "changeUserInfo": {
       const body = (await readJson(request)) as Record<string, string> | null;
       if (body?.type === "PASSWORD") {
@@ -301,146 +227,13 @@ async function post(request: Request, ctx: Ctx) {
       return ok(true);
     }
 
-    case "SaveAppPicture": {
-      const file = await readUpload(request);
-      if (!file) return fail("file not selected");
-      account.picture = `data:image/jpeg;base64,${file.data}`;
-      return ok(true);
-    }
-
-    case "SaveAppCV": {
-      const file = await readUpload(request);
-      if (!file) return fail("file not selected");
-      account.cv = { filename: file.name, filedata: file.data };
-      return ok(true);
-    }
-
-    case "deleteAppCV":
-      account.cv = null;
-      return ok(true);
-
-    case "SaveHrAppEducation": {
-      const body = (await readJson(request)) as Row | null;
-      if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(account.education, {
-          ...body,
-          universityname: labelFor("GetUniversityDropDown", body.universityid),
-          professionname: labelFor("GetProfessionDropDown", body.professionid),
-          educationlevelname: labelFor("get_educationlevel_dropdown", body.educationlevelid),
-        }),
+    default: {
+      const upload = UPLOAD_ENDPOINTS.has(endpoint) ? await readUpload(request) : null;
+      const body = UPLOAD_ENDPOINTS.has(endpoint) ? null : await readJson(request);
+      return shared(
+        { endpoint, method: "POST", query: url.searchParams, body, upload },
+        account,
       );
     }
-
-    case "SaveAppForLanguage": {
-      const body = (await readJson(request)) as Row | null;
-      if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(account.languages, {
-          ...body,
-          forlanguagename: labelFor("GetForLanguageDropDown", body.forlanguageid),
-        }),
-      );
-    }
-
-    case "SaveAppSkillComp": {
-      const body = (await readJson(request)) as Row[] | Row | null;
-      const rows = Array.isArray(body) ? body : body ? [body] : [];
-      const saved = rows.map((row) =>
-        upsert(account.skills, {
-          ...row,
-          skillcompname: labelFor("GetSkillCompDropDown", row.skillcompid),
-          levelname: labelFor("GetSkillCompLevelDropDown", row.levelid),
-        }),
-      );
-      return ok(saved);
-    }
-
-    case "SaveAppExperience": {
-      const body = (await readJson(request)) as Row | null;
-      if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(account.experience, {
-          ...body,
-          jobname: labelFor("GetJobDropDown", body.jobid),
-          businesstypename: labelFor("GetBusinessTypeDropDown", body.businesstypeid),
-        }),
-      );
-    }
-
-    case "SaveAppFamily": {
-      const body = (await readJson(request)) as Row[] | Row | null;
-      const rows = Array.isArray(body) ? body : body ? [body] : [];
-      const saved = rows.map((row) =>
-        upsert(account.family, {
-          ...row,
-          relativename: labelFor("GetRelativeDropDown", row.relativeid),
-        }),
-      );
-      return ok(saved);
-    }
-
-    case "SaveInterestedJobItem": {
-      const body = (await readJson(request)) as Row | null;
-      if (!body) return fail("Мэдээлэл дутуу байна.");
-      const position = dropdowns.getPositionsDropdown.find(
-        (row) => String(row.key) === String(body.positionid),
-      );
-      return ok(
-        upsert(account.interests, {
-          ...body,
-          posgroupname: labelFor("getPosGroupDropdown", body.posgroupid),
-          positionname: position ? String(position.text) : "",
-        }),
-      );
-    }
-
-    case "SaveHrRecruitmentOrderApp": {
-      const body = (await readJson(request)) as Row | null;
-      const orderId = Number(body?.recruitmentorderid ?? 0);
-      const detail = jobItem(orderId);
-      if (!detail) return fail("Ажлын байр олдсонгүй.");
-
-      if (account.applications.some((row) => Number(row.recruitmentorderid) === orderId)) {
-        return fail("Та энэ ажлын байранд аль хэдийн анкет илгээсэн байна.");
-      }
-
-      const order = detail.hrrecruitmentorder[0];
-      return ok(
-        upsert(account.applications, {
-          entryid: 0,
-          recruitmentorderid: orderId,
-          posname: order.posname,
-          companyname: order.companyname,
-          locname: order.locname,
-          salaryname: order.salarylevel ?? "",
-          salrequest: body?.salrequest ?? null,
-          availabledate: body?.poshiredate ?? "",
-          recsourceid: body?.recsourceid ?? null,
-          sourcename: labelFor("GetSourceDropDown", body?.recsourceid),
-          statusid: 1,
-          statusname: "Хүлээн авсан",
-          senddate: new Date().toISOString().slice(0, 10).replace(/-/g, "."),
-        }),
-      );
-    }
-
-    case "DeleteHrAppEducation":
-      return removeRow(account.education, entryid) ? ok(true) : fail("Мөр олдсонгүй.");
-    case "DeleteAppForLanguage":
-      return removeRow(account.languages, entryid) ? ok(true) : fail("Мөр олдсонгүй.");
-    case "DeleteAppSkillComp":
-      return removeRow(account.skills, entryid) ? ok(true) : fail("Мөр олдсонгүй.");
-    case "DeleteAppExperience":
-      return removeRow(account.experience, entryid) ? ok(true) : fail("Мөр олдсонгүй.");
-    case "DeleteAppFamily":
-      return removeRow(account.family, entryid) ? ok(true) : fail("Мөр олдсонгүй.");
-    case "deleteInterestedJob":
-      return removeRow(account.interests, entryid) ? ok(true) : fail("Мөр олдсонгүй.");
-    case "DeleteOrderApp":
-      return removeRow(account.applications, entryid) ? ok(true) : fail("Хүсэлт олдсонгүй.");
-
-    default:
-      return fail(`Тодорхойгүй хүсэлт: ${endpoint}`, 404);
   }
 }

@@ -7,13 +7,6 @@ import { useAuth } from "@clerk/nextjs";
 import { Loader2 } from "lucide-react";
 
 import { useSession } from "@/components/auth/session-provider";
-import {
-  retryErpSession,
-  useErpBridgeReason,
-  useErpBridgeStatus,
-} from "@/components/auth/clerk-erp-bridge";
-import { ErpConnectForm } from "@/components/auth/erp-connect-form";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const sections = [
@@ -26,53 +19,19 @@ const sections = [
   { href: "/account/applications", label: "Илгээсэн хүсэлт" },
 ];
 
-/** Everything under /account needs a session; anonymous visitors go to sign-in. */
+/**
+ * Everything under /account needs a Clerk session: spinner while Clerk loads,
+ * signed-out visitors go to sign-in, signed-in ones get their D1 account.
+ */
 export default function AccountLayout({ children }: LayoutProps<"/account">) {
   const { status } = useSession();
   const { isLoaded, isSignedIn } = useAuth();
-  const bridgeStatus = useErpBridgeStatus();
-  const bridgeReason = useErpBridgeReason();
   const pathname = usePathname();
   const router = useRouter();
 
   React.useEffect(() => {
-    // Only bounce to sign-in when Clerk itself is signed out. If Clerk is signed
-    // in but the app session isn't ready yet, the ClerkErpBridge is either
-    // establishing it or showing the inline connect form — so we wait.
-    if (isLoaded && !isSignedIn && status !== "authenticated") {
-      router.replace("/sign-in");
-    }
-  }, [isLoaded, isSignedIn, status, router]);
-
-  if (status !== "authenticated" && bridgeStatus === "relink") {
-    return (
-      <main className="flex-1 pt-16">
-        <div className="mx-auto w-full max-w-xl px-6 py-16">
-          <div className="rounded-2xl border p-6">
-            <h1 className="text-2xl font-semibold tracking-[-0.02em]">Анкетаа холбох</h1>
-            <p className="text-muted-foreground mt-2 mb-8 text-sm">
-              ERP (careers.shunkhlai.mn) дахь анкеттайгаа холбохын тулд регистр, утасны
-              дугаараа оруулна уу. Мэдээллийг шалгаад шифрлэн хадгална.
-            </p>
-            <ErpConnectForm notice={bridgeReason === "relink"} />
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (status !== "authenticated" && bridgeStatus === "error") {
-    return (
-      <main className="flex flex-1 items-center justify-center pt-16">
-        <div role="alert" className="flex flex-col items-center gap-3 py-32 text-center text-sm">
-          <p className="text-muted-foreground">Алдаа гарлаа. Дахин оролдоно уу.</p>
-          <Button size="sm" className="rounded-full px-3" onClick={retryErpSession}>
-            Дахин оролдох
-          </Button>
-        </div>
-      </main>
-    );
-  }
+    if (isLoaded && !isSignedIn) router.replace("/sign-in");
+  }, [isLoaded, isSignedIn, router]);
 
   if (status !== "authenticated") {
     return (

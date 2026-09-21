@@ -1,10 +1,10 @@
-import { APPLICANT_BASE } from "./core/config";
+import { ME_BASE } from "./core/config";
 import { apiGetList, apiPost } from "./core/request";
 
 /**
  * Applying to a posting, tracking what was sent, and registering interest in
- * roles that are not advertised yet. All of it needs a session — the backend
- * reads the applicant from the token and attaches their CV automatically.
+ * roles that are not advertised yet. All of it needs a session — `/api/me`
+ * reads the applicant from the Clerk session and stores it in D1.
  */
 
 export type ApplicationInput = {
@@ -59,36 +59,36 @@ export type InterestedJobInput = {
   depid?: string | number | null;
 };
 
-/** POST /api/applicant/SaveHrRecruitmentOrderApp */
+/** POST /api/me/SaveHrRecruitmentOrderApp */
 export function apply(body: ApplicationInput) {
-  return apiPost<unknown>(`${APPLICANT_BASE}/SaveHrRecruitmentOrderApp`, body);
+  return apiPost<unknown>(`${ME_BASE}/SaveHrRecruitmentOrderApp`, body);
 }
 
-/** GET /api/applicant/getRecruitmenRequestList */
+/** GET /api/me/getRecruitmenRequestList */
 export function listMine() {
-  return apiGetList<ApplicationRow>(`${APPLICANT_BASE}/getRecruitmenRequestList`);
+  return apiGetList<ApplicationRow>(`${ME_BASE}/getRecruitmenRequestList`);
 }
 
-/** POST /api/applicant/DeleteOrderApp?entryID= — withdraws an application. */
+/** POST /api/me/DeleteOrderApp?entryID= — withdraws an application. */
 export function withdraw(entryID: number) {
-  return apiPost<unknown>(`${APPLICANT_BASE}/DeleteOrderApp`, undefined, {
+  return apiPost<unknown>(`${ME_BASE}/DeleteOrderApp`, undefined, {
     params: { entryID },
   });
 }
 
-/** GET /api/applicant/getInterestedJobsList */
+/** GET /api/me/getInterestedJobsList */
 export function listInterests() {
-  return apiGetList<InterestedJobRow>(`${APPLICANT_BASE}/getInterestedJobsList`);
+  return apiGetList<InterestedJobRow>(`${ME_BASE}/getInterestedJobsList`);
 }
 
-/** POST /api/applicant/SaveInterestedJobItem */
+/** POST /api/me/SaveInterestedJobItem */
 export function saveInterest(body: InterestedJobInput) {
-  return apiPost<unknown>(`${APPLICANT_BASE}/SaveInterestedJobItem`, body);
+  return apiPost<unknown>(`${ME_BASE}/SaveInterestedJobItem`, body);
 }
 
-/** POST /api/applicant/deleteInterestedJob?entryid= */
+/** POST /api/me/deleteInterestedJob?entryid= */
 export function deleteInterest(entryid: number) {
-  return apiPost<unknown>(`${APPLICANT_BASE}/deleteInterestedJob`, undefined, {
+  return apiPost<unknown>(`${ME_BASE}/deleteInterestedJob`, undefined, {
     params: { entryid },
   });
 }

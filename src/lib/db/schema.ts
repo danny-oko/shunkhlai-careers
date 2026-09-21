@@ -1,14 +1,13 @@
 /**
- * Our own persistence layer — the piece the ERP does not give us.
+ * Our own persistence layer (Cloudflare D1 / SQLite).
  *
- * Clerk owns identity (email / social login). This DB (Cloudflare D1 / SQLite)
- * is the bridge from a Clerk user to their credentials on the recruitment
- * backend (careers.shunkhlai.mn), so the app can drive the ERP on their behalf.
+ * Clerk owns identity (email / social login). Applicant account data lives in
+ * `applicant_account` / `applicant_file`, keyed by the Clerk email.
  *
- * SECURITY: `regno`, `phone` (which doubles as the ERP password), and the ERP
- * tokens are secrets. They are stored ENCRYPTED (see ./crypto) — never in
- * cleartext. This is the real-database answer to the PII-at-rest issue that
- * STATE.md records for the dev `.mock-data/db.json` store.
+ * `applicant_link` and `applicant_profile` are from the retired ERP-link flow.
+ * They are kept (data retained) but unused, apart from a one-time import of an
+ * `applicant_profile` snapshot into a new account. `applicant_link` holds
+ * secrets encrypted with the old APP_ENCRYPTION_KEY; nothing decrypts them now.
  */
 import {
   sqliteTable,
@@ -17,7 +16,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-/** One row per Clerk user ↔ their ERP applicant identity. */
+/** RETIRED: one row per Clerk user ↔ their ERP applicant identity. Unused. */
 export const applicantLink = sqliteTable(
   "applicant_link",
   {
@@ -95,7 +94,56 @@ export const applicantProfile = sqliteTable(
   })
 );
 
+/**
+ * The applicant's account — every personal-data section the /account pages
+ * edit — as one JSON document per signed-in Clerk email (lowercased). Served by
+ * `/api/me/*` on the ERP's own endpoint names. Files live in `applicant_file`.
+ */
+export const applicantAccount = sqliteTable(
+  "applicant_account",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    clerkUserId: text("clerk_user_id"),
+    // profile, education, languages, …, applications, cv/picture metadata, nextEntryId
+    dataJson: text("data_json").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byEmail: uniqueIndex("applicant_account_email_key").on(t.email),
+  })
+);
+
+/**
+ * The CV and profile photo (base64), split into chunks: D1 caps a single value
+ * / row at 2 MB and a CV may be up to 5 MB (MAX_CV_BYTES) — ~6.7 MB as base64.
+ */
+export const applicantFile = sqliteTable(
+  "applicant_file",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    kind: text("kind").notNull(), // cv | picture
+    filename: text("filename"),
+    chunkIndex: integer("chunk_index").notNull(),
+    data: text("data").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byChunk: uniqueIndex("applicant_file_email_kind_chunk_key").on(t.email, t.kind, t.chunkIndex),
+  })
+);
+
 export type ApplicantLink = typeof applicantLink.$inferSelect;
 export type NewApplicantLink = typeof applicantLink.$inferInsert;
 export type ApplicationLog = typeof applicationLog.$inferSelect;
 export type ApplicantProfileRow = typeof applicantProfile.$inferSelect;
+export type ApplicantAccountRow = typeof applicantAccount.$inferSelect;
+export type ApplicantFileRow = typeof applicantFile.$inferSelect;

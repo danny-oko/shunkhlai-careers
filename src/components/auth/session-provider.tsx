@@ -2,30 +2,22 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 
-import { auth, isSignedIn, isUnauthorized, onSessionChange, profile as profileApi } from "@/lib/api";
+import { clearSession, profile as profileApi } from "@/lib/api";
 import type { ApplicantProfile } from "@/lib/api/profile";
 
 /**
- * Client-side session.
+ * Client-side applicant session.
  *
- * Tokens live in `localStorage` (see `api/core/tokens.ts`), so the signed-in
- * surfaces are client-rendered; the public job pages stay on the server.
- * The profile is fetched once and shared, because `/api/applicant/get` already
- * returns the name, the photo and the completion percentages every account
- * screen needs.
+ * Clerk decides who is signed in: `status` follows Clerk's `isSignedIn`. The
+ * profile comes from `/api/me/get` (D1, keyed by the Clerk email) and is
+ * fetched once and shared, because it already carries the name, the photo and
+ * the completion percentages every account screen needs. No applicant token is
+ * stored in the browser; the admin token tier (`core/tokens.ts`) is separate.
  *
- * Two things this has to get right, because `/account` redirects anyone whose
- * status is `anonymous`:
- *
- *   - `refresh()` must not resolve until the new status has been handed to
- *     React. `AuthForm` awaits it and then navigates; if it resolves early the
- *     guard sees the pre-sign-in `anonymous` and bounces the user back to the
- *     login form they just submitted.
- *   - the token store is written from outside React too — the 401 interceptor
- *     in `api/core/client.ts` and an expired token both clear it — so the provider
- *     subscribes to `onSessionChange` rather than assuming it is the only
- *     writer.
+ * `refresh()` resolves only after the new profile has been handed to React, so
+ * a caller that awaits it and then navigates sees the updated state.
  */
 
 type SessionValue = {
@@ -35,13 +27,6 @@ type SessionValue = {
   signOut: () => void;
 };
 
-type SessionState = {
-  status: SessionValue["status"];
-  profile: ApplicantProfile | null;
-};
-
-const ANONYMOUS: SessionState = { status: "anonymous", profile: null };
-
 const SessionContext = React.createContext<SessionValue | null>(null);
 
 export function useSession(): SessionValue {
@@ -50,79 +35,78 @@ export function useSession(): SessionValue {
   return context;
 }
 
-/** A 401 means the session is gone; anything else is worth keeping it for. */
-function afterProfileError(error: unknown): SessionState {
-  if (isUnauthorized(error)) {
-    auth.signOut();
-    return ANONYMOUS;
-  }
-  // A transient failure should not sign anyone out.
-  return { status: "authenticated", profile: null };
-}
-
-/** Resolves the next session state without touching React state. */
-async function readSession(): Promise<SessionState> {
-  if (!isSignedIn()) return ANONYMOUS;
-
+/** The profile, or null when it cannot be read right now. */
+async function readProfile(): Promise<ApplicantProfile | null> {
   try {
-    return { status: "authenticated", profile: await profileApi.getProfile() };
-  } catch (error) {
-    return afterProfileError(error);
+    return await profileApi.getProfile();
+  } catch {
+    // A failed read must not sign anyone out; Clerk owns that.
+    return null;
   }
 }
 
 export const SessionProvider = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
-  const [status, setStatus] = React.useState<SessionValue["status"]>("loading");
-  const [profile, setProfile] = React.useState<ApplicantProfile | null>(null);
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  // Tagged with the Clerk user it belongs to, so another user's (or a
+  // signed-out) session never shows it.
+  const [loaded, setLoaded] = React.useState<{
+    userId: string;
+    profile: ApplicantProfile | null;
+  } | null>(null);
+  const profile = isSignedIn && loaded?.userId === userId ? loaded.profile : null;
 
-  // Only the newest read may commit. Sign-out and a re-read can otherwise be
-  // in flight together, and a slow earlier read would put the old profile
-  // back on screen after the session ended. `mounted` is the other half of
-  // what the old per-effect `cancelled` flag did: the counter alone would
-  // still let a late read commit to an unmounted provider.
+  const status: SessionValue["status"] = !isLoaded
+    ? "loading"
+    : isSignedIn
+      ? "authenticated"
+      : "anonymous";
+
+  // Only the newest read may commit: a slow earlier read must not put an old
+  // profile back after sign-out or a newer save.
   const generation = React.useRef(0);
   const mounted = React.useRef(false);
 
-  const load = React.useCallback(async () => {
-    const ticket = (generation.current += 1);
-    const next = await readSession();
-    if (!mounted.current || ticket !== generation.current) return;
-
-    setProfile(next.profile);
-    setStatus(next.status);
-  }, []);
-
   React.useEffect(() => {
     mounted.current = true;
-    void load();
-
     return () => {
       mounted.current = false;
     };
-  }, [load]);
+  }, []);
 
-  // The token store has writers outside React — sign-in, the 401 interceptor
-  // and the expiry check all go through `core/tokens.ts`.
-  React.useEffect(
-    () =>
-      onSessionChange((audience) => {
-        if (audience === "applicant") void load();
-      }),
-    [load],
-  );
+  const load = React.useCallback(async (owner: string) => {
+    const ticket = (generation.current += 1);
+    const next = await readProfile();
+    if (!mounted.current || ticket !== generation.current) return;
+    setLoaded({ userId: owner, profile: next });
+  }, []);
+
+  React.useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn && userId) {
+      void load(userId);
+      return;
+    }
+    // Signed out: invalidate any read still in flight.
+    generation.current += 1;
+  }, [isLoaded, isSignedIn, userId, load]);
+
+  const refresh = React.useCallback(async () => {
+    if (isSignedIn && userId) await load(userId);
+  }, [isSignedIn, userId, load]);
 
   const signOut = React.useCallback(() => {
-    auth.signOut();
-    setProfile(null);
-    setStatus("anonymous");
+    generation.current += 1;
+    // Drop any applicant token an older build left in localStorage.
+    clearSession("applicant");
+    setLoaded(null);
     router.push("/");
     router.refresh();
   }, [router]);
 
   const value = React.useMemo<SessionValue>(
-    () => ({ status, profile, refresh: load, signOut }),
-    [status, profile, load, signOut],
+    () => ({ status, profile, refresh, signOut }),
+    [status, profile, refresh, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

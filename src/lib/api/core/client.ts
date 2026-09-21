@@ -5,7 +5,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 
-import { API_TIMEOUT_MS, LANGUAGE, ORIGIN_URL, resolveBaseUrl } from "./config";
+import { API_TIMEOUT_MS, LANGUAGE, ORIGIN_URL, isMePath, resolveBaseUrl } from "./config";
 import { type Audience, clearSession, readAccessToken } from "./tokens";
 
 declare module "axios" {
@@ -57,9 +57,22 @@ function bearerFor(config: InternalAxiosRequestConfig): string | null {
   return token ? `Bearer ${token}` : null;
 }
 
+/**
+ * `/api/me/*` is this app's own route, authenticated by the Clerk cookie: send
+ * it same-origin with credentials and no bearer. `skipAuth` also keeps its 401
+ * from clearing a stored token — the session provider reads that 401 itself.
+ */
+function routeToMe(config: InternalAxiosRequestConfig): void {
+  if (!isMePath(config.url)) return;
+  config.baseURL = "";
+  config.withCredentials = true;
+  config.skipAuth = true;
+}
+
 http.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     if (isFormData(config.data)) delete config.headers["Content-Type"];
+    routeToMe(config);
 
     const bearer = bearerFor(config);
     if (bearer) config.headers.Authorization = bearer;

@@ -1,4 +1,4 @@
-import { APPLICANT_BASE } from "./core/config";
+import { ME_BASE } from "./core/config";
 import { apiGet, apiPost, apiUpload } from "./core/request";
 import { buildProfilePayload } from "./profile-payload";
 
@@ -113,29 +113,29 @@ export function unwrapProfile(data: unknown): ApplicantProfile {
   return fromWrapped(data);
 }
 
-/** GET /api/applicant/get */
+/** GET /api/me/get */
 export async function getProfile(): Promise<ApplicantProfile> {
-  return unwrapProfile(await apiGet<unknown>(`${APPLICANT_BASE}/get`));
+  return unwrapProfile(await apiGet<unknown>(`${ME_BASE}/get`));
 }
 
-/** POST /api/applicant/SaveHrApplicant */
+/** POST /api/me/SaveHrApplicant */
 export function saveProfile(body: ProfileInput, loaded?: ApplicantProfile | null) {
-  return apiPost<unknown>(`${APPLICANT_BASE}/SaveHrApplicant`, buildProfilePayload(body, loaded));
+  return apiPost<unknown>(`${ME_BASE}/SaveHrApplicant`, buildProfilePayload(body, loaded));
 }
 
-/** POST /api/applicant/SaveAppPicture — the server makes a full and a thumbnail copy. */
+/** POST /api/me/SaveAppPicture */
 export function uploadPhoto(file: File) {
-  return apiUpload<unknown>(`${APPLICANT_BASE}/SaveAppPicture`, file);
+  return apiUpload<unknown>(`${ME_BASE}/SaveAppPicture`, file);
 }
 
-/** POST /api/applicant/SaveAppCV — one CV per applicant; re-uploading replaces it. */
+/** POST /api/me/SaveAppCV — one CV per applicant; re-uploading replaces it. */
 export function uploadCv(file: File) {
-  return apiUpload<unknown>(`${APPLICANT_BASE}/SaveAppCV`, file);
+  return apiUpload<unknown>(`${ME_BASE}/SaveAppCV`, file);
 }
 
-/** POST /api/applicant/deleteAppCV — no parameters; the token identifies the applicant. */
+/** POST /api/me/deleteAppCV — no parameters; the Clerk session identifies the applicant. */
 export function deleteCv() {
-  return apiPost<unknown>(`${APPLICANT_BASE}/deleteAppCV`);
+  return apiPost<unknown>(`${ME_BASE}/deleteAppCV`);
 }
 
 /** Turns the Base64 photo from `getProfile` into something `<img src>` accepts. */

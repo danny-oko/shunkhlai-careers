@@ -9,27 +9,22 @@ import {
   parentOf,
   postings,
 } from "./data";
+import {
+  type ApplicantDoc,
+  type Row,
+  completion,
+  removeRow,
+  upsertRow,
+} from "@/server/applicant/handlers";
 
-export type Row = Record<string, unknown>;
+export type { Row };
+export { completion, removeRow };
 
-export type Account = {
+/** A mock ERP account: the shared applicant document plus its credentials. */
+export type Account = ApplicantDoc & {
   id: number;
   regno: string;
   password: string;
-  profile: Row;
-  education: Row[];
-  languages: Row[];
-  qualifications: Row[];
-  skills: Row[];
-  experience: Row[];
-  projects: Row[];
-  internships: Row[];
-  family: Row[];
-  relatives: Row[];
-  interests: Row[];
-  applications: Row[];
-  cv: { filename: string; filedata: string } | null;
-  picture: string | null;
 };
 
 type Db = {
@@ -180,24 +175,7 @@ export function accountFromToken(token: string | null): Account | null {
 
 /** `entryid: 0` inserts, anything else updates in place. */
 export function upsert(rows: Row[], entry: Row): Row {
-  const entryid = Number(entry.entryid ?? 0);
-  if (entryid > 0) {
-    const index = rows.findIndex((row) => Number(row.entryid) === entryid);
-    if (index >= 0) {
-      rows[index] = { ...rows[index], ...entry };
-      return rows[index];
-    }
-  }
-  const created = { ...entry, entryid: nextEntryId() };
-  rows.push(created);
-  return created;
-}
-
-export function removeRow(rows: Row[], entryid: number): boolean {
-  const index = rows.findIndex((row) => Number(row.entryid) === entryid);
-  if (index < 0) return false;
-  rows.splice(index, 1);
-  return true;
+  return upsertRow(rows, entry, nextEntryId);
 }
 
 /** Resolves a dropdown key to its label, so saved rows can show names too. */
@@ -239,52 +217,6 @@ export function dropdownRows(name: string, params: URLSearchParams): Row[] {
     if (parent) delete visible[parent.param];
     return visible;
   });
-}
-
-export function completion(account: Account) {
-  const profile = account.profile;
-  const personalFields = [
-    profile.lastname,
-    profile.firstname,
-    profile.regno,
-    profile.mobilephone,
-    profile.email2,
-    profile.addr2,
-    profile.divisionid,
-    profile.districtid,
-    profile.contactname,
-    profile.contactphone,
-  ];
-  const filled = personalFields.filter(
-    (value) => value !== null && value !== undefined && value !== "",
-  ).length;
-  const persinfoper = Math.round((filled / personalFields.length) * 100);
-
-  const educationper = Math.min(
-    100,
-    account.education.length * 50 +
-      account.languages.length * 25 +
-      account.skills.length * 25,
-  );
-  const experienceper = Math.min(100, account.experience.length * 50);
-  const familyper = Math.min(100, account.family.length * 50);
-  const distinctper = Math.min(
-    100,
-    account.interests.length * 50 + (account.cv ? 50 : 0),
-  );
-
-  const totalper = Math.round(
-    (persinfoper + educationper + experienceper + familyper + distinctper) / 5,
-  );
-
-  return {
-    persinfoper,
-    educationper,
-    experienceper,
-    familyper,
-    distinctper,
-    totalper,
-  };
 }
 
 /* --- postings ---------------------------------------------------------- */

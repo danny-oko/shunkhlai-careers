@@ -35,8 +35,8 @@ export function SiteHeader() {
   const pathname = usePathname();
   const { status } = useSession();
   const { isSignedIn: isClerkSignedIn } = useAuth();
-  // Clerk can be signed in while the ERP token is missing (session call failed
-  // or account not linked); "Нэвтрэх" would then bounce straight back to "/".
+  // The applicant session follows Clerk; reading Clerk directly as well keeps
+  // "Нэвтрэх" hidden for a signed-in visitor during the first render.
   const isAuthenticated = status === "authenticated" || isClerkSignedIn === true;
   const [isScrolled, setIsScrolled] = React.useState(false);
   const [isOpen, setIsOpen] = React.useState(false);

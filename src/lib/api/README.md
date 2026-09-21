@@ -58,8 +58,9 @@ in the collection.
 
 **The phone number is the initial password.** `mobilephone` carries the phone on
 first sign-up and the password on every sign-in after that — until
-`changeUserInfo` with `type: "PASSWORD"` replaces it (called server-side by
-`POST /api/erp/password`, which also updates the stored credential). The sign-in copy says so
+`changeUserInfo` with `type: "PASSWORD"` replaces it. (The app no longer uses
+this: applicants sign in with Clerk and their account data lives in D1 behind
+`/api/me/*`.) The sign-in copy says so
 out loud, because otherwise the first login is a guessing game.
 
 ## Two patterns carry most of the surface

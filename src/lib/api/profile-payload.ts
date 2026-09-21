@@ -1,9 +1,8 @@
 import type { ApplicantProfile, ProfileInput } from "./profile";
 
 /**
- * Pure SaveHrApplicant payload builder, kept free of transport imports so the
- * server-side ERP link (`src/server/erp/link.ts`) can share it with the browser
- * client. `profile.ts` re-exports it.
+ * Pure SaveHrApplicant payload builder, kept free of transport imports so
+ * server code can share it with the browser client. `profile.ts` re-exports it.
  */
 
 /**
