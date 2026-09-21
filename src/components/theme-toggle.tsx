@@ -5,6 +5,13 @@ import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/**
+ * Light/dark switch.
+ *
+ * Both icons are rendered and swapped by the `dark` class variant rather than
+ * by React state, so the server and client markup match exactly and the
+ * correct icon is painted on first frame - no mount flash, no effect needed.
+ */
 export function ThemeToggle({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
 
