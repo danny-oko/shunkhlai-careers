@@ -4,7 +4,9 @@ import Link from "next/link";
 import { FileWarning, Loader2 } from "lucide-react";
 
 import type { DropdownOption } from "@/lib/api";
-import { useSession } from "@/components/auth/session-provider";
+import { LinkErrorNotice } from "@/components/account/identity-gate";
+import { useCv } from "@/components/account/profile-files";
+import { CvDropzone } from "@/components/cv-dropzone";
 import type { useApplyForm, useApplyOptions } from "@/components/use-apply-form";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
@@ -41,18 +43,26 @@ const LoadedSelect = ({
   </Select>
 );
 
+/**
+ * No CV stored: say so and take one right here (the same upload as the
+ * profile page). The sheet only shows this form once the identity gate is passed.
+ */
 const CvNotice = () => {
-  const { profile } = useSession();
-  return profile?.filename ? null : (
-    <div className="border-border/70 bg-muted/40 flex gap-3 rounded-lg border p-4">
-      <FileWarning className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-      <p className="text-muted-foreground text-sm">
-        CV хавсаргаагүй байна.{" "}
-        <Link href="/account/profile" className="text-foreground underline underline-offset-4">
-          Профайлаас хавсаргах
-        </Link>{" "}
-        нь сонгон шалгаруулалтад давуу тал болно.
-      </p>
+  const cv = useCv();
+  if (cv.filename && !cv.pending) return null;
+  return (
+    <div className="border-border/70 bg-muted/40 space-y-3 rounded-lg border p-4">
+      <div className="flex gap-3">
+        <FileWarning className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+        <p className="text-muted-foreground text-sm">
+          CV хавсаргаагүй байна. Энд эсвэл{" "}
+          <Link href="/account/profile" className="text-foreground underline underline-offset-4">
+            профайлаасаа
+          </Link>{" "}
+          хавсаргах нь сонгон шалгаруулалтад давуу тал болно.
+        </p>
+      </div>
+      <CvDropzone file={cv.pending} onFileChange={cv.upload} disabled={cv.locked} />
     </div>
   );
 };
@@ -91,6 +101,8 @@ export const ApplyForm = ({
     </SheetHeader>
 
     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6">
+      {/* The ERP refused регистр + утас: the application is kept here but cannot reach it until fixed. */}
+      <LinkErrorNotice fixHref="/account/profile" />
       <CvNotice />
 
       <Field label="Хүссэн цалингийн түвшин" htmlFor="salrequest" hint={salaryHint(job)}>

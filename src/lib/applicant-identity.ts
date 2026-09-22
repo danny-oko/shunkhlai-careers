@@ -25,6 +25,14 @@ export const IDENTITY_REQUIRED_MESSAGE =
 export const REGNO_LOCKED_MESSAGE =
   "Регистрийн дугаар ERP-ийн бүртгэлтэй холбогдсон тул өөрчлөх боломжгүй.";
 
+/**
+ * `SaveHrApplicant` body flag: the applicant asked to try the ERP again with
+ * the stored регистр + утас after it refused them. Only the identity form /
+ * banner sends it; `/api/me` takes it off the body (never stored, never sent
+ * to the ERP). Without it an unchanged pair stays refused.
+ */
+export const RETRY_LINK_FLAG = "retrylink";
+
 const filled = (value: unknown) =>
   value !== null && value !== undefined && String(value).trim() !== "";
 

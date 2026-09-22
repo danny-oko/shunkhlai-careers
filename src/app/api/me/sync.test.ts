@@ -285,7 +285,11 @@ describe("pull (ERP → D1)", () => {
 
     expect(profile.addr2).toBe("ERP хаяг"); // ERP value wins on the first pull
     expect(profile.firstname).toBe("Бат");
-    expect(profile.filedata).toBe(CV_B64);
+    expect(profile.filename).toBe("cv.pdf");
+    expect(profile).not.toHaveProperty("filedata"); // served by GET /api/me/cv
+    const cv = await GET(new Request("http://x/api/me/cv"), ctx("cv") as never);
+    expect(Buffer.from(await cv.arrayBuffer()).toString("base64")).toBe(CV_B64);
+    expect(cv.headers.get("content-type")).toBe("application/pdf");
     expect(profile.picturedata).toBe("data:image/jpeg;base64,UElD");
     // The ERP's percentages are not copied; ours are computed from the sections.
     expect(profile.totalper).not.toBe(80);

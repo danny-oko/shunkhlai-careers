@@ -12,8 +12,9 @@
  * keeps its bundled data and `/api/me` can follow the live ERP.
  */
 
-import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
-import { linkRefused, linkedRegno } from "./erp-model";
+import { RETRY_LINK_FLAG, isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
+import type { MaritalOption } from "@/lib/api/profile";
+import { CLEARABLE_KEYS, labelRow, linkRefused, linkedRegno } from "./erp-model";
 
 export type Row = Record<string, unknown>;
 
@@ -31,6 +32,10 @@ export type ApplicantDoc = {
   relatives: Row[];
   interests: Row[];
   applications: Row[];
+  /**
+   * The mock holds the bytes here; `/api/me` loads only the name (`filedata`
+   * is "" unless this request uploaded it — the file is read by `readCv`).
+   */
   cv: { filename: string; filedata: string } | null;
   picture: string | null;
   /** ERP sync state (`/api/me` only; see `erp-sync.ts`). */
@@ -78,6 +83,20 @@ export type DocErp = {
   linkedAt?: string;
   /** A SaveHrAppUser is in flight (ISO): no second one for this applicant. */
   registeringAt?: string;
+  /**
+   * The утас the ERP last accepted as the password (the pair that earned a
+   * token). When the stored утас differs, the next login changes the ERP
+   * password to it first (`changeUserInfo`). Server-only: never in a response.
+   */
+  loginPhone?: string;
+  /**
+   * Profile fields the applicant emptied here that the ERP may still hold.
+   * The flush sends them cleared (SaveHrApplicant is a full replace); gone
+   * once that save went through.
+   */
+  profileCleared?: string[];
+  /** The ERP's `maritalstatus[]` option list, from the last pull of `/get`. */
+  maritalOptions?: MaritalOption[];
 };
 
 export type Envelope = {
@@ -157,6 +176,8 @@ export function envelopeFail(retmsg: string, rettype = 1): Envelope {
 }
 
 export const UNAUTHORIZED_MESSAGE = "Нэвтрэх шаардлагатай.";
+
+export const SCHOOL_REQUIRED_MESSAGE = "Сургуулиа жагсаалтаас сонгох эсвэл нэрийг нь бичнэ үү.";
 
 const ok = (retdata: unknown, mutated = false): HandlerResult => ({
   envelope: envelopeOk(retdata),
@@ -265,6 +286,8 @@ function handleGet({ endpoint, query }: HandlerRequest, doc: ApplicantDoc): Hand
         erplinked: linkedRegno(doc) !== "",
         // The ERP refused the stored регистр + утас (its own message), else null.
         erplinkerror: linkRefused(doc) ? (doc.erp?.linkError ?? null) : null,
+        // Гэрлэлтийн байдал options as the ERP lists them (absent: the form's fallback).
+        ...(doc.erp?.maritalOptions?.length ? { maritalOptions: doc.erp.maritalOptions } : {}),
       });
 
     case "GetHrAppEducationData":
@@ -307,6 +330,25 @@ function handleGet({ endpoint, query }: HandlerRequest, doc: ApplicantDoc): Hand
   }
 }
 
+const blank = (value: unknown) =>
+  value === null || value === undefined || String(value).trim() === "";
+
+/**
+ * `profileCleared` after this save: fields the body empties that D1 held a
+ * value for are added (the ERP may still have it), fields it fills are
+ * dropped. A field that was blank here all along is not a clearing — the ERP
+ * may hold a value the applicant never saw.
+ */
+function clearedFields(doc: ApplicantDoc, body: Row): Pick<DocErp, "profileCleared"> {
+  const cleared = new Set(doc.erp?.profileCleared ?? []);
+  for (const key of CLEARABLE_KEYS) {
+    if (!(key in body)) continue;
+    if (!blank(body[key])) cleared.delete(key);
+    else if (!blank(doc.profile[key])) cleared.add(key);
+  }
+  return { profileCleared: cleared.size ? [...cleared] : undefined };
+}
+
 const asRows = (body: unknown): Row[] =>
   Array.isArray(body) ? (body as Row[]) : body ? [body as Row] : [];
 
@@ -340,6 +382,10 @@ async function handlePost(
   switch (endpoint) {
     case "SaveHrApplicant": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
+      // "Try the ERP again" from the identity form / banner: an instruction,
+      // not a profile field — taken off the body so it is never stored or sent.
+      const retry = body[RETRY_LINK_FLAG] === true;
+      delete body[RETRY_LINK_FLAG];
       // A new регистр / утас is stored as the ERP stores and compares it; the
       // same value in another spelling keeps the stored one untouched.
       const normalise = (key: string, as: (value: unknown) => string) => {
@@ -351,7 +397,16 @@ async function handlePost(
       const wasComplete = isIdentityComplete(doc.profile);
       const changed = (key: string) => key in body && body[key] !== doc.profile[key];
       const newCredentials = changed("regno") || changed("mobilephone");
-      doc.erp = { ...doc.erp, profileEdited: true };
+      // A linked account's утас is its ERP password: remember the one the ERP
+      // accepted before it changes, so the sync can move the password along.
+      // (Accounts linked before this was recorded — no stored refusal means
+      // the stored утас still logs in.)
+      if (changed("mobilephone") && linkedRegno(doc) && !doc.erp?.loginPhone && !linkRefused(doc)) {
+        // As the login sends it (`loginFor`): the stored value, trimmed.
+        const previous = blank(doc.profile.mobilephone) ? "" : String(doc.profile.mobilephone).trim();
+        if (previous) doc.erp = { ...doc.erp, loginPhone: previous };
+      }
+      doc.erp = { ...doc.erp, profileEdited: true, ...clearedFields(doc, body) };
       // Newly complete or new credentials: the ERP gets a fresh try on the next
       // visit — no leftover pull backoff, no stale refusal.
       if (newCredentials || (!wasComplete && isIdentityComplete({ ...doc.profile, ...body }))) {
@@ -359,9 +414,10 @@ async function handlePost(
         delete doc.erp.pullFailedAt;
         delete doc.erp.linkError;
         delete doc.erp.linkKey;
-      } else if ("regno" in body && "mobilephone" in body) {
-        // The applicant saved the same регистр + утас on purpose (they say it
-        // is right): lift the refusal so the next sync asks the ERP once more.
+      } else if (retry) {
+        // The applicant asked to retry the same регистр + утас (they say it is
+        // right): lift the refusal so the next sync asks the ERP once more. An
+        // ordinary profile save echoes both too, and must not re-send them.
         delete doc.erp.linkError;
         delete doc.erp.linkKey;
       }
@@ -383,6 +439,8 @@ async function handlePost(
 
     case "SaveAppPicture": {
       if (!upload) return fail("file not selected");
+      // JPEG by construction: the picker re-encodes every photo as JPEG before
+      // upload (`lib/resize-image.ts` `resizePhoto`).
       doc.picture = `data:image/jpeg;base64,${upload.data}`;
       return ok(true, true);
     }
@@ -399,17 +457,12 @@ async function handlePost(
 
     case "SaveHrAppEducation": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(doc.education, {
-          ...body,
-          universityname: await label("GetUniversityDropDown", body.universityid, {
-            countryid: body.countryid,
-          }),
-          professionname: await label("GetProfessionDropDown", body.professionid),
-          educationlevelname: await label("get_educationlevel_dropdown", body.educationlevelid),
-        }),
-        true,
-      );
+      // The school is заавал: one from the list, or — not listed —
+      // `universityid: 0` with its name typed into `universitynametext`.
+      if (!(Number(body.universityid) > 0) && blank(body.universitynametext)) {
+        return fail(SCHOOL_REQUIRED_MESSAGE);
+      }
+      return ok(upsert(doc.education, await labelRow("education", body, label)), true);
     }
 
     case "SaveAppForLanguage": {

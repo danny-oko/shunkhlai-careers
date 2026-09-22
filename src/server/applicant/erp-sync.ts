@@ -114,11 +114,15 @@ async function claimRegistration(identity: ClerkIdentity): Promise<boolean> {
 const login = (identity: ClerkIdentity, doc: ApplicantDoc): Promise<Step<string>> =>
   loginFor(doc, { email: identity.email, claimRegister: () => claimRegistration(identity) });
 
-/** First token for this account: record the link (fixes the регистр). */
+/**
+ * A token for this account: record the link (fixes the регистр) and the утас
+ * that earned it (the ERP password now; see `loginFor`).
+ */
 async function recordLinked(identity: ClerkIdentity, doc: ApplicantDoc) {
-  if (linkedRegno(doc)) return;
+  const phone = String(doc.profile.mobilephone ?? "").trim();
+  if (linkedRegno(doc) && doc.erp?.loginPhone === phone) return;
   await update(identity, ({ doc: fresh }) => {
-    markLinked(fresh, doc.profile.regno);
+    markLinked(fresh, doc.profile.regno, phone);
     return true;
   });
 }
@@ -304,7 +308,10 @@ function applyOutcome(
   const erp = (doc.erp ??= {});
 
   if (outcome) {
-    if (outcome.profileStamp && erp.profileDirty === outcome.profileStamp) delete erp.profileDirty;
+    if (outcome.profileStamp && erp.profileDirty === outcome.profileStamp) {
+      delete erp.profileDirty;
+      delete erp.profileCleared; // the ERP has them empty now
+    }
     if (outcome.cv && erp.cvDirty === outcome.cv.stamp) {
       delete erp.cvDirty;
       if (outcome.cv.hash) erp.cvHash = outcome.cv.hash;

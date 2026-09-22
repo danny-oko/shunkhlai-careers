@@ -7,6 +7,7 @@ import { FULL_PULL, fetchSnapshot } from "./erp-pull";
 import {
   LOCAL_ID_BASE,
   applySnapshot,
+  maritalOptionsOf,
   mergeApplications,
   mergeSection,
   pulledProfile,
@@ -86,6 +87,17 @@ describe("fetchSnapshot", () => {
     expect(snap.applications).toHaveLength(1);
   });
 
+  it("keeps /get's maritalstatus[] as options (and nothing when absent or unusable)", async () => {
+    expect((await fetchSnapshot(erp.token, FULL_PULL)).maritalOptions ?? null).toBeNull();
+    erp.marital = [{ key: "S", text: "Ганц бие" }, { key: "", text: "x" }, { code: "M", name: "Гэрлэсэн" }];
+    expect((await fetchSnapshot(erp.token, FULL_PULL)).maritalOptions).toEqual([
+      { key: "S", text: "Ганц бие" },
+      { key: "M", text: "Гэрлэсэн" },
+    ]);
+    expect(maritalOptionsOf("S")).toBeNull(); // the flat record's own code, not a list
+    expect(maritalOptionsOf([])).toBeNull();
+  });
+
   it("a failing part comes back missing, the rest still arrive; never throws", async () => {
     erp.refuse.set("GetHrAppFamilyData", "boom");
     const snap = await fetchSnapshot(erp.token, FULL_PULL);
@@ -114,6 +126,17 @@ describe("applySnapshot", () => {
     expect(doc.erp?.appliedOrderIds).toEqual([707]);
   });
 
+  it("stores the ERP's marital options; a pull without them keeps the last ones", async () => {
+    const doc = emptyDoc({ regno: erp.regno, mobilephone: erp.phone });
+    erp.marital = [{ key: "S", text: "Ганц бие" }];
+    applySnapshot(doc, await fetchSnapshot(erp.token, FULL_PULL), new Date());
+    expect(doc.erp?.maritalOptions).toEqual([{ key: "S", text: "Ганц бие" }]);
+    expect(doc.profile).not.toHaveProperty("maritalOptions");
+    erp.marital = [];
+    applySnapshot(doc, await fetchSnapshot(erp.token, FULL_PULL), new Date());
+    expect(doc.erp?.maritalOptions).toEqual([{ key: "S", text: "Ганц бие" }]);
+  });
+
   it("a dirty profile is left alone", async () => {
     const doc = emptyDoc({ regno: erp.regno, mobilephone: erp.phone, addr2: "local" });
     doc.erp = { profileDirty: Date.now() };
@@ -126,6 +149,24 @@ describe("applySnapshot", () => {
       regno: "R",
       mobilephone: "P",
       addr2: "a",
+    });
+  });
+
+  it("a different ERP regno/phone never replaces D1's either (the phone there is the contact number, not the password)", () => {
+    for (const first of [true, false]) {
+      const pulled = pulledProfile(
+        { regno: "УБ99010101", mobilephone: "PASS1234" },
+        { regno: "уб99010101", mobilephone: "99887766", addr2: "a" },
+        first,
+      );
+      expect(pulled.profile).toMatchObject({ regno: "УБ99010101", mobilephone: "PASS1234", addr2: "a" });
+      // Nothing to send back: D1 keeping its login is not a profile edit.
+      expect(pulled.d1Only).toBe(false);
+    }
+    // Blank in D1 (never the case once logged in): the ERP value fills it.
+    expect(pulledProfile({ regno: "R" }, { regno: "X", mobilephone: "99887766" }).profile).toMatchObject({
+      regno: "R",
+      mobilephone: "99887766",
     });
   });
 

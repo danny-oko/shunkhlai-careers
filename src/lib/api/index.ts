@@ -5,7 +5,6 @@
  * reaching for axios. Everything here is modelled on the Postman collection
  * "Careers Web API — Үндсэн"; `README.md` maps each module to its requests.
  *
- *   auth          sign-up / sign-in (one endpoint, as in the collection)
  *   profile       core record, photo, CV, completion percentages
  *   sections      the CV sections, over three bundle endpoints
  *   reference     every dropdown
@@ -14,7 +13,6 @@
  *   system        CMS endpoints from the endpoint reference (not in the collection)
  */
 
-export * as auth from "./auth";
 export * as profile from "./profile";
 export * as sections from "./sections";
 export * as reference from "./reference";

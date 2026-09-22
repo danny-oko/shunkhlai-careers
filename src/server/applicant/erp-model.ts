@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
+import type { MaritalOption } from "@/lib/api/profile";
 import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
-import type { ApplicantDoc, DocErp, PendingDelete, Row } from "./handlers";
+import type { ApplicantDoc, DocErp, HandlerDeps, PendingDelete, Row } from "./handlers";
 
 /**
  * The pure half of the two-way ERP sync: which D1 list maps to which ERP
@@ -130,6 +131,85 @@ export function mergeSection(
   return result;
 }
 
+/* --- display labels ----------------------------------------------------- */
+
+type Label = HandlerDeps["label"];
+
+/**
+ * A label a section row carries next to its id, for the list to show: `name`
+ * is `id` looked up in `dropdown`, under each of `parents` in turn (the first
+ * list that has the id wins).
+ */
+type LabelSpec = { name: string; id: string; dropdown: string; parents?: (row: Row) => Row[] };
+
+/**
+ * The labels per section. The ERP's own lists document ids only (Postman
+ * `hrappedulist`: `universityid`, `professionid`, `educationlevelid`, …), so a
+ * row pulled from there is labelled here the same way a save through
+ * `/api/me` is.
+ */
+export const SECTION_LABELS: Partial<Record<SectionKey, LabelSpec[]>> = {
+  education: [
+    {
+      name: "universityname",
+      id: "universityid",
+      dropdown: "GetUniversityDropDown",
+      // `countryid=0` is the collection's "every country"; it is also where a
+      // school sits that the country's own list leaves out (live 2026-09-22:
+      // 1841 rows for 0, 1762 for Монгол).
+      parents: (row) =>
+        Number(row.countryid) > 0 ? [{ countryid: row.countryid }, { countryid: 0 }] : [{ countryid: 0 }],
+    },
+    { name: "professionname", id: "professionid", dropdown: "GetProfessionDropDown" },
+    { name: "educationlevelname", id: "educationlevelid", dropdown: "get_educationlevel_dropdown" },
+  ],
+};
+
+const noId = (value: unknown) => value === null || value === undefined || value === "" || Number(value) === 0;
+
+async function labelOf(spec: LabelSpec, row: Row, label: Label): Promise<string> {
+  if (noId(row[spec.id])) return "";
+  for (const parent of spec.parents?.(row) ?? [undefined]) {
+    const text = await label(spec.dropdown, row[spec.id], parent);
+    if (text) return text;
+  }
+  return "";
+}
+
+/**
+ * `row` with its labels (see `SECTION_LABELS`). A save re-labels every one —
+ * its ids may have changed; `keep` fills only the labels a row lacks, so a
+ * name the ERP does send is left as it is.
+ */
+export async function labelRow(section: SectionKey, row: Row, label: Label, keep = false): Promise<Row> {
+  const specs = SECTION_LABELS[section] ?? [];
+  const labelled: Row = { ...row };
+  for (const spec of specs) {
+    if (keep && (noId(row[spec.id]) || (typeof row[spec.name] === "string" && row[spec.name] !== ""))) continue;
+    labelled[spec.name] = await labelOf(spec, row, label);
+  }
+  return labelled;
+}
+
+/**
+ * Fills the missing labels of every section row in fetched ERP sources, in
+ * place (`sources` as `ErpSnapshot.sources`). A failed lookup leaves the row
+ * as it came.
+ */
+export async function labelSources(sources: Record<string, unknown>, label: Label): Promise<void> {
+  for (const config of SECTIONS) {
+    if (!SECTION_LABELS[config.key] || !(config.source in sources)) continue;
+    const source = sources[config.source];
+    const list = sectionList(config, source);
+    if (!list) continue;
+    const labelled = await Promise.all(
+      list.map((row) => labelRow(config.key, row, label, true).catch(() => row)),
+    );
+    if (config.listKey) (source as Row)[config.listKey] = labelled;
+    else sources[config.source] = labelled;
+  }
+}
+
 type AppErp = {
   status: string;
   attempts?: number;
@@ -215,16 +295,52 @@ export const PROFILE_KEYS = [
   "custom2",
 ] as const;
 
+/**
+ * Never sent blank: the ERP login and the applicant's name. A blank here
+ * means "not known yet", not "cleared", so the ERP keeps its own value.
+ */
+export const NEVER_BLANK = new Set(["lastname", "firstname", "regno", "mobilephone"]);
+
+/** Profile fields an applicant can empty, and the ERP then has to empty too. */
+export const CLEARABLE_KEYS: readonly string[] = PROFILE_KEYS.filter((key) => !NEVER_BLANK.has(key));
+
+/**
+ * The `/get` reply's `maritalstatus[]` as `{ key, text }` options, or null
+ * when it carries no usable list. Rows the ERP spells `code`/`name` are
+ * accepted too — the collection has no saved example of this list.
+ */
+export function maritalOptionsOf(list: unknown): MaritalOption[] | null {
+  if (!Array.isArray(list)) return null;
+  const options = list.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const r = row as Row;
+    const key = str(r.key ?? r.code ?? r.value);
+    const text = str(r.text ?? r.name ?? r.description);
+    return key && text ? [{ key, text }] : [];
+  });
+  return options.length ? options : null;
+}
+
+const str = (value: unknown) => (value === null || value === undefined ? "" : String(value).trim());
+
 const NOT_PULLED = new Set(["filedata", "picturedata", "filename", "maritalOptions"]);
-const KEEP_WHEN_BLANK = new Set(["regno", "mobilephone"]);
+/**
+ * The ERP login (`auth/login {regNo, mobile}`): регистр + утас, where the утас
+ * is the password (Postman 02 — the phone at first, a new password once
+ * changed). The ERP record's `mobilephone` is the contact number and can differ
+ * from it, so a pull never writes either over a stored D1 value: a pull only
+ * ever runs with a token those D1 values just earned.
+ */
+const CREDENTIALS = new Set(["regno", "mobilephone"]);
 
 const isBlank = (value: unknown) =>
   value === null || value === undefined || String(value).trim() === "";
 
 /**
- * The ERP record over the D1 profile, minus files, percentages and audit.
- * `keepD1` (the first pull): a blank ERP value never replaces a D1 one; the
- * return says whether D1 kept anything the ERP lacks (so it gets sent).
+ * The ERP record over the D1 profile, minus files, percentages and audit, and
+ * never over a stored регистр / утас (`CREDENTIALS`). `keepD1` (the first
+ * pull): a blank ERP value never replaces a D1 one; the return says whether D1
+ * kept anything the ERP lacks (so it gets sent).
  */
 export function pulledProfile(profile: Row, record: Row, keepD1 = false): { profile: Row; d1Only: boolean } {
   const next = { ...profile };
@@ -233,8 +349,12 @@ export function pulledProfile(profile: Row, record: Row, keepD1 = false): { prof
     if (NOT_PULLED.has(key) || key.endsWith("per")) continue;
     if (value === null || value === undefined) continue;
     const blank = isBlank(value);
-    // The login needs these; never let a blank ERP value erase them.
-    if (blank && (KEEP_WHEN_BLANK.has(key) || keepD1)) {
+    // The login needs these: an ERP value (blank, or the contact number) never replaces them.
+    if (CREDENTIALS.has(key) && !isBlank(next[key])) {
+      if (blank) d1Only = true;
+      continue;
+    }
+    if (blank && keepD1) {
       if (!isBlank(next[key])) d1Only = true;
       continue;
     }
@@ -257,6 +377,8 @@ export const asDataUrl = (data: string) =>
 /** What one pull fetched; null parts failed or were not fetched. */
 export type ErpSnapshot = {
   record: Row | null;
+  /** `/get`'s `maritalstatus[]` option list (null: absent or unusable). */
+  maritalOptions?: MaritalOption[] | null;
   recruitmentorders: Row[] | null;
   sources: Record<string, unknown>;
   applications: Row[] | null;
@@ -279,6 +401,8 @@ export function applySnapshot(doc: ApplicantDoc, snap: ErpSnapshot, now: Date): 
     doc.profile = pulled.profile;
     if (pulled.d1Only) erp.profileDirty = Date.now();
   }
+
+  if (snap.maritalOptions?.length) erp.maritalOptions = snap.maritalOptions;
 
   if (snap.recruitmentorders) {
     erp.appliedOrderIds = snap.recruitmentorders
@@ -479,11 +603,15 @@ export const erpReady = (doc: ApplicantDoc) => isIdentityComplete(doc.profile) &
 export const linkedRegno = (doc: ApplicantDoc) =>
   doc.erp?.linkedRegno ?? (doc.erp?.pulledAt ? normalizeRegno(doc.profile.regno) : "");
 
-/** A token was issued for `regno`: linked, and any refusal or claim is over. */
-export function markLinked(doc: ApplicantDoc, regno: unknown, now = new Date()): void {
+/**
+ * A token was issued for `regno` + `phone`: linked, `phone` is the ERP
+ * password now, and any refusal or claim is over.
+ */
+export function markLinked(doc: ApplicantDoc, regno: unknown, phone?: string, now = new Date()): void {
   const erp = (doc.erp ??= {});
   erp.linkedRegno ??= normalizeRegno(regno);
   erp.linkedAt ??= now.toISOString();
+  if (phone) erp.loginPhone = phone;
   delete erp.linkError;
   delete erp.linkKey;
   delete erp.registeringAt;

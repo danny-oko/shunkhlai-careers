@@ -14,7 +14,6 @@ src/lib/
       request.ts    the { rettype, retmsg, retdata } envelope
       errors.ts     one error shape for the whole app
       factories.ts  the two repeating endpoint patterns (below)
-    auth.ts         sign-up / sign-in — one endpoint, as in the collection
     profile.ts      core record, photo, CV, completion percentages
     reference.ts    every dropdown
     sections.ts     the CV sections, over three bundle endpoints
@@ -49,19 +48,42 @@ Two headers ride along on every call: `language` (MN) and `Origin`. Browsers
 set `Origin` themselves and forbid scripts from touching it, so the client only
 supplies it for server-side requests.
 
-## Sign-up and sign-in are the same endpoint
+## Sign-up and sign-in
 
-`POST /api/applicant/SaveHrAppUser` creates the account when the register
-number is new and signs in when it already exists, returning
-`retdata.access_token` / `refresh_token` either way. There is no `/auth/login`
-in the collection.
+Applicants sign in and sign up with **Clerk** (`/sign-in`, `/sign-up`; the old
+`/login` and `/register` only redirect there). Nothing in the browser logs in to
+the ERP, and there is no регистр/утас login form. Their анкет lives in D1
+behind the same-origin `/api/me/*` (`src/server/applicant/`).
 
-**The phone number is the initial password.** `mobilephone` carries the phone on
-first sign-up and the password on every sign-in after that — until
-`changeUserInfo` with `type: "PASSWORD"` replaces it. (The app no longer uses
-this: applicants sign in with Clerk and their account data lives in D1 behind
-`/api/me/*`.) The sign-in copy says so
-out loud, because otherwise the first login is a guessing game.
+**The identity gate.** The ERP creates an applicant from регистр, овог, нэр and
+утас (`SaveHrAppUser`, Postman 01), so until all four are stored nothing
+ERP-backed is offered: `/api/me` refuses every POST except `SaveHrApplicant`
+(`server/applicant/identity-gate.ts`), and the UI asks for the four in place
+(`components/account/identity-gate.tsx`, on /account and in the apply sheet).
+
+**The ERP login is server-side.** The sync (`server/applicant/erp-push.ts`
+`loginFor`) first calls `POST /api/applicant/auth/login` with `{ regNo, mobile }`
+— not in the collection, verified live: wrong credentials are HTTP 401,
+`rettype -1`, "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!".
+Only that 401, on an account not yet linked, falls back to one `SaveHrAppUser`:
+a new регистр is created and answered with `retdata.access_token`; a known one
+logs in when `mobilephone` matches, else the same "…зөрж байна!".
+
+**The phone number is the password.** `mobilephone` is the initial password,
+and after a change on the ERP it is the new one — which is why the ERP
+record's `mobilephone` (the contact number) is never pulled over the D1 утас
+that logged in. A refusal is stored and shown (`erplinkerror`, on /account and
+in the apply sheet); those credentials are not sent again until the applicant
+changes регистр/утас or presses «Дахин оролдох» (`saveProfile(…, { retryLink:
+true })`) — an ordinary profile save never retries.
+
+**Changing the утас moves the password.** The server keeps the утас the ERP
+last accepted (`erp.loginPhone`, never sent to the browser). When the stored
+утас differs on a linked account, the sync logs in with the old pair, calls
+`changeUserInfo {phonenumber, email, oldpassword, newpassword, type:
+"PASSWORD"}` (Postman 03), then continues with the new pair; the next
+`SaveHrApplicant` carries the new утас as `mobilephone`. A refused change
+(rettype ≠ 0) is stored as the refusal with the ERP's own message.
 
 ## Two patterns carry most of the surface
 
@@ -112,7 +134,8 @@ are refined client-side over the rows already fetched.
 `NEXT_PUBLIC_API_URL` unset → the app talks to `src/app/api/applicant/[...path]`,
 which answers on the same paths with the same envelope, backed by the in-memory
 store in `src/server/mock/`. Accounts, CVs, applications and every CV section
-are real writes that survive until the server restarts. Set the env var and the
+are real writes that survive until the server restarts. `auth/login` and
+`SaveHrAppUser` answer as the live ERP does (token, 401 / "…зөрж байна!"). Set the env var and the
 client goes to the real origin instead; nothing else changes.
 
 The seed data in `src/server/mock/data.ts` uses shapes copied from the
@@ -137,7 +160,5 @@ example rows, kept verbatim; the rest is local demo content in the same shape.
 reference. They are **not in this collection** and unverified — treat those
 shapes as provisional.
 
-Sign-in follows the collection only: `SaveHrAppUser`, no refresh, no logout
-call. The reference doc's `/auth/login` and `/auth/refresh-token` are not used.
-A 401 or an expired JWT `exp` clears the session and the applicant signs in
-again.
+No token refresh and no logout call: the server-side sync logs in afresh for
+each batch. The reference doc's `/auth/refresh-token` is not used.

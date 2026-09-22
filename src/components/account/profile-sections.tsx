@@ -10,7 +10,8 @@ import {
 } from "@/components/account/profile-fields";
 import {
   LICENCE_KEYS,
-  maritalOptions,
+  maritalChoices,
+  withSavedChoice,
   type LicenceKey,
   type State,
 } from "@/components/account/profile-form-state";
@@ -20,9 +21,21 @@ import type { ApplicantProfile } from "@/lib/api/profile";
 
 type Dropdown = { options: Choice[]; isLoading: boolean };
 
-export const PHONE_HINT = "Энэ дугаар ERP системд нэвтрэх нууц үг тань болно.";
+export const PHONE_HINT =
+  "Энэ дугаар ERP системд нэвтрэх нууц үг тань болно. Дугаараа сольвол нууц үг тань хамт солигдоно.";
 
 type SectionProps = { values: State; set: Setter };
+
+type Saved = { profile: ApplicantProfile | null };
+
+/** A dropdown's options with the loaded value kept visible (see `withSavedChoice`). */
+const choicesFor = (
+  dropdown: Dropdown,
+  values: State,
+  profile: ApplicantProfile | null,
+  name: keyof State & keyof ApplicantProfile,
+  labelKey: keyof ApplicantProfile,
+) => withSavedChoice(dropdown.options, String(values[name]), { value: profile?.[name], label: profile?.[labelKey] });
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <fieldset className="border-border/70 space-y-5 rounded-xl border p-5">
@@ -38,11 +51,7 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
  * sync at another person. The phone stays editable — it is the ERP password,
  * and the only way to repair a login the ERP refuses.
  */
-export const PersonalSection = ({
-  values,
-  set,
-  profile,
-}: SectionProps & { profile: ApplicantProfile | null }) => (
+export const PersonalSection = ({ values, set, profile }: SectionProps & Saved) => (
   <Section title="Хувийн мэдээлэл">
     <div className="grid gap-5 sm:grid-cols-2">
       <TextField name="lastname" label="Эцэг/эх-ийн нэр" values={values} set={set} required />
@@ -63,7 +72,7 @@ export const PersonalSection = ({
         label="Гэрлэлтийн байдал"
         values={values}
         set={set}
-        options={maritalOptions(profile?.maritalOptions).map((m) => ({ value: m.key, label: m.text }))}
+        options={maritalChoices(profile, values.maritalstatus)}
       />
     </div>
   </Section>
@@ -92,13 +101,19 @@ export const LicenceSection = ({
   </Section>
 );
 
+/**
+ * Улс → Аймаг, хот → Сум, дүүрэг: each list is read for the parent chosen
+ * above it (`profile-form.tsx`), and a saved value shows with its stored label
+ * even before (or without) its list.
+ */
 export const AddressSection = ({
   values,
   set,
+  profile,
   countries,
   divisions,
   districts,
-}: SectionProps & { countries: Dropdown; divisions: Dropdown; districts: Dropdown }) => (
+}: SectionProps & Saved & { countries: Dropdown; divisions: Dropdown; districts: Dropdown }) => (
   <Section title="Гэрийн хаяг">
     <div className="grid gap-5 sm:grid-cols-3">
       <SelectField
@@ -107,7 +122,7 @@ export const AddressSection = ({
         values={values}
         set={set}
         required
-        options={countries.options}
+        options={choicesFor(countries, values, profile, "countryid", "countryname")}
         isLoading={countries.isLoading}
       />
       <SelectField
@@ -116,7 +131,7 @@ export const AddressSection = ({
         values={values}
         set={set}
         required
-        options={divisions.options}
+        options={choicesFor(divisions, values, profile, "divisionid", "divisionname")}
         isLoading={divisions.isLoading}
         disabled={!values.countryid}
       />
@@ -126,7 +141,7 @@ export const AddressSection = ({
         values={values}
         set={set}
         required
-        options={districts.options}
+        options={choicesFor(districts, values, profile, "districtid", "districtname")}
         isLoading={districts.isLoading}
         disabled={!values.divisionid}
       />
@@ -141,7 +156,8 @@ const ContactRow = ({
   relatives,
   values,
   set,
-}: SectionProps & { suffix: "" | "2"; required: boolean; relatives: Dropdown }) => (
+  profile,
+}: SectionProps & Saved & { suffix: "" | "2"; required: boolean; relatives: Dropdown }) => (
   <div className="grid gap-5 sm:grid-cols-3">
     <TextField
       name={`contactname${suffix}`}
@@ -156,7 +172,7 @@ const ContactRow = ({
       values={values}
       set={set}
       required={required}
-      options={relatives.options}
+      options={choicesFor(relatives, values, profile, `relativeid${suffix}`, `relativename${suffix}`)}
       isLoading={relatives.isLoading}
     />
     <TextField
@@ -170,14 +186,16 @@ const ContactRow = ({
   </div>
 );
 
+/** Both contacts pick «Таны хэн болох» from GetRelativeDropDown (relativeid / relativeid2). */
 export const ContactSection = ({
   values,
   set,
+  profile,
   relatives,
-}: SectionProps & { relatives: Dropdown }) => (
+}: SectionProps & Saved & { relatives: Dropdown }) => (
   <Section title="Яаралтай үед холбоо барих хүний мэдээлэл">
-    <ContactRow suffix="" required relatives={relatives} values={values} set={set} />
-    <ContactRow suffix="2" required={false} relatives={relatives} values={values} set={set} />
+    <ContactRow suffix="" required relatives={relatives} values={values} set={set} profile={profile} />
+    <ContactRow suffix="2" required={false} relatives={relatives} values={values} set={set} profile={profile} />
   </Section>
 );
 

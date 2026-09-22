@@ -246,6 +246,22 @@ describe("helpers", () => {
     });
   });
 
+  it("sends the fields the applicant emptied as empty — never a blank регистр, name or утас", () => {
+    const profile = { addr2: "", relativeid2: null, contactname2: "", lastname: "", regno: "", mobilephone: "", custom1: "" };
+    const cleared = ["addr2", "relativeid2", "contactname2", "lastname", "regno", "mobilephone"];
+    expect(profileOverlay(profile, undefined, cleared)).toEqual({ addr2: "", relativeid2: null, contactname2: "" });
+    // Blank but not cleared here (never known): left to the ERP.
+    expect(profileOverlay(profile, undefined, [])).toEqual({});
+  });
+
+  it("before a save here the ERP's values win — except the утас, which is the ERP password", () => {
+    const record = { addr2: "ERP", mobilephone: "99887766", email2: "" };
+    expect(profileOverlay({ addr2: "D1", mobilephone: "99112233", email2: "c@x.mn" }, record)).toEqual({
+      mobilephone: "99112233",
+      email2: "c@x.mn",
+    });
+  });
+
   it("matches the ERP row by order id only — never guesses by name", () => {
     expect(findErpEntryId([{ entryid: 3, recruitmentorderid: 55 }], app)).toBe(3);
     expect(

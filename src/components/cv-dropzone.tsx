@@ -3,7 +3,7 @@
 import * as React from "react";
 import { FileText, UploadCloud, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ACCEPTED_CV_EXTENSIONS } from "@/lib/apply-schema";
+import { ACCEPTED_CV_EXTENSIONS, CV_LIMITS_TEXT } from "@/lib/apply-schema";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -19,6 +19,11 @@ type CvDropzoneProps = {
   describedBy?: string;
 };
 
+/**
+ * Pick or drop one CV file. Checking it (type, size) is the caller's job
+ * (`describeCvFileError`). Also off inside a disabled `<fieldset>` — the
+ * identity gate's `IdentityLock` — which a drop would otherwise slip past.
+ */
 export function CvDropzone({
   file,
   onFileChange,
@@ -29,17 +34,27 @@ export function CvDropzone({
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
 
-  const openFilePicker = React.useCallback(() => {
-    if (!disabled) inputRef.current?.click();
-  }, [disabled]);
+  // `:disabled` also matches an input disabled by an ancestor fieldset.
+  const isOff = () => disabled || inputRef.current?.matches(":disabled") === true;
+
+  const openFilePicker = () => {
+    if (!isOff()) inputRef.current?.click();
+  };
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setIsDragging(false);
-    if (disabled) return;
+    if (isOff()) return;
 
     const dropped = event.dataTransfer.files?.[0];
     if (dropped) onFileChange(dropped);
+  }
+
+  function handlePick(event: React.ChangeEvent<HTMLInputElement>) {
+    const picked = event.target.files?.[0] ?? null;
+    // Cleared so picking the same file again (after a refused upload) fires again.
+    event.target.value = "";
+    if (picked) onFileChange(picked);
   }
 
   if (file) {
@@ -59,23 +74,13 @@ export function CvDropzone({
         </div>
         <button
           type="button"
-          onClick={() => {
-            onFileChange(null);
-            if (inputRef.current) inputRef.current.value = "";
-          }}
+          onClick={() => onFileChange(null)}
           disabled={disabled}
           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <X className="size-4" />
-          <span className="sr-only">Remove {file.name}</span>
+          <span className="sr-only">{`${file.name} файлыг хасах`}</span>
         </button>
-        <input
-          ref={inputRef}
-          type="file"
-          className="sr-only"
-          accept={ACCEPTED_CV_EXTENSIONS.join(",")}
-          onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
-        />
       </div>
     );
   }
@@ -96,9 +101,12 @@ export function CvDropzone({
       }}
       onDragOver={(event) => {
         event.preventDefault();
-        if (!disabled) setIsDragging(true);
+        if (!isOff()) setIsDragging(true);
       }}
-      onDragLeave={() => setIsDragging(false)}
+      onDragLeave={(event) => {
+        // Moving onto a child (the icon, the text) is not leaving.
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragging(false);
+      }}
       onDrop={handleDrop}
       className={cn(
         "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center transition-colors",
@@ -117,17 +125,20 @@ export function CvDropzone({
         )}
       />
       <p className="text-sm font-medium">
-        Drop your CV here, or{" "}
-        <span className="underline underline-offset-4">browse</span>
+        CV-гээ энд чирж оруулах эсвэл{" "}
+        <span className="underline underline-offset-4">файл сонгох</span>
       </p>
-      <p className="text-xs text-muted-foreground">PDF, DOC or DOCX · max 5 MB</p>
+      <p className="text-xs text-muted-foreground">{CV_LIMITS_TEXT}</p>
 
       <input
         ref={inputRef}
         type="file"
         className="sr-only"
+        tabIndex={-1}
+        aria-hidden
         accept={ACCEPTED_CV_EXTENSIONS.join(",")}
-        onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
+        onClick={(event) => event.stopPropagation()}
+        onChange={handlePick}
       />
     </div>
   );

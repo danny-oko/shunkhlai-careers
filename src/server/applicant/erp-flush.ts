@@ -9,10 +9,12 @@ import {
   type SectionKey,
   hashOf,
   isLocalId,
+  labelSources,
   snapshotOf,
 } from "./erp-model";
 import { type PushIdentity, type PushResult, erpRecord, profileOverlay, pushApplication } from "./erp-push";
 import type { ApplicantDoc, PendingDelete, Row } from "./handlers";
+import { referenceDeps } from "./reference";
 
 /**
  * Write-through (D1 → ERP): sends every piece of local work the document
@@ -111,12 +113,19 @@ async function readRecord({ input, out, failed }: Ctx): Promise<Row | null> {
   }
 }
 
-/** Edited here, so D1's non-empty values win over the ERP record. */
+/**
+ * Edited here, so D1's non-empty values win over the ERP record, and the
+ * fields the applicant emptied go empty (an omitted field is reset too).
+ */
 async function flushProfile({ input, out, failed }: Ctx, record: Row) {
   const stamp = input.doc.erp?.profileDirty;
   if (!stamp) return;
   try {
-    const payload = buildProfilePayload(profileOverlay(input.doc.profile) as ProfileInput, record);
+    const erp = input.doc.erp;
+    const payload = buildProfilePayload(
+      profileOverlay(input.doc.profile, undefined, erp?.profileCleared) as ProfileInput,
+      record,
+    );
     await erpPost("SaveHrApplicant", input.token, payload);
     out.profileStamp = stamp;
   } catch (error) {
@@ -209,6 +218,8 @@ async function flushSections(ctx: Ctx) {
       ctx.failed("erp_repull_failed", error);
     }
   }
+  // Those rows carry ids only; the list shows names (as a pull labels them).
+  if (touched.size) await labelSources(ctx.out.sources, referenceDeps().label);
 }
 
 async function flushApplications({ input, out }: Ctx) {
