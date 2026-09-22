@@ -1,6 +1,7 @@
 "use client";
 
 import { SectionManager, type FieldDef } from "@/components/account/section-manager";
+import { sharedLoader } from "@/components/account/use-dropdown";
 import { useHomeCountry } from "@/components/account/use-home-country";
 import { Separator } from "@/components/ui/separator";
 import { reference, sections } from "@/lib/api";
@@ -80,6 +81,16 @@ const educationFields: FieldDef[] = [
   { name: "note", label: "Тэмдэглэл", type: "textarea", wide: true },
 ];
 
+/** Сонсох / Ярих / Унших / Бичих all read the one level list. */
+const LANGUAGE_SKILLS = [
+  { skill: "listening", label: "Сонсох" },
+  { skill: "speaking", label: "Ярих" },
+  { skill: "reading", label: "Унших" },
+  { skill: "writing", label: "Бичих" },
+] as const;
+
+const languageLevels = sharedLoader(() => reference.languageLevels());
+
 const languageFields: FieldDef[] = [
   {
     name: "forlanguageid",
@@ -88,32 +99,39 @@ const languageFields: FieldDef[] = [
     required: true,
     load: () => reference.foreignLanguages(),
   },
-  {
-    name: "listeninglevelid",
-    label: "Сонсох",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
-  {
-    name: "speakinglevelid",
-    label: "Ярих",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
-  {
-    name: "readinglevelid",
-    label: "Унших",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
-  {
-    name: "writinglevelid",
-    label: "Бичих",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
+  { name: "studytime", label: "Судалсан хугацаа (жил)", type: "number" },
+  ...LANGUAGE_SKILLS.map(
+    ({ skill, label }): FieldDef => ({
+      name: `${skill}levelid`,
+      label,
+      type: "select",
+      load: languageLevels,
+      // An edit that empties a level must reach the row: omitted, the saved
+      // id would stay (`0` is the ERP's own "none", and reads back as blank).
+      emptyAs: "zero",
+    }),
+  ),
   { name: "score", label: "Шалгалтын оноо", type: "text", placeholder: "IELTS 6.5" },
 ];
+
+/** `score` is text on the ERP ("IELTS 6.5"), even when it was typed as a bare number. */
+const languagePayload = (values: Record<string, unknown>) =>
+  values.score === undefined || values.score === null
+    ? values
+    : { ...values, score: String(values.score).trim() };
+
+/** "Ярих: Дунд · Унших: Дээд түвшин · 3 жил · IELTS 6.5" */
+const languageSummary = (row: LanguageEntry) =>
+  [
+    ...LANGUAGE_SKILLS.map(({ skill, label }) => {
+      const level = row[`${skill}levelname`];
+      return level ? `${label}: ${level}` : "";
+    }),
+    Number(row.studytime) > 0 ? `${row.studytime} жил` : "",
+    row.score,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 const skillFields: FieldDef[] = [
   {
@@ -197,10 +215,9 @@ export default function EducationPage() {
         resource={sections.language}
         fields={languageFields}
         defaults={{}}
+        payload={languagePayload}
         primary={(row) => row.forlanguagename || "Гадаад хэл"}
-        secondary={(row) =>
-          row.score ?? ""
-        }
+        secondary={languageSummary}
         emptyText="Гадаад хэлний мэдээлэл алга."
       />
 

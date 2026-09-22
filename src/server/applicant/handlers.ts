@@ -179,6 +179,8 @@ export const UNAUTHORIZED_MESSAGE = "Нэвтрэх шаардлагатай.";
 
 export const SCHOOL_REQUIRED_MESSAGE = "Сургуулиа жагсаалтаас сонгох эсвэл нэрийг нь бичнэ үү.";
 
+export const LANGUAGE_REQUIRED_MESSAGE = "«Гадаад хэл» талбарыг бөглөнө үү.";
+
 const ok = (retdata: unknown, mutated = false): HandlerResult => ({
   envelope: envelopeOk(retdata),
   status: 200,
@@ -467,13 +469,9 @@ async function handlePost(
 
     case "SaveAppForLanguage": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(doc.languages, {
-          ...body,
-          forlanguagename: await label("GetForLanguageDropDown", body.forlanguageid),
-        }),
-        true,
-      );
+      // Without the language the row means nothing (the form requires it too).
+      if (!(Number(body.forlanguageid) > 0)) return fail(LANGUAGE_REQUIRED_MESSAGE);
+      return ok(upsert(doc.languages, await labelRow("languages", body, label)), true);
     }
 
     case "SaveAppSkillComp": {

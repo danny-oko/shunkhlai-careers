@@ -19,6 +19,7 @@ import type { DropdownOption, DropdownQuery } from "@/lib/api";
 
 const state = vi.hoisted(() => ({
   rows: [] as Array<Record<string, unknown>>,
+  languageRows: [] as Array<Record<string, unknown>>,
   calls: [] as Array<{ list: string; query?: Record<string, unknown> }>,
   saved: [] as unknown[],
   /** Holds GetCountryDropDown back until released (null: answers at once). */
@@ -44,7 +45,8 @@ vi.mock("@/lib/api", () => {
     return answer();
   };
   const section = (listKey: string) => ({
-    list: async () => (listKey === "education" ? state.rows : []),
+    list: async () =>
+      listKey === "education" ? state.rows : listKey === "language" ? state.languageRows : [],
     save: async (body: unknown) => {
       state.saved.push(body);
       return true;
@@ -68,8 +70,9 @@ vi.mock("@/lib/api", () => {
       },
       professions: list("professions", () => rows([[2414, "AI Инженер"]])),
       educationLevels: list("educationLevels", () => rows([[2010, "Бакалавр"], [2011, "Магистр"]])),
-      foreignLanguages: list("foreignLanguages", () => []),
-      languageLevels: list("languageLevels", () => []),
+      foreignLanguages: list("foreignLanguages", () => rows([[15, "Англи"], [17, "Орос"]])),
+      // GetForLanguageLevelDropDown as live answers it (2026-09-22, part).
+      languageLevels: list("languageLevels", () => rows([[2, "Анхан"], [4, "Дунд"], [6, "Дээд түвшин"]])),
       computerSkills: list("computerSkills", () => []),
       computerSkillLevels: list("computerSkillLevels", () => []),
       defaultCountry: async () => ({ countryid: 28, countryname: "Монгол" }),
@@ -92,6 +95,7 @@ let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   state.rows = [];
+  state.languageRows = [];
   state.calls = [];
   state.saved = [];
   state.countriesGate = null;
@@ -358,5 +362,124 @@ describe("education form: payload", () => {
     await click(buttonNamed("Засах"));
     await submit();
     expect(state.saved[0]).toMatchObject({ todate: "2099-06-01", isgraduated: "N" });
+  });
+});
+
+/* --- Гадаад хэлний мэдлэг ------------------------------------------------ */
+
+/** The second section on the page. */
+const languages = () => container.querySelectorAll("section")[1] as HTMLElement;
+
+const languageButton = (name: string) =>
+  [...languages().querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === name || button.getAttribute("aria-label") === name,
+  )!;
+
+async function submitLanguage() {
+  await act(async () => {
+    languages()
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await settle();
+}
+
+const LEVEL_FIELDS = ["listeninglevelid", "speakinglevelid", "readinglevelid", "writinglevelid"];
+
+const SAVED_LANGUAGE = {
+  entryid: 21,
+  forlanguageid: 15,
+  forlanguagename: "Англи",
+  studytime: 5,
+  listeninglevelid: 4,
+  listeninglevelname: "Дунд",
+  speakinglevelid: 4,
+  speakinglevelname: "Дунд",
+  readinglevelid: 6,
+  readinglevelname: "Дээд түвшин",
+  writinglevelid: 0,
+  score: "IELTS 6.5",
+};
+
+describe("language form", () => {
+  it("the four level selects share one GetForLanguageLevelDropDown call", async () => {
+    await render();
+    await click(languageButton("Нэмэх"));
+    expect(callsOf("languageLevels")).toHaveLength(1);
+    expect(callsOf("foreignLanguages")).toHaveLength(1);
+    for (const name of LEVEL_FIELDS) {
+      const options = [...document.getElementById(`field-${name}`)!.parentElement!.querySelectorAll("option")];
+      expect(options.map((o) => o.textContent)).toEqual(expect.arrayContaining(["Анхан", "Дунд", "Дээд түвшин"]));
+    }
+  });
+
+  it("a new row sends the Postman body: ids and studytime as numbers, empty levels as 0, score as text", async () => {
+    await render();
+    await click(languageButton("Нэмэх"));
+    expect(document.querySelector('label[for="field-studytime"]')?.textContent).toContain(
+      "Судалсан хугацаа (жил)",
+    );
+    await choose("field-forlanguageid", "15");
+    await type("field-studytime", "3");
+    await choose("field-speakinglevelid", "4");
+    await type("field-score", "7.5");
+    await submitLanguage();
+    expect(state.saved).toEqual([
+      {
+        entryid: 0,
+        forlanguageid: 15,
+        studytime: 3,
+        listeninglevelid: 0,
+        speakinglevelid: 4,
+        readinglevelid: 0,
+        writinglevelid: 0,
+        score: "7.5",
+      },
+    ]);
+  });
+
+  it("no language chosen: nothing is sent", async () => {
+    await render();
+    await click(languageButton("Нэмэх"));
+    await choose("field-speakinglevelid", "4");
+    await submitLanguage();
+    expect(state.saved).toEqual([]);
+    expect(languages().textContent).toContain("«Гадаад хэл» талбарыг бөглөнө үү.");
+  });
+
+  it("a saved row is listed by its names and edits round-trip studytime; emptying a level sends 0", async () => {
+    state.languageRows = [SAVED_LANGUAGE];
+    await render();
+    expect(languages().textContent).toContain("Англи");
+    expect(languages().textContent).toContain(
+      "Сонсох: Дунд · Ярих: Дунд · Унших: Дээд түвшин · 5 жил · IELTS 6.5",
+    );
+
+    await click(languageButton("Засах"));
+    expect(shown("field-forlanguageid")).toBe("Англи");
+    expect(typedIn("field-studytime")).toBe("5");
+    expect(shown("field-readinglevelid")).toBe("Дээд түвшин");
+    expect(shown("field-writinglevelid")).toBe("- Сонгох -"); // 0 = none
+    await choose("field-listeninglevelid", "");
+    await submitLanguage();
+    expect(state.saved).toHaveLength(1);
+    expect(state.saved[0]).toMatchObject({
+      entryid: 21,
+      forlanguageid: 15,
+      studytime: 5,
+      listeninglevelid: 0,
+      speakinglevelid: 4,
+      readinglevelid: 6,
+      writinglevelid: 0,
+      score: "IELTS 6.5",
+    });
+  });
+
+  it("a score the ERP handed back as a number is sent back as text", async () => {
+    state.languageRows = [{ ...SAVED_LANGUAGE, score: 7 }];
+    await render();
+    await click(languageButton("Засах"));
+    await submitLanguage();
+    expect(state.saved[0]).toMatchObject({ score: "7" });
   });
 });

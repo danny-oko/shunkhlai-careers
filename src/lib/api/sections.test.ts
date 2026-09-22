@@ -2,7 +2,7 @@ import axios, { type AxiosAdapter } from "axios";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { http } from "./core/client";
-import { education } from "./sections";
+import { education, language } from "./sections";
 
 /**
  * Боловсрол on the wire, as the Postman folder spells it: one row by
@@ -46,6 +46,43 @@ describe("education", () => {
     await education.remove(11);
     expect(seen[0].method).toBe("post");
     expect(seen[0].url).toMatch(/\/api\/me\/DeleteHrAppEducation\?ENTRYID=11$/);
+    expect(seen[0].data).toBeUndefined();
+  });
+});
+
+describe("language", () => {
+  it("save posts the Postman body as is: ids and studytime numbers, score text", async () => {
+    const seen: Seen[] = [];
+    http.defaults.adapter = recording(seen, { entryid: 9 });
+    const body = {
+      entryid: 0,
+      forlanguageid: 15,
+      studytime: 5,
+      listeninglevelid: 4,
+      speakinglevelid: 4,
+      readinglevelid: 6,
+      writinglevelid: 0,
+      score: "IELTS 6.5",
+    };
+    await language.save(body);
+    expect(seen[0].method).toBe("post");
+    expect(seen[0].url).toMatch(/\/api\/me\/SaveAppForLanguage$/);
+    expect(JSON.parse(String(seen[0].data))).toEqual(body);
+  });
+
+  it("get reads one row by entryid", async () => {
+    const seen: Seen[] = [];
+    http.defaults.adapter = recording(seen, { entryid: 9, studytime: 5 });
+    expect(await language.get(9)).toEqual({ entryid: 9, studytime: 5 });
+    expect(seen[0].url).toMatch(/\/api\/me\/GetAppForLanguage\?entryid=9$/);
+  });
+
+  it("remove sends lowercase entryid in the query string, no body", async () => {
+    const seen: Seen[] = [];
+    http.defaults.adapter = recording(seen);
+    await language.remove(9);
+    expect(seen[0].method).toBe("post");
+    expect(seen[0].url).toMatch(/\/api\/me\/DeleteAppForLanguage\?entryid=9$/);
     expect(seen[0].data).toBeUndefined();
   });
 });

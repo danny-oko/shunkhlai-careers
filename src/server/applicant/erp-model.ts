@@ -163,6 +163,15 @@ export const SECTION_LABELS: Partial<Record<SectionKey, LabelSpec[]>> = {
     { name: "professionname", id: "professionid", dropdown: "GetProfessionDropDown" },
     { name: "educationlevelname", id: "educationlevelid", dropdown: "get_educationlevel_dropdown" },
   ],
+  // Postman `hrapplanglist` is ids only too. All four skills read one level list.
+  languages: [
+    { name: "forlanguagename", id: "forlanguageid", dropdown: "GetForLanguageDropDown" },
+    ...(["listening", "speaking", "reading", "writing"] as const).map((skill) => ({
+      name: `${skill}levelname`,
+      id: `${skill}levelid`,
+      dropdown: "GetForLanguageLevelDropDown",
+    })),
+  ],
 };
 
 const noId = (value: unknown) => value === null || value === undefined || value === "" || Number(value) === 0;
