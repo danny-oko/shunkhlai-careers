@@ -13,7 +13,8 @@
  */
 
 import { RETRY_LINK_FLAG, isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
-import { linkRefused, linkedRegno } from "./erp-model";
+import type { MaritalOption } from "@/lib/api/profile";
+import { CLEARABLE_KEYS, linkRefused, linkedRegno } from "./erp-model";
 
 export type Row = Record<string, unknown>;
 
@@ -78,6 +79,20 @@ export type DocErp = {
   linkedAt?: string;
   /** A SaveHrAppUser is in flight (ISO): no second one for this applicant. */
   registeringAt?: string;
+  /**
+   * The утас the ERP last accepted as the password (the pair that earned a
+   * token). When the stored утас differs, the next login changes the ERP
+   * password to it first (`changeUserInfo`). Server-only: never in a response.
+   */
+  loginPhone?: string;
+  /**
+   * Profile fields the applicant emptied here that the ERP may still hold.
+   * The flush sends them cleared (SaveHrApplicant is a full replace); gone
+   * once that save went through.
+   */
+  profileCleared?: string[];
+  /** The ERP's `maritalstatus[]` option list, from the last pull of `/get`. */
+  maritalOptions?: MaritalOption[];
 };
 
 export type Envelope = {
@@ -265,6 +280,8 @@ function handleGet({ endpoint, query }: HandlerRequest, doc: ApplicantDoc): Hand
         erplinked: linkedRegno(doc) !== "",
         // The ERP refused the stored регистр + утас (its own message), else null.
         erplinkerror: linkRefused(doc) ? (doc.erp?.linkError ?? null) : null,
+        // Гэрлэлтийн байдал options as the ERP lists them (absent: the form's fallback).
+        ...(doc.erp?.maritalOptions?.length ? { maritalOptions: doc.erp.maritalOptions } : {}),
       });
 
     case "GetHrAppEducationData":
@@ -305,6 +322,25 @@ function handleGet({ endpoint, query }: HandlerRequest, doc: ApplicantDoc): Hand
     default:
       return null;
   }
+}
+
+const blank = (value: unknown) =>
+  value === null || value === undefined || String(value).trim() === "";
+
+/**
+ * `profileCleared` after this save: fields the body empties that D1 held a
+ * value for are added (the ERP may still have it), fields it fills are
+ * dropped. A field that was blank here all along is not a clearing — the ERP
+ * may hold a value the applicant never saw.
+ */
+function clearedFields(doc: ApplicantDoc, body: Row): Pick<DocErp, "profileCleared"> {
+  const cleared = new Set(doc.erp?.profileCleared ?? []);
+  for (const key of CLEARABLE_KEYS) {
+    if (!(key in body)) continue;
+    if (!blank(body[key])) cleared.delete(key);
+    else if (!blank(doc.profile[key])) cleared.add(key);
+  }
+  return { profileCleared: cleared.size ? [...cleared] : undefined };
 }
 
 const asRows = (body: unknown): Row[] =>
@@ -355,7 +391,16 @@ async function handlePost(
       const wasComplete = isIdentityComplete(doc.profile);
       const changed = (key: string) => key in body && body[key] !== doc.profile[key];
       const newCredentials = changed("regno") || changed("mobilephone");
-      doc.erp = { ...doc.erp, profileEdited: true };
+      // A linked account's утас is its ERP password: remember the one the ERP
+      // accepted before it changes, so the sync can move the password along.
+      // (Accounts linked before this was recorded — no stored refusal means
+      // the stored утас still logs in.)
+      if (changed("mobilephone") && linkedRegno(doc) && !doc.erp?.loginPhone && !linkRefused(doc)) {
+        // As the login sends it (`loginFor`): the stored value, trimmed.
+        const previous = blank(doc.profile.mobilephone) ? "" : String(doc.profile.mobilephone).trim();
+        if (previous) doc.erp = { ...doc.erp, loginPhone: previous };
+      }
+      doc.erp = { ...doc.erp, profileEdited: true, ...clearedFields(doc, body) };
       // Newly complete or new credentials: the ERP gets a fresh try on the next
       // visit — no leftover pull backoff, no stale refusal.
       if (newCredentials || (!wasComplete && isIdentityComplete({ ...doc.profile, ...body }))) {
@@ -388,6 +433,8 @@ async function handlePost(
 
     case "SaveAppPicture": {
       if (!upload) return fail("file not selected");
+      // JPEG by construction: the picker re-encodes every photo as JPEG before
+      // upload (`lib/resize-image.ts` `resizePhoto`).
       doc.picture = `data:image/jpeg;base64,${upload.data}`;
       return ok(true, true);
     }

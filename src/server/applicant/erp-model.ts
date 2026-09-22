@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import type { MaritalOption } from "@/lib/api/profile";
 import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 import type { ApplicantDoc, DocErp, PendingDelete, Row } from "./handlers";
 
@@ -215,6 +216,34 @@ export const PROFILE_KEYS = [
   "custom2",
 ] as const;
 
+/**
+ * Never sent blank: the ERP login and the applicant's name. A blank here
+ * means "not known yet", not "cleared", so the ERP keeps its own value.
+ */
+export const NEVER_BLANK = new Set(["lastname", "firstname", "regno", "mobilephone"]);
+
+/** Profile fields an applicant can empty, and the ERP then has to empty too. */
+export const CLEARABLE_KEYS: readonly string[] = PROFILE_KEYS.filter((key) => !NEVER_BLANK.has(key));
+
+/**
+ * The `/get` reply's `maritalstatus[]` as `{ key, text }` options, or null
+ * when it carries no usable list. Rows the ERP spells `code`/`name` are
+ * accepted too — the collection has no saved example of this list.
+ */
+export function maritalOptionsOf(list: unknown): MaritalOption[] | null {
+  if (!Array.isArray(list)) return null;
+  const options = list.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const r = row as Row;
+    const key = str(r.key ?? r.code ?? r.value);
+    const text = str(r.text ?? r.name ?? r.description);
+    return key && text ? [{ key, text }] : [];
+  });
+  return options.length ? options : null;
+}
+
+const str = (value: unknown) => (value === null || value === undefined ? "" : String(value).trim());
+
 const NOT_PULLED = new Set(["filedata", "picturedata", "filename", "maritalOptions"]);
 /**
  * The ERP login (`auth/login {regNo, mobile}`): регистр + утас, where the утас
@@ -269,6 +298,8 @@ export const asDataUrl = (data: string) =>
 /** What one pull fetched; null parts failed or were not fetched. */
 export type ErpSnapshot = {
   record: Row | null;
+  /** `/get`'s `maritalstatus[]` option list (null: absent or unusable). */
+  maritalOptions?: MaritalOption[] | null;
   recruitmentorders: Row[] | null;
   sources: Record<string, unknown>;
   applications: Row[] | null;
@@ -291,6 +322,8 @@ export function applySnapshot(doc: ApplicantDoc, snap: ErpSnapshot, now: Date): 
     doc.profile = pulled.profile;
     if (pulled.d1Only) erp.profileDirty = Date.now();
   }
+
+  if (snap.maritalOptions?.length) erp.maritalOptions = snap.maritalOptions;
 
   if (snap.recruitmentorders) {
     erp.appliedOrderIds = snap.recruitmentorders
@@ -491,11 +524,15 @@ export const erpReady = (doc: ApplicantDoc) => isIdentityComplete(doc.profile) &
 export const linkedRegno = (doc: ApplicantDoc) =>
   doc.erp?.linkedRegno ?? (doc.erp?.pulledAt ? normalizeRegno(doc.profile.regno) : "");
 
-/** A token was issued for `regno`: linked, and any refusal or claim is over. */
-export function markLinked(doc: ApplicantDoc, regno: unknown, now = new Date()): void {
+/**
+ * A token was issued for `regno` + `phone`: linked, `phone` is the ERP
+ * password now, and any refusal or claim is over.
+ */
+export function markLinked(doc: ApplicantDoc, regno: unknown, phone?: string, now = new Date()): void {
   const erp = (doc.erp ??= {});
   erp.linkedRegno ??= normalizeRegno(regno);
   erp.linkedAt ??= now.toISOString();
+  if (phone) erp.loginPhone = phone;
   delete erp.linkError;
   delete erp.linkKey;
   delete erp.registeringAt;

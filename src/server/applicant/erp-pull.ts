@@ -1,7 +1,7 @@
 import "server-only";
 
 import { ErpError, erpGet } from "./erp";
-import { type ErpSnapshot, SOURCES } from "./erp-model";
+import { type ErpSnapshot, SOURCES, maritalOptionsOf } from "./erp-model";
 import type { Row } from "./handlers";
 
 /**
@@ -28,17 +28,17 @@ async function part<T>(endpoint: string, token: string): Promise<T | null> {
   }
 }
 
-/** `/get` → the record and the postings already applied to. */
-function splitGet(data: unknown): { record: Row | null; recruitmentorders: Row[] | null } {
+/** `/get` → the record, the postings already applied to and the marital options. */
+function splitGet(data: unknown): Pick<ErpSnapshot, "record" | "recruitmentorders" | "maritalOptions"> {
   if (!data || typeof data !== "object") return { record: null, recruitmentorders: null };
-  const wrapped = data as { applicantdata?: unknown; recruitmentorders?: unknown };
+  const wrapped = data as { applicantdata?: unknown; recruitmentorders?: unknown; maritalstatus?: unknown };
   const record = Array.isArray(wrapped.applicantdata)
     ? ((wrapped.applicantdata[0] as Row | undefined) ?? null)
     : (data as Row);
   const orders = Array.isArray(wrapped.recruitmentorders)
     ? (wrapped.recruitmentorders as Row[])
     : null;
-  return { record, recruitmentorders: orders };
+  return { record, recruitmentorders: orders, maritalOptions: maritalOptionsOf(wrapped.maritalstatus) };
 }
 
 export type PullScope = {

@@ -398,6 +398,101 @@ describe("write-through", () => {
     expect(storedDoc().erp?.profileDirty).toBeUndefined();
   });
 
+  it("a field emptied here is emptied in the ERP too, and the next pull does not bring it back", async () => {
+    const fake = richErp();
+    Object.assign(fake.record, { contactname2: "Хоёр дахь", relativeid2: 22, contactphone2: "88887777" });
+    await firstLoad(fake);
+    const loaded = (await get("get")).body.retdata as Row;
+    expect(loaded).toMatchObject({ addr2: "ERP хаяг", contactname2: "Хоёр дахь", relativeid2: 22 });
+
+    // What the profile form sends when the second contact and the address are cleared.
+    await post("SaveHrApplicant", { ...loaded, addr2: "", contactname2: "", relativeid2: null, contactphone2: "" });
+    expect(storedDoc().erp.profileCleared).toEqual(expect.arrayContaining(["addr2", "contactname2", "relativeid2", "contactphone2"]));
+    await flushAfter();
+
+    const save = erp.calls.find((c) => c.endpoint === "SaveHrApplicant")!.body as Row;
+    expect(save).toMatchObject({ addr2: "", contactname2: "", contactphone2: "" });
+    expect(save).not.toHaveProperty("relativeid2"); // a blank id is left out: the full replace resets it
+    expect(erp.record).toMatchObject({ addr2: "", contactname2: "", contactphone2: "" });
+    expect(erp.record.relativeid2).toBeUndefined();
+    // The rest of the record, and the login, are untouched.
+    expect(erp.record).toMatchObject({ lastname: "Дорж", firstname: "Бат", regno: erp.regno, mobilephone: erp.phone, custom1: "ERP custom" });
+    expect(storedDoc().erp.profileCleared).toBeUndefined();
+
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect((await get("get")).body.retdata).toMatchObject({ addr2: "", contactname2: "", contactphone2: "" });
+    expect(((await get("get")).body.retdata as Row).relativeid2 ?? null).toBeNull();
+  });
+
+  it("emptied, then filled again before the flush: the new value goes, nothing is cleared", async () => {
+    await firstLoad();
+    erp.down = true;
+    await post("SaveHrApplicant", { addr2: "", contactname: "" });
+    await flushAfter();
+    expect(storedDoc().erp.profileCleared).toEqual(["addr2", "contactname"]);
+    await post("SaveHrApplicant", { addr2: "Шинэ хаяг" });
+    expect(storedDoc().erp.profileCleared).toEqual(["contactname"]);
+    erp.down = false;
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.record).toMatchObject({ addr2: "Шинэ хаяг", contactname: "" });
+    expect(storedDoc().erp.profileCleared).toBeUndefined();
+  });
+
+  it("a field that was blank here all along is not a clearing: the ERP keeps its value", async () => {
+    // Saved here before the first pull: D1 never saw the ERP's addr2 / custom1.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    await post("SaveHrApplicant", { regno: erp.regno, mobilephone: erp.phone, addr2: "", custom1: "" });
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://erp.test");
+    state.after = [];
+    expect(storedDoc().erp.profileCleared).toBeUndefined();
+    await get("get");
+    await flushAfter();
+    expect(erp.record).toMatchObject({ addr2: "ERP хаяг", custom1: "ERP custom" });
+  });
+
+  it("the ERP's maritalstatus[] reaches /api/me/get, and a stored code outside it is kept", async () => {
+    const fake = richErp();
+    fake.marital = [
+      { key: "S", text: "Ганц бие" },
+      { key: "M", text: "Гэрлэсэн" },
+    ];
+    fake.record.maritalstatus = "X";
+    await firstLoad(fake);
+    const p = (await get("get")).body.retdata as Row;
+    expect(p.maritalOptions).toEqual([
+      { key: "S", text: "Ганц бие" },
+      { key: "M", text: "Гэрлэсэн" },
+    ]);
+    expect(p.maritalstatus).toBe("X");
+    expect(storedDoc().profile).not.toHaveProperty("maritalOptions");
+
+    // Never echoed back to the ERP.
+    await post("SaveHrApplicant", { ...p, maritalstatus: "S" });
+    await flushAfter();
+    const save = erp.calls.find((c) => c.endpoint === "SaveHrApplicant")!.body as Row;
+    expect(save.maritalstatus).toBe("S");
+    expect(save).not.toHaveProperty("maritalOptions");
+  });
+
+  it("a photo goes to SaveAppPicture as multipart field `file`; the pulled picturedata is served as a data URL", async () => {
+    await firstLoad();
+    const pulled = (await get("get")).body.retdata as Row;
+    expect(pulled.picturedata).toBe(`data:image/jpeg;base64,${erp.record.picturedata}`);
+
+    const fd = new FormData();
+    fd.set("file", new File([new Uint8Array([0xff, 0xd8, 0xff, 0x02])], "me.jpg", { type: "image/jpeg" }));
+    expect((await post("SaveAppPicture", fd)).body.rettype).toBe(0);
+    await flushAfter();
+    const call = erp.calls.find((c) => c.endpoint === "SaveAppPicture")!;
+    expect(call.method).toBe("POST");
+    expect(call.body).toMatchObject({ field: "file", bytes: Buffer.from([0xff, 0xd8, 0xff, 0x02]).toString("base64") });
+    expect(erp.record.picturedata).toBe(Buffer.from([0xff, 0xd8, 0xff, 0x02]).toString("base64"));
+  });
+
   it("ERP down during the flush → stays pending → the next due get retries and succeeds", async () => {
     await firstLoad();
     erp.down = true;
@@ -737,16 +832,97 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     expect(erp.lists.hrappexplist.map((row) => row.orgname)).toEqual(["Local"]);
   });
 
-  it("a LINKED account whose утас no longer matches: no SaveHrAppUser, refusal shown, calls stop", async () => {
-    await firstLoad(); // linked by this pull
-    expect(storedDoc().erp.linkedRegno).toBe(erp.regno);
+  it("a LINKED account whose утас changes here: the ERP password follows (changeUserInfo), then the new pair", async () => {
+    await firstLoad(); // linked by this pull, with the утас that logged in
+    const oldPhone = erp.phone;
+    expect(storedDoc().erp).toMatchObject({ linkedRegno: erp.regno, loginPhone: oldPhone });
     erp.calls = [];
-    const count = (endpoint: string) => erp.endpoints().filter((e) => e === endpoint).length;
 
-    await post("SaveHrApplicant", { mobilephone: "88000000" }); // wrong for the ERP
+    await post("SaveHrApplicant", { mobilephone: "88000000" });
+    // The last-good утас stays on the server: never in a response.
+    expect(JSON.stringify((await get("get")).body)).not.toContain(oldPhone);
     await flushAfter();
-    expect(count("auth/login")).toBe(1);
-    expect(count("SaveHrAppUser")).toBe(0);
+
+    expect(erp.endpoints().slice(0, 3)).toEqual(["auth/login", "changeUserInfo", "auth/login"]);
+    expect(erp.calls[0].body).toEqual({ regNo: erp.regno, mobile: oldPhone });
+    expect(erp.calls[1].auth).toBe(`Bearer ${erp.token}`);
+    expect(erp.calls[1].body).toEqual({
+      phonenumber: "88000000",
+      email: "bat@erp.mn",
+      oldpassword: oldPhone,
+      newpassword: "88000000",
+      type: "PASSWORD",
+    });
+    expect(erp.calls[2].body).toEqual({ regNo: erp.regno, mobile: "88000000" });
+    expect(erp.endpoints()).not.toContain("SaveHrAppUser");
+    expect(erp.phone).toBe("88000000"); // what auth/login compares now
+    // SaveHrApplicant carries the D1 утас: the ERP record's phone is the new one too.
+    const save = erp.calls.find((c) => c.endpoint === "SaveHrApplicant")!;
+    expect((save.body as Row).mobilephone).toBe("88000000");
+    expect(erp.record.mobilephone).toBe("88000000");
+    expect(storedDoc().erp.loginPhone).toBe("88000000");
+    expect(storedDoc().erp.linkError).toBeUndefined();
+
+    // From now on a plain login with the new pair.
+    erp.calls = [];
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.endpoints().filter((e) => e === "auth/login")).toHaveLength(1);
+    expect(erp.endpoints()).not.toContain("changeUserInfo");
+    expect(logs.join("\n")).not.toContain(oldPhone);
+    expect(logs.join("\n")).not.toContain("88000000");
+  });
+
+  it("changeUserInfo refused: its own message is shown, nothing loops, a new утас tries again", async () => {
+    await firstLoad();
+    const oldPhone = erp.phone;
+    erp.refuse.set("changeUserInfo", "Нууц үг солих боломжгүй байна.");
+    erp.calls = [];
+
+    await post("SaveHrApplicant", { mobilephone: "88000000" });
+    await flushAfter();
+    // Old pair → refused change → the new pair once (not the password yet) → stop.
+    expect(erp.endpoints()).toEqual(["auth/login", "changeUserInfo", "auth/login"]);
+    expect(erp.phone).toBe(oldPhone);
+    expect(storedDoc().erp.linkError).toBe("Нууц үг солих боломжгүй байна.");
+    expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: "Нууц үг солих боломжгүй байна." });
+    expect(storedDoc().profile.mobilephone).toBe("88000000"); // D1 keeps what was typed
+
+    erp.calls = [];
+    advance(48 * 60 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.calls).toEqual([]);
+
+    // Back to the утас the ERP knows: a plain login, the waiting profile goes.
+    erp.refuse.delete("changeUserInfo");
+    await post("SaveHrApplicant", { mobilephone: oldPhone });
+    await flushAfter();
+    expect(erp.endpoints()).toEqual(["auth/login", "get", "SaveHrApplicant"]);
+    expect(storedDoc().erp.linkError).toBeUndefined();
+  });
+
+  it("the ERP password already is the new утас (an earlier change not recorded): no second change", async () => {
+    await firstLoad();
+    erp.calls = [];
+    await post("SaveHrApplicant", { mobilephone: "88000000" });
+    erp.phone = "88000000"; // changed, but our bookkeeping never heard back
+    await flushAfter();
+    expect(erp.endpoints().slice(0, 2)).toEqual(["auth/login", "auth/login"]);
+    expect(erp.endpoints()).not.toContain("changeUserInfo");
+    expect(storedDoc().erp).toMatchObject({ loginPhone: "88000000" });
+    expect(storedDoc().erp.linkError).toBeUndefined();
+  });
+
+  it("neither the old nor the new утас logs in: the refusal is shown and calls stop", async () => {
+    await firstLoad();
+    erp.calls = [];
+    erp.phone = "77000000"; // changed on the old site meanwhile
+    await post("SaveHrApplicant", { mobilephone: "88000000" });
+    await flushAfter();
+    expect(erp.endpoints()).toEqual(["auth/login", "auth/login"]);
+    expect(erp.endpoints()).not.toContain("SaveHrAppUser");
     expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: MISMATCH, erplinked: true });
 
     erp.calls = [];
@@ -755,12 +931,27 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await flushAfter();
     expect(erp.calls).toEqual([]);
 
-    await post("SaveHrApplicant", { mobilephone: erp.phone });
+    // The утас the ERP has now: the recorded one is still refused, the new pair logs in.
+    await post("SaveHrApplicant", { mobilephone: "77000000" });
     await flushAfter();
-    expect(count("auth/login")).toBe(1);
-    expect(count("SaveHrAppUser")).toBe(0);
-    expect(erp.record.mobilephone).toBe(erp.phone);
+    expect(erp.endpoints().slice(0, 2)).toEqual(["auth/login", "auth/login"]);
+    expect(storedDoc().erp).toMatchObject({ loginPhone: "77000000" });
     expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: null });
+  });
+
+  it("an account linked before the last-good утас was recorded: the stored утас is taken as it", async () => {
+    await firstLoad();
+    const oldPhone = erp.phone;
+    const legacy = storedDoc();
+    delete legacy.erp.loginPhone;
+    state.sqlite!.prepare("update applicant_account set data_json = ?").run(JSON.stringify(legacy));
+    erp.calls = [];
+
+    await post("SaveHrApplicant", { mobilephone: "88000000" });
+    await flushAfter();
+    expect(erp.endpoints().slice(0, 3)).toEqual(["auth/login", "changeUserInfo", "auth/login"]);
+    expect((erp.calls[1].body as Row).oldpassword).toBe(oldPhone);
+    expect(erp.phone).toBe("88000000");
   });
 
   it("a deliberate retry (retrylink) with the same регистр + утас asks the ERP once more", async () => {

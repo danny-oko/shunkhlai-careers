@@ -77,6 +77,14 @@ in the apply sheet); those credentials are not sent again until the applicant
 changes регистр/утас or presses «Дахин оролдох» (`saveProfile(…, { retryLink:
 true })`) — an ordinary profile save never retries.
 
+**Changing the утас moves the password.** The server keeps the утас the ERP
+last accepted (`erp.loginPhone`, never sent to the browser). When the stored
+утас differs on a linked account, the sync logs in with the old pair, calls
+`changeUserInfo {phonenumber, email, oldpassword, newpassword, type:
+"PASSWORD"}` (Postman 03), then continues with the new pair; the next
+`SaveHrApplicant` carries the new утас as `mobilephone`. A refused change
+(rettype ≠ 0) is stored as the refusal with the ERP's own message.
+
 ## Two patterns carry most of the surface
 
 **Reference dropdowns.** Around twenty endpoints take `?search=&lfr=false&ids=`
