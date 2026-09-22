@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { REGNO_LOCKED_MESSAGE } from "@/lib/applicant-identity";
 import { ERP_DELETES, FakeErp, MISMATCH, type Row } from "@/server/applicant/fake-erp.fixture";
+import { labelFor } from "@/server/mock/store";
 
 /**
  * Two-way D1 ⇄ ERP sync through /api/me, end to end: real SQLite (node:sqlite)
@@ -240,6 +241,29 @@ describe("first load (pull)", () => {
     expect(l.applications[0].posname).toBe("Нягтлан");
     // Pulling is read-only.
     expect(erp.endpoints().filter((e) => /^(Save|Delete|delete)/.test(e))).toEqual([]);
+  });
+
+  it("ERP education rows (ids only, per Postman hrappedulist) are listed with their names", async () => {
+    await firstLoad();
+    const [row] = (await lists()).education;
+    expect(row.universityname).toBe(labelFor("GetUniversityDropDown", 3));
+    expect(row.universityname).not.toBe("");
+    // Labels are ours: the ERP row itself is untouched, and they are never sent back.
+    expect(erp.lists.hrappedulist[0]).not.toHaveProperty("universityname");
+  });
+
+  it("a row saved here keeps its names once the ERP's re-read copy replaces it", async () => {
+    await firstLoad(new FakeErp());
+    await post("SaveHrAppEducation", { entryid: 0, universityid: 3, educationlevelid: 2010 });
+    await flushAfter();
+    const [row] = (await lists()).education;
+    expect(row.erp).toBe("synced");
+    expect(row.entryid).toBe(erp.lists.hrappedulist[0].entryid);
+    expect(row.universityname).toBe(labelFor("GetUniversityDropDown", 3));
+    expect(row.educationlevelname).toBe(labelFor("get_educationlevel_dropdown", 2010));
+    const sent = erp.calls.find((c) => c.endpoint === "SaveHrAppEducation")!.body as Row;
+    expect(sent).not.toHaveProperty("universityname");
+    expect(sent).not.toHaveProperty("educationlevelname");
   });
 
   it("10-minute throttle: no pull within 10 min, background pull after", async () => {
@@ -557,7 +581,7 @@ type DeleteCase = {
 };
 
 const DELETE_CASES: DeleteCase[] = [
-  { name: "education", list: "hrappedulist", ui: "education", save: "SaveHrAppEducation", saveBody: { entryid: 0, schoolname: "L" }, del: "DeleteHrAppEducation", clientParam: "ENTRYID" },
+  { name: "education", list: "hrappedulist", ui: "education", save: "SaveHrAppEducation", saveBody: { entryid: 0, universitynametext: "L" }, del: "DeleteHrAppEducation", clientParam: "ENTRYID" },
   { name: "language", list: "hrapplanglist", ui: "languages", save: "SaveAppForLanguage", saveBody: { entryid: 0, note: "L" }, del: "DeleteAppForLanguage", clientParam: "entryid" },
   { name: "skill", list: "hrappcomplist", ui: "skills", save: "SaveAppSkillComp", saveBody: [{ entryid: 0, note: "L" }], del: "DeleteAppSkillComp", clientParam: "entryid" },
   { name: "experience", list: "hrappexplist", ui: "experience", save: "SaveAppExperience", saveBody: { entryid: 0, orgname: "L" }, del: "DeleteAppExperience", clientParam: "entryid" },
@@ -1192,7 +1216,7 @@ describe("mock mode (NEXT_PUBLIC_API_URL unset)", () => {
     seedCredentials();
     await get("get");
     await post("SaveHrApplicant", { addr2: "x" });
-    const created = await post("SaveHrAppEducation", { entryid: 0, schoolname: "S" });
+    const created = await post("SaveHrAppEducation", { entryid: 0, universitynametext: "S" });
     await post("DeleteHrAppEducation", undefined, `?ENTRYID=${(created.body.retdata as Row).entryid}`);
     await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
     await post("deleteAppCV");

@@ -1,8 +1,9 @@
 import "server-only";
 
 import { ErpError, erpGet } from "./erp";
-import { type ErpSnapshot, SOURCES, maritalOptionsOf } from "./erp-model";
+import { type ErpSnapshot, SOURCES, labelSources, maritalOptionsOf } from "./erp-model";
 import type { Row } from "./handlers";
+import { referenceDeps } from "./reference";
 
 /**
  * Pull (ERP → D1): reads the applicant's whole анкет from the live ERP with a
@@ -69,5 +70,7 @@ export async function fetchSnapshot(token: string, scope: PullScope = FULL_PULL)
   sources.forEach((source, index) => {
     if (lists[index] !== null) snapshot.sources[source] = lists[index];
   });
+  // The ERP's rows carry ids only; the list shows names.
+  await labelSources(snapshot.sources, referenceDeps().label);
   return snapshot;
 }
