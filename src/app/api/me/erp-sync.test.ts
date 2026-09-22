@@ -439,7 +439,7 @@ describe("write-through", () => {
     await firstLoad(
       new FakeErp((e) => {
         e.seedRow("hrappedulist", { countryid: 28, divisionid: 1, universityid: 3, educationlevelid: 2010 });
-        e.seedRow("hrappexplist", { orgname: "Шунхлай", basewage: 2_500_000, headjobid: 7 });
+        e.seedRow("hrappexplist", { orgname: "Шунхлай", jobid: 100, basewage: 2_500_000, headjobid: 7 });
       }),
     );
     const before = await lists();
@@ -604,7 +604,7 @@ describe("write-through", () => {
   it("ERP down during the flush → stays pending → the next due get retries and succeeds", async () => {
     await firstLoad();
     erp.down = true;
-    await post("SaveInterestedJobItem", { entryid: 0, posgroupid: 142, note: "Retry me" });
+    await post("SaveInterestedJobItem", { entryid: 0, posgroupid: 142, positionid: 3720, note: "Retry me" });
     await flushAfter();
     expect(storedDoc().interests.find((r: Row) => r.note === "Retry me").erp).toBe("pending");
 
@@ -624,7 +624,7 @@ describe("write-through", () => {
   it("flush retries are capped (no unbounded attempts)", async () => {
     await firstLoad();
     erp.down = true;
-    await post("SaveInterestedJobItem", { entryid: 0, posgroupid: 142, note: "Never" });
+    await post("SaveInterestedJobItem", { entryid: 0, posgroupid: 142, positionid: 3720, note: "Never" });
     await flushAfter();
     for (let i = 0; i < 12; i += 1) {
       advance(60 * 60_000);
@@ -1070,9 +1070,9 @@ const DELETE_CASES: DeleteCase[] = [
   { name: "education", list: "hrappedulist", ui: "education", save: "SaveHrAppEducation", saveBody: { entryid: 0, universitynametext: "L" }, del: "DeleteHrAppEducation", clientParam: "ENTRYID" },
   { name: "language", list: "hrapplanglist", ui: "languages", save: "SaveAppForLanguage", saveBody: { entryid: 0, forlanguageid: 15, note: "L" }, del: "DeleteAppForLanguage", clientParam: "entryid" },
   { name: "skill", list: "hrappcomplist", ui: "skills", save: "SaveAppSkillComp", saveBody: [{ entryid: 0, skillcompid: 6, note: "L" }], del: "DeleteAppSkillComp", clientParam: "entryid" },
-  { name: "experience", list: "hrappexplist", ui: "experience", save: "SaveAppExperience", saveBody: { entryid: 0, orgname: "L" }, del: "DeleteAppExperience", clientParam: "entryid" },
-  { name: "family", list: "hrappfamilylist", ui: "family", save: "SaveAppFamily", saveBody: [{ entryid: 0, firstname: "L" }], del: "DeleteAppFamily", clientParam: "entryid" },
-  { name: "interest", list: "interests", ui: "interests", save: "SaveInterestedJobItem", saveBody: { entryid: 0, note: "L" }, del: "deleteInterestedJob", clientParam: "entryid" },
+  { name: "experience", list: "hrappexplist", ui: "experience", save: "SaveAppExperience", saveBody: { entryid: 0, orgname: "L", jobid: 100 }, del: "DeleteAppExperience", clientParam: "entryid" },
+  { name: "family", list: "hrappfamilylist", ui: "family", save: "SaveAppFamily", saveBody: [{ entryid: 0, relativeid: 1, firstname: "L" }], del: "DeleteAppFamily", clientParam: "entryid" },
+  { name: "interest", list: "interests", ui: "interests", save: "SaveInterestedJobItem", saveBody: { entryid: 0, posgroupid: 142, positionid: 3720, note: "L" }, del: "deleteInterestedJob", clientParam: "entryid" },
   { name: "application", list: "requests", ui: "applications", save: "SaveHrRecruitmentOrderApp", saveBody: { recruitmentorderid: 786 }, del: "DeleteOrderApp", clientParam: "entryID" },
 ];
 
@@ -1376,7 +1376,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     expect((r.body.retdata as Row).erplinked).toBe(true);
 
     // Registered now: the next sync just logs in.
-    await post("SaveAppExperience", { entryid: 0, orgname: "Local" });
+    await post("SaveAppExperience", { entryid: 0, orgname: "Local", jobid: 100 });
     erp.calls = [];
     await flushAfter();
     expect(erp.endpoints()).not.toContain("SaveHrAppUser");
@@ -1414,7 +1414,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     expect(count("SaveHrAppUser")).toBe(1);
 
     advance(48 * 60 * 60_000); // far past any backoff
-    await post("SaveAppExperience", { entryid: 0, orgname: "Local" }); // local work waits
+    await post("SaveAppExperience", { entryid: 0, orgname: "Local", jobid: 100 }); // local work waits
     await get("get");
     await flushAfter();
     expect(count("SaveHrAppUser")).toBe(1);
