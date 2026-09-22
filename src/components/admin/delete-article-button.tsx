@@ -24,8 +24,7 @@ export function DeleteArticleButton({ id, title }: { id: string; title: string }
       <Button
         type="submit"
         variant="destructive"
-        size="icon-sm"
-        title="Хасах"
+        size="sm"
         onClick={(event) => {
           if (!window.confirm(`“${title}” мэдээг хасах уу? Үүнийг буцаах боломжгүй.`)) {
             event.preventDefault();
@@ -33,7 +32,7 @@ export function DeleteArticleButton({ id, title }: { id: string; title: string }
         }}
       >
         <Trash2 aria-hidden />
-        <span className="sr-only">Хасах</span>
+        Хасах
       </Button>
     </form>
   );

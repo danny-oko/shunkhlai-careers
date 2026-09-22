@@ -36,6 +36,7 @@ export function FieldShell({
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-baseline justify-between gap-3">
         <Label
+          id={`${id}-label`}
           htmlFor={id}
           className="text-[0.6875rem] tracking-[0.14em] uppercase"
         >

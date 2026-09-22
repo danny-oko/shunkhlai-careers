@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { NewsBlock } from "@/lib/news/types";
+import { blocksToDoc } from "@/lib/news/legacy";
 
 import {
   countByCategory,
@@ -26,7 +26,7 @@ import {
  * rather than from whatever the previous one left behind.
  */
 
-const BODY: NewsBlock[] = [{ kind: "paragraph", text: "Туршилтын бичвэр." }];
+const BODY = blocksToDoc([{ kind: "paragraph", text: "Туршилтын бичвэр." }]);
 
 function article(overrides: Partial<Parameters<typeof saveArticle>[0]> = {}) {
   return saveArticle({

@@ -7,8 +7,14 @@
  * data they format, so a component never reaches for `Intl` and guesses.
  */
 
+import { type RichDoc, docText, excerpt, readingMinutes as readingMinutesOf } from "./shared/rich-text";
+
 export type NewsCategory = "company" | "industry" | "society" | "people";
 
+/**
+ * The body format before rich text. No longer stored: it survives only so that
+ * old JSON on disk and the seed can be read (see `legacy.ts`).
+ */
 export type NewsBlock =
   | { kind: "paragraph"; text: string }
   | { kind: "heading"; text: string }
@@ -16,6 +22,28 @@ export type NewsBlock =
   | { kind: "list"; items: string[] };
 
 export type NewsStatus = "draft" | "published";
+
+/**
+ * The two states, in the order the admin offers them. Labels and hints live
+ * here so the desk's filter, the row badge and the editor say the same thing
+ * about a story, and so the hint says what a reader can see.
+ */
+export const NEWS_STATUSES: ReadonlyArray<{
+  value: NewsStatus;
+  label: string;
+  hint: string;
+}> = [
+  { value: "published", label: "Нийтлэгдсэн", hint: "Сайтад харагдаж байна" },
+  { value: "draft", label: "Ноорог", hint: "Сайтад харагдахгүй" },
+];
+
+export function statusLabel(value: NewsStatus): string {
+  return NEWS_STATUSES.find((status) => status.value === value)?.label ?? "";
+}
+
+export function statusHint(value: NewsStatus): string {
+  return NEWS_STATUSES.find((status) => status.value === value)?.hint ?? "";
+}
 
 export type NewsArticle = {
   /** `art_` plus 10 hex. */
@@ -32,7 +60,7 @@ export type NewsArticle = {
   /** Served at `/api/news/media/<coverKey>`; null while a draft has no image. */
   coverKey: string | null;
   coverAlt: string;
-  body: NewsBlock[];
+  body: RichDoc;
   status: NewsStatus;
   featured: boolean;
   createdAt: string;
@@ -112,25 +140,13 @@ export function formatNewsDateShort(isoDate: string): string {
   return `${date.year}.${pad(date.month)}.${pad(date.day)}`;
 }
 
-/** Every word a block contributes, in reading order. */
-function words(block: NewsBlock): string[] {
-  const text =
-    block.kind === "list" ? block.items.join(" ") : `${block.text} ${blockAttribution(block)}`;
-  return text.split(/\s+/u).filter(Boolean);
-}
-
-function blockAttribution(block: NewsBlock): string {
-  return block.kind === "quote" ? (block.attribution ?? "") : "";
-}
-
 /**
  * 180 words a minute — the slow end of the usual 180-260 range, because
  * Mongolian Cyrillic sets longer words than the English the figure comes from.
  * Never zero: "0 минут" reads as broken rather than short.
  */
-export function readingMinutes(body: NewsBlock[]): number {
-  const total = (body ?? []).reduce((count, block) => count + words(block).length, 0);
-  return Math.max(1, Math.ceil(total / 180));
+export function readingMinutes(body: RichDoc): number {
+  return readingMinutesOf(docText(body));
 }
 
 /**
@@ -139,18 +155,8 @@ export function readingMinutes(body: NewsBlock[]): number {
  * Cuts on a word boundary so a Cyrillic word is never sliced mid-syllable, and
  * only appends the ellipsis when something was actually dropped.
  */
-export function bodyExcerpt(body: NewsBlock[], max = 180): string {
-  const text = (body ?? [])
-    .map((block) => (block.kind === "list" ? block.items.join(" ") : block.text))
-    .join(" ")
-    .replace(/\s+/gu, " ")
-    .trim();
-
-  if (text.length <= max) return text;
-
-  const cut = text.slice(0, max);
-  const lastSpace = cut.lastIndexOf(" ");
-  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+export function bodyExcerpt(body: RichDoc, max = 180): string {
+  return excerpt(docText(body), max);
 }
 
 /**

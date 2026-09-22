@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { ApplicationCard } from "@/components/account/application-card";
 import { FormMessage } from "@/components/ui/field";
 import { applications, toApiError } from "@/lib/api";
 import type { ApplicationRow } from "@/lib/api/applications";
@@ -46,14 +46,16 @@ export default function ApplicationsPage() {
     setToken((current) => current + 1);
   }, []);
 
-  async function withdraw(row: ApplicationRow) {
-    if (!window.confirm(`«${row.posname}» хүсэлтээ цуцлах уу?`)) return;
+  /** Confirmation happens in the card's dialog; resolves true when withdrawn. */
+  async function withdraw(row: ApplicationRow): Promise<boolean> {
     try {
       await applications.withdraw(Number(row.entryid));
       toast.success("Хүсэлт цуцлагдлаа");
       await reload();
+      return true;
     } catch (withdrawError) {
       toast.error(toApiError(withdrawError).message);
+      return false;
     }
   }
 
@@ -69,12 +71,17 @@ export default function ApplicationsPage() {
       <FormMessage message={error} />
 
       {isLoading ? (
-        <p className="text-muted-foreground flex items-center gap-2 text-sm">
-          <Loader2 className="size-4 animate-spin" />
-          Ачаалж байна…
-        </p>
+        <div className="space-y-3" role="status" aria-live="polite">
+          <p className="text-muted-foreground flex items-center gap-2 text-sm">
+            <Loader2 className="size-4 animate-spin" />
+            Ачаалж байна…
+          </p>
+          {[0, 1].map((i) => (
+            <div key={i} className="border-border/70 bg-card h-40 animate-pulse rounded-2xl border" />
+          ))}
+        </div>
       ) : rows.length === 0 ? (
-        <div className="border-border/70 rounded-xl border border-dashed px-5 py-10 text-center">
+        <div className="border-border/70 bg-muted/30 rounded-2xl border border-dashed px-5 py-12 text-center">
           <p className="text-muted-foreground text-sm">
             Та одоогоор анкет илгээгээгүй байна.
           </p>
@@ -83,35 +90,16 @@ export default function ApplicationsPage() {
           </Button>
         </div>
       ) : (
-        <ul className="border-border/70 divide-border/70 divide-y rounded-xl border">
-          {rows.map((row) => (
-            <li key={String(row.entryid)} className="space-y-3 px-5 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium">{row.posname}</p>
-                  <p className="text-muted-foreground mt-0.5 text-sm">
-                    {[row.companyname, row.locname].filter(Boolean).join(" · ")}
-                  </p>
-                </div>
-                <Badge variant="secondary">{row.statusname ?? "Хүлээгдэж буй"}</Badge>
-              </div>
-
-              <div className="text-muted-foreground flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-                {row.salaryname ? <span>Цалингийн түвшин: {row.salaryname}</span> : null}
-                {row.availabledate ? <span>Ажилд орох: {row.availabledate}</span> : null}
-                {typeof row.senddate === "string" ? <span>Илгээсэн: {row.senddate}</span> : null}
-              </div>
-
-              <Button
-                variant="ghost"
-                onClick={() => withdraw(row)}
-                className="text-muted-foreground hover:text-destructive h-8 rounded-full px-3 text-sm"
-              >
-                Хүсэлт цуцлах
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="text-muted-foreground text-sm" aria-live="polite">
+            Нийт <span className="text-foreground font-semibold">{rows.length}</span> хүсэлт
+          </p>
+          <ul className="space-y-3" aria-label="Илгээсэн хүсэлтүүд">
+            {rows.map((row) => (
+              <ApplicationCard key={String(row.entryid)} row={row} onWithdraw={withdraw} />
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );

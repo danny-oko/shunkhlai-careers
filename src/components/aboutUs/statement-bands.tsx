@@ -6,6 +6,7 @@ import Image from "next/image";
 import { FeatherLattice } from "@/components/brand/feather-lattice";
 import { SectionRule } from "@/components/brand/section-rule";
 import { useScrollProgress } from "@/components/landing/use-scroll-progress";
+import { PrinciplePanel } from "@/components/aboutUs/academy-principle";
 import { mission, values, vision } from "@/lib/company";
 import { cn } from "@/lib/utils";
 
@@ -205,18 +206,149 @@ function Roller({
 }
 
 /**
+ * Two beats after the three statements: one for the word, one for what is
+ * behind it.
+ *
+ * The section used to be exactly as long as it had statements. It carries the
+ * Academy's principle now, out of a section of its own and into the end of
+ * this one, and the word is the hinge: "Бидний" has labelled every one of the
+ * three, and at the end of them it steps off the row, comes forward into the
+ * middle of the screen, and breaks apart to leave the principle standing where
+ * it stood.
+ *
+ * The beat after that is the principle's own, and it is not spare: the panel
+ * only finishes arriving at the very end of the word's beat, so without a beat
+ * of its own it would be fully up for the last pixel of the runway and gone.
+ */
+const BEATS = STEPS.length + 2;
+
+/** Cubic ease-out: away quickly, settling in. What arrives on screen takes it. */
+const ease = (t: number) => 1 - (1 - t) ** 3;
+
+/**
+ * Smoothstep: still at both ends, quickest in the middle.
+ *
+ * The word's own travel takes this and not the ease above, and the difference
+ * is the whole reading of the beat. Under an ease-out the word is four fifths
+ * of the way up to full size within a tenth of its beat: it does not come
+ * forward, it pops, and everything left is a pause and then a burst - which
+ * is what "it scatters before it has grown" looks like. Settling in at both
+ * ends spends the travel where it was asked for, in the travelling.
+ */
+const advance = (t: number) => t * t * (3 - 2 * t);
+
+/**
+ * The word's beat, as shares of it: it comes forward into the middle over the
+ * first half, stands clear at full size for a fifth of the beat, and only then
+ * breaks up, with the panel behind it arriving as the pieces go.
+ *
+ * The standing is not slack. It is the beat that says the growing has finished
+ * before the scattering starts, and without it the two movements run into each
+ * other and read as one.
+ */
+const GROW = 0.5;
+const BREAK = { from: 0.68, span: 0.32 };
+/**
+ * And the share of that break the letters are gone by.
+ *
+ * They travel for the whole of it and fade over the first half, so the burst
+ * still carries out to its full spread while the word itself is already off
+ * the screen. Fading over the whole break instead, the letters were still at
+ * a third of their weight with the panel behind them fully arrived, and six
+ * grey letters lay across the copy like a watermark nobody asked for.
+ */
+const FADE = 0.5;
+/**
+ * The panel waits for them. It opens where the letters reach about a tenth of
+ * their weight, which is the last moment before the two would be read at once.
+ */
+const REVEAL = { from: 0.82, span: 0.18 };
+/** And how quickly the statements give up the screen once that beat opens. */
+const HAND_OVER = 0.22;
+
+/**
+ * Where each letter of "Бидний" goes when the word breaks up.
+ *
+ * In ems of the word's own size rather than pixels, and applied inside the
+ * transform that scales it, so the burst is the same shape on a phone as on a
+ * desktop instead of being a shrug at one size and a scatter at the other.
+ */
+const SCATTER = [
+  { x: -1.55, y: -0.6, turn: -24 },
+  { x: -0.9, y: 0.85, turn: 15 },
+  { x: -0.3, y: -0.95, turn: -11 },
+  { x: 0.35, y: 0.9, turn: 19 },
+  { x: 1.05, y: -0.75, turn: -17 },
+  { x: 1.65, y: 0.5, turn: 26 },
+];
+
+/**
+ * Where the outro word starts, measured rather than guessed.
+ *
+ * It has to begin exactly where the label it replaces sits, at exactly that
+ * label's size, or the hand-over is two words rather than one word moving.
+ * Neither is knowable up front: the label is placed by a wrapping flex row
+ * whose position changes at `xl`, and both are set in a web font at fluid
+ * sizes. So the label's own box is read off the layout, against the pinned
+ * screen's box, and the word is told where it came from.
+ *
+ * Sizes are taken from `offset*`, positions from the rects. The word carries a
+ * transform, and a rect would hand back the size that transform had already
+ * drawn it at - which is the size being measured for, so it would chase
+ * itself. `offsetHeight` is the untransformed layout box and cannot.
+ */
+function useWordOrigin(
+  screenRef: React.RefObject<HTMLElement | null>,
+  labelRef: React.RefObject<HTMLElement | null>,
+  wordRef: React.RefObject<HTMLElement | null>,
+) {
+  const [origin, setOrigin] = React.useState({ x: 0, y: 0, scale: 0.2 });
+
+  React.useLayoutEffect(() => {
+    const screen = screenRef.current;
+
+    const measure = () => {
+      const label = labelRef.current;
+      const word = wordRef.current;
+      if (!screen || !label || !word || !word.offsetHeight) return;
+
+      const stage = screen.getBoundingClientRect();
+      const box = label.getBoundingClientRect();
+
+      setOrigin({
+        x: box.left + box.width / 2 - (stage.left + stage.width / 2),
+        y: box.top + box.height / 2 - (stage.top + stage.height / 2),
+        scale: Math.min(box.height / word.offsetHeight, 1),
+      });
+    };
+
+    measure();
+    if (!screen) return;
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(screen);
+    // The measurement is of type that has not necessarily arrived yet.
+    document.fonts?.ready.then(measure).catch(() => {});
+    return () => observer.disconnect();
+  }, [screenRef, labelRef, wordRef]);
+
+  return origin;
+}
+
+/**
  * Эрхэм зорилго, алсын хараа, үнэт зүйл — one screen, scrolled through.
  *
- * The section is three screens tall and its contents are pinned for all of
- * them, so a screen of scrolling moves the piece on by one statement rather
- * than moving the page. A hairline runs across the middle of the window and
- * the subject rides up through it.
+ * The section is five screens tall and its contents are pinned for all of
+ * them, so a screen of scrolling moves the piece on by one beat rather than
+ * moving the page. A hairline runs across the middle of the window and the
+ * subject rides up through it.
  *
- * Each step is two beats, as the reference's are. The word arrives on the line
- * and stands there while it fills in from the left and the sentence beside it
- * is drawn in behind a soft edge; only then does it travel up and the next one
- * arrive. Reaching the line and being read are separate movements — run as one,
- * the word is gone before the sentence has been finished.
+ * Each of the three statements is two beats, as the reference's are. The word
+ * arrives on the line and stands there while it fills in from the left and the
+ * sentence beside it is drawn in behind a soft edge; only then does it travel
+ * up and the next one arrive. Reaching the line and being read are separate
+ * movements — run as one, the word is gone before the sentence has been
+ * finished.
  *
  * Both sides of the line are clipped to exactly one word, so the line always
  * has one word above it and one below and nothing queues behind either. The
@@ -226,8 +358,15 @@ function Roller({
  * drops underneath it below `xl` — side by side, the Mongolian is long enough
  * that the two would meet in the middle.
  *
- * Under reduced motion the runway is dropped and the three are laid out as
- * three plain screens instead.
+ * The last two beats are the Academy's: the label steps out of the row, takes
+ * the middle of the screen, and breaks apart, and the 70/20/10 principle is
+ * standing behind it. That principle had a section of its own
+ * under this one and no longer does — arriving out of the thing that was
+ * saying "Бидний" all along is what makes it the company's own account of how
+ * its people grow rather than a chart further down the page.
+ *
+ * Under reduced motion the runway is dropped and the four are laid out as four
+ * plain screens instead.
  *
  * Anchors: the vision and the values were tabs of the culture section below
  * and are linked by those hashes from the hero rail and the site footer, so
@@ -235,11 +374,19 @@ function Roller({
  */
 export function StatementBands() {
   const ref = React.useRef<HTMLDivElement>(null);
+  const screenRef = React.useRef<HTMLDivElement>(null);
+  const labelRef = React.useRef<HTMLParagraphElement>(null);
+  const wordRef = React.useRef<HTMLParagraphElement>(null);
   const { progress, isReduced } = useScrollProgress(ref);
+  const origin = useWordOrigin(screenRef, labelRef, wordRef);
 
-  // Where we are in the run, in steps. Held just inside the last one so the
-  // closing word does not travel off the line at the very bottom.
-  const run = Math.min(progress * STEPS.length, STEPS.length - 0.0001);
+  // Where we are in the whole run, in beats.
+  const phase = progress * BEATS;
+
+  // Where we are in the statements. Held just inside the last one so the
+  // closing word does not travel off the line at the very bottom, and it stays
+  // there for the two beats after them.
+  const run = Math.min(phase, STEPS.length - 0.0001);
   const current = Math.floor(run);
   const local = run - current;
 
@@ -264,6 +411,39 @@ export function StatementBands() {
   // past it there is still scroll left, and the line would otherwise sit
   // unfinished through the end of the section.
   const draw = clamp(run / (STEPS.length - 1 + SWEEP));
+
+  // The closing beat the word has to itself. The one after it is the panel's,
+  // and needs no number: nothing moves on it.
+  const outro = clamp(phase - STEPS.length);
+
+  // The statements hand the screen over at the top of the word's beat.
+  const statements = 1 - ease(clamp(outro / HAND_OVER));
+
+  // The word: out to the middle and up to full size, held there, then broken
+  // apart. `advance` and not `ease` - see the note on it.
+  const grown = advance(clamp(outro / GROW));
+  const scale = origin.scale + (1 - origin.scale) * grown;
+  const word = clamp(outro / 0.1);
+
+  // The break is read off three ways: the letters travel on the eased number,
+  // which throws them out and lets them settle, and fade on a plain one that
+  // is spent over the first half of it. Fading on the eased number, they were
+  // three quarters gone a third of the way through and the scatter was over
+  // before it had been seen; fading over the whole break, they outlived the
+  // panel arriving behind them.
+  const breaking = clamp((outro - BREAK.from) / BREAK.span);
+  const broken = ease(breaking);
+  const scattered = clamp(breaking / FADE);
+
+  // And what is behind it, which arrives as the last of the letters go and
+  // then stands for the rest of the run.
+  const principle = ease(clamp((outro - REVEAL.from) / REVEAL.span));
+
+  /** Lifted as it arrives, so the panel enters rather than switches on. */
+  const rise = (shown: number) => ({
+    opacity: shown,
+    transform: `translate3d(0, ${((1 - shown) * 24).toFixed(2)}px, 0)`,
+  });
 
   // One gap on either side of the word. The sentence is held inside the row
   // rather than allowed to run past its right edge, which is what would happen
@@ -303,14 +483,22 @@ export function StatementBands() {
             </div>
           </article>
         ))}
+
+        {/* The same panel the run closes on, laid out rather than revealed.
+            There is no word to break apart here because there is no movement
+            to break it with. */}
+        <article className="relative isolate overflow-hidden bg-ink py-section">
+          <FeatherLattice className="opacity-[0.18]" tone="brand" />
+          <PrinciplePanel />
+        </article>
       </section>
     );
   }
 
   return (
-    <section ref={ref} className="relative isolate h-[300svh]">
+    <section ref={ref} className="relative isolate h-[500svh]">
       {/* On the section, not the pinned screen — inside, it would sit at the
-          top of the window for the whole three screens of the run. */}
+          top of the window for the whole run. */}
       <SectionRule />
 
       {/* One landing point per step, at the scroll position that shows it. */}
@@ -320,13 +508,14 @@ export function StatementBands() {
           id={step.id}
           aria-hidden
           className="absolute inset-x-0 block h-0"
-          style={{ top: `${(index * 100) / STEPS.length}%` }}
+          style={{ top: `${(index * 100) / BEATS}%` }}
         />
       ))}
 
       {/* Ink under the grounds, so a photograph that has not arrived yet leaves
           the type on the colour it was drawn for rather than on the page. */}
       <div
+        ref={screenRef}
         className="sticky top-0 h-svh overflow-hidden bg-ink text-ink-foreground"
         style={
           {
@@ -358,17 +547,25 @@ export function StatementBands() {
             rather than a screen. */}
         <FeatherLattice className="-z-10 opacity-[0.18]" tone="brand" />
 
-        {/* The line the words cross. */}
+        {/* The line the words cross. It goes with them. */}
         <div
           aria-hidden
           // Not the brand gradient: the section rules above and below it are
           // already that orange, and a third orange rule across the middle read
           // as the page having been ruled twice by mistake.
           className="absolute inset-x-0 top-1/2 h-px bg-white/25"
-          style={{ transform: `scaleX(${draw})`, transformOrigin: "left" }}
+          style={{
+            transform: `scaleX(${draw})`,
+            transformOrigin: "left",
+            opacity: statements,
+          }}
         />
 
-        <div className="absolute inset-0 mx-auto max-w-6xl px-6 lg:px-10">
+        <div
+          inert={statements < 0.02}
+          style={{ opacity: statements }}
+          className="absolute inset-0 mx-auto max-w-6xl px-6 lg:px-10"
+        >
           {/* One row across the line, laid out rather than placed: the kicker,
               the column the words run in, and the sentence. The gap is the flex
               gap. Placing the three by hand needed the word's width, and a
@@ -387,8 +584,12 @@ export function StatementBands() {
                 as two unrelated things rather than as one line. Given the same
                 `ml-auto`, the pair closes up and travels to the gutter
                 together; at `xl` both release it and the row packs from the
-                left as it always did. */}
+                left as it always did.
+
+                It is also where the closing word comes from, so it carries a
+                ref: see <useWordOrigin>. */}
             <p
+              ref={labelRef}
               aria-hidden
               className="mt-[0.9em] ml-auto shrink-0 type-eyebrow font-medium tracking-[0.16em] text-white/55 uppercase xl:ml-0"
             >
@@ -487,6 +688,49 @@ export function StatementBands() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* What the word gives way to. Under it in the stack, so the word
+            breaks apart over the panel rather than beside it. */}
+        <div className="absolute inset-0 flex items-center">
+          <PrinciplePanel inert={principle < 0.02} style={rise(principle)} />
+        </div>
+
+        {/* And the word itself, over everything.
+            
+            Always rendered, because it is what <useWordOrigin> measures
+            against, and held at nothing until its beat opens. Decorative
+            throughout: it is the same word as the label it steps out of, and
+            at this size it is a picture of the company saying it rather than
+            a second thing to read. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          <p
+            ref={wordRef}
+            className="type-display font-semibold tracking-[-0.04em] whitespace-nowrap text-white uppercase"
+            style={{
+              opacity: word,
+              transform: `translate3d(${(origin.x * (1 - grown)).toFixed(2)}px, ${(origin.y * (1 - grown)).toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
+            }}
+          >
+            {/* Letters rather than a word, because they have to leave in six
+                directions. Together they read as one until they go, and the
+                key carries the index because "и" is in it twice. */}
+            {["Б", "и", "д", "н", "и", "й"].map((letter, index) => (
+              <span
+                key={`${letter}-${index}`}
+                className="inline-block"
+                style={{
+                  transform: `translate(${SCATTER[index].x * broken}em, ${SCATTER[index].y * broken}em) rotate(${SCATTER[index].turn * broken}deg)`,
+                  opacity: 1 - scattered,
+                }}
+              >
+                {letter}
+              </span>
+            ))}
+          </p>
         </div>
       </div>
     </section>

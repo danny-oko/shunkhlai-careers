@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 import { BriefList } from "@/components/news/brief-list";
 import { CategoryRail } from "@/components/news/category-rail";
@@ -104,6 +106,16 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
             <p className="mt-2.5 text-sm text-muted-foreground">
               Шинэ мэдээ нийтлэгдэх үед энэ хуудсанд харагдана.
             </p>
+            {deskName && (
+              <Link
+                href="/news"
+                className="mt-5 inline-flex items-center gap-1.5 type-kicker font-semibold tracking-[0.14em] uppercase focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                style={{ color: "var(--paper-accent)" }}
+              >
+                <ArrowLeft aria-hidden className="size-3.5" />
+                Бүх мэдээ
+              </Link>
+            )}
           </section>
         )}
       </div>

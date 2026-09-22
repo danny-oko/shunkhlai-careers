@@ -8,6 +8,10 @@ import { useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
 import { profile as profileApi, toApiError } from "@/lib/api";
 import { pictureSrc } from "@/lib/api/profile";
+<<<<<<< HEAD
+=======
+import { PhotoTooLargeError, resizePhoto } from "@/lib/resize-image";
+>>>>>>> 9a011bf77e674065c5c1675787bef5f4c35dd06a
 
 /** Profile photo — the one thing `SaveHrApplicant` does not carry. (Clerk owns the password.) */
 
@@ -29,11 +33,16 @@ export function PhotoUpload() {
 
     setIsBusy(true);
     try {
-      await profileApi.uploadPhoto(file);
+      // Phone photos exceed the 5 MB server limit; shrink before uploading.
+      await profileApi.uploadPhoto(await resizePhoto(file));
       toast.success("Профайл зураг шинэчлэгдлээ");
       await refresh();
     } catch (error) {
-      toast.error(toApiError(error).message);
+      toast.error(
+        error instanceof PhotoTooLargeError
+          ? "Зураг хэт том байна. Жижиг зураг сонгоно уу."
+          : toApiError(error).message,
+      );
     } finally {
       setIsBusy(false);
     }

@@ -48,14 +48,18 @@ export function LeadStory({ article }: { article: NewsArticle }) {
 
         <Dateline article={article} long showReading className="mt-5" />
 
-        <p
+        {/* The headline is the keyboard's link; this one is for the pointer,
+            so it stays out of the tab order and the accessibility tree. */}
+        <Link
+          href={`/news/${article.slug}`}
+          tabIndex={-1}
           aria-hidden
-          className="mt-5 flex items-center gap-1.5 type-kicker font-semibold tracking-[0.14em] uppercase"
+          className="mt-5 flex w-fit items-center gap-1.5 type-kicker font-semibold tracking-[0.14em] uppercase hover:underline"
           style={{ color: "var(--paper-accent)" }}
         >
           Үргэлжлүүлэн унших
           <ArrowRight className="size-3.5" />
-        </p>
+        </Link>
       </div>
     </article>
   );

@@ -70,57 +70,17 @@ export const stories: Story[] = [
   },
 ];
 
-export type AcademyVoice = {
-  src: string;
-  name: string;
-  role: string;
-  /** The pull quote printed on the poster, repeated for screen readers. */
-  quote: string;
-};
-
-/**
- * Shunkhlai Academy — ажилтнуудын зөвлөгөө.
+/*
+ * Урмын үгс - the five Shunkhlai Academy posters - stood here: a person, their
+ * job and the one thing each would tell somebody starting out, transcribed off
+ * the artwork so the words could be read at a readable size.
  *
- * Read by <AcademyVoices> on the About page. The transcribed quotes are what
- * the artwork alone cannot give back: they carry the posters into the alt text
- * and into the dialog, where the words can be read at a readable size.
+ * Removed at the client's request along with the artwork itself. Four of the
+ * five files went with it; `public/brand/academy-solongo.jpg` stayed, because
+ * it is the cover of a seeded news article and is not this section's to take.
+ * The quotes and the wall they were shown on are in the history of this file
+ * if they are ever wanted back.
  */
-export const academyVoices: AcademyVoice[] = [
-  {
-    src: "/brand/academy-myagmarsuren.jpg",
-    name: "С. Мягмарсүрэн",
-    role: "Борлуулалтын менежер",
-    quote:
-      "Анх ажилд орж байхад алдаа гаргах тохиолдол их бий. Гэхдээ алдчихлаа гээд шантрах бус түүнээсээ суралцах хэрэгтэй гэдгийг битгий мартаарай.",
-  },
-  {
-    src: "/brand/academy-sanchir-od.jpg",
-    name: "Э. Санчир-Од",
-    role: "Техник ашиглалтын ахлах инженер",
-    quote: "Ажлыг багаас нь хийгээд, суурийг нь мэдэж авах нь их чухал.",
-  },
-  {
-    src: "/brand/academy-javzan.jpg",
-    name: "О. Жавзан",
-    role: "Шуурхай зохицуулалтын ахлах менежер",
-    quote:
-      "Өөрийгөө чадахгүй гээд хойш суухаас илүү аль болох оролдоод үзэх хэрэгтэй. Таны хийж буй зүйл бусдын амьдралд том өөрчлөлт авчирч чадна.",
-  },
-  {
-    src: "/brand/academy-solongo.jpg",
-    name: "Б. Солонго",
-    role: "ШТС-ын эрхлэгч",
-    quote:
-      "Мэдэхгүй, чадахгүй зүйлээ бусдаас асуухаас бүү нэрэлхээрэй. Хүн бүрд мэдэхгүй чадахгүй зүйл байдаг шүү дээ.",
-  },
-  {
-    src: "/brand/academy-shijirbaatar.jpg",
-    name: "Г. Шижирбаатар",
-    role: "Хуулийн зөвлөх",
-    quote:
-      "Өөрийгөө бусадтай бүү харьцуулаарай. Өөрийнхөө өнгөрсөнөөс илүү амжилттай явж байвал тэр л жинхэнэ ялалт.",
-  },
-];
 
 export type Benefit = {
   title: string;
@@ -147,16 +107,27 @@ export const benefits: Benefit[] = [
   },
 ];
 
+
 export type Club = {
   name: string;
   /** The wordmark on the lockup, for the caption under the Mongolian name. */
   nameEn: string;
   /** The club's own lockup: the Shunkhlai mark beside its wordmark. */
   logo: string;
+  /**
+   * A photograph of the club at something it actually did, where HR sent one.
+   *
+   * The lockup stays on the tile - it is what names the club on the wall - and
+   * the photograph opens with it, because a wordmark says which club it is and
+   * a picture says what belonging to it looks like.
+   */
+  photo?: string;
+  /** What the club does. See the TODO below: these are drafts, not HR's copy. */
+  body?: string;
 };
 
 /**
- * Content plan 2.8. The clubs as HR's own lockups name them.
+ * Content plan 2.8. The clubs as HR's own lockups and photo folders name them.
  *
  * Each logo is a wide transparent lockup - the eagle beside the club's
  * wordmark - so these are drawn whole on a light plate rather than cropped
@@ -164,32 +135,176 @@ export type Club = {
  * club's name, and `name` repeats it in Mongolian for the caption and for a
  * reader who never sees the picture.
  *
- * TODO(HR): the count below is 14 and these are the 13 lockups delivered.
- * The fourteenth is still to come.
+ * Three names follow the photo folders rather than the older list: HR's own
+ * folders say "Алхалтын клуб Hiking", "Гоо зүйн клуб VOGUE" and "Шагай
+ * харвааны клуб", which are the Mongolian names the club members use.
+ *
+ * TODO(HR): every `body` here is a draft written from the photographs and the
+ * club's own name, not copy HR has published - the content plan gives the
+ * count and nothing else. Replace them with the clubs' own words; they are
+ * marked in one place so the whole set can be swapped in one pass.
+ *
+ * TODO(HR): Boardgame and Innovation have no lockup yet, so they stand on the
+ * company lockup. Drop the two files into `public/clubs` and point `logo` at
+ * them; nothing else changes.
  */
 export const clubs: Club[] = [
-  { name: "Шагайн клуб", nameEn: "Shagai club", logo: "/clubs/shagai.png" },
-  { name: "Спорт клуб", nameEn: "Sport club", logo: "/clubs/sport.png" },
-  { name: "И-спорт клуб", nameEn: "E-sport club", logo: "/clubs/e-sport.png" },
-  { name: "Дартс клуб", nameEn: "Darts club", logo: "/clubs/darts.png" },
-  { name: "Хайкинг клуб", nameEn: "Hiking club", logo: "/clubs/hiking.png" },
-  { name: "Бүжгийн клуб", nameEn: "Dance club", logo: "/clubs/dance.png" },
-  { name: "Хөгжмийн клуб", nameEn: "Music club", logo: "/clubs/music.png" },
-  { name: "Подкаст клуб", nameEn: "Podcast club", logo: "/clubs/podcast.png" },
+  {
+    name: "Шагай харвааны клуб",
+    nameEn: "Shagai club",
+    logo: "/clubs/shagai.png",
+    photo: "/clubs/photos/shagai.jpg",
+    body: "Үндэсний шагай харваагаар баг бүрдүүлэн тогтмол бэлтгэл хийж, улсын болон салбарын тэмцээнд Шунхлай ХХК-ийг төлөөлөн оролцдог.",
+  },
+  {
+    name: "Спорт клуб",
+    nameEn: "Sport club",
+    logo: "/clubs/sport.png",
+    body: "Сагсан бөмбөг, волейбол, ширээний теннис зэрэг төрлөөр тогтмол бэлтгэл хийж, компанийн дотоод болон салбар хоорондын тэмцээнд оролцдог.",
+  },
+  {
+    name: "И-спорт клуб",
+    nameEn: "E-sport club",
+    logo: "/clubs/e-sport.png",
+    body: "Онлайн тоглоомын төрлүүдээр дотоод тэмцээн зохион байгуулж, багаар ажиллах, стратеги төлөвлөх чадварыг чөлөөт цагаараа хөгжүүлдэг.",
+  },
+  {
+    name: "Дартс клуб",
+    nameEn: "Darts club",
+    logo: "/clubs/darts.png",
+    body: "Ажлын завсарлагаагаар оффис дотроо бэлтгэл хийж, улирал бүр дотоод тэмцээнээ зохион байгуулдаг.",
+  },
+  {
+    name: "Алхалтын клуб",
+    nameEn: "Hiking club",
+    logo: "/clubs/hiking.png",
+    photo: "/clubs/photos/hiking.jpg",
+    body: "Улирал бүр хот орчмын болон орон нутгийн уулын маршрутаар явган аялал зохион байгуулдаг. Ажилтан гэр бүлийнхээ хамт оролцох боломжтой.",
+  },
+  {
+    name: "Бүжгийн клуб",
+    nameEn: "Dance club",
+    logo: "/clubs/dance.png",
+    body: "Долоо хоног бүр бэлтгэл хийж, компанийн баяр ёслол, арга хэмжээнд тоглолтоо бэлддэг.",
+  },
+  {
+    name: "Хөгжмийн клуб",
+    nameEn: "Music club",
+    logo: "/clubs/music.png",
+    body: "Хамтлаг, дуучдын бүрэлдэхүүнтэйгээр компанийн арга хэмжээнд тогтмол тоглолт хийдэг.",
+  },
+  {
+    name: "Подкаст клуб",
+    nameEn: "Podcast club",
+    logo: "/clubs/podcast.png",
+    body: "Ажилтнуудын түүх, ажлын туршлага, салбарын мэдээллийг подкаст хэлбэрээр бэлтгэж, дотооддоо түгээдэг.",
+  },
   {
     name: "Шинжлэх ухааны клуб",
     nameEn: "Science club",
     logo: "/clubs/science.png",
+    body: "Шинэ технологи, салбарын судалгаа, сонирхолтой нээлтүүдийг хамтдаа судалж, хамт олондоо танилцуулдаг.",
   },
   {
     name: "Англи хэлний клуб",
     nameEn: "English club",
     logo: "/clubs/english.png",
+    photo: "/clubs/photos/english.jpg",
+    body: "Долоо хоног бүрийн уулзалтаар ярианы дадлага хийж, ажлын байранд хэрэгтэй Business English-ийн мэдлэгээ хөгжүүлдэг.",
   },
-  { name: "Бизнес клуб", nameEn: "Business club", logo: "/clubs/business.png" },
-  { name: "Vogue клуб", nameEn: "Vogue", logo: "/clubs/vogue.png" },
-  { name: "Be Happy клуб", nameEn: "Be Happy", logo: "/clubs/be-happy.png" },
+  {
+    name: "Бизнес клуб",
+    nameEn: "Business club",
+    logo: "/clubs/business.png",
+    body: "Бизнесийн ном, кейс судалгаа хэлэлцэж, ажилтнуудын санаачилга, шинэ санааг дэмжин ярилцдаг.",
+  },
+  {
+    name: "Гоо зүйн клуб",
+    nameEn: "Vogue",
+    logo: "/clubs/vogue.png",
+    photo: "/clubs/photos/vogue.jpg",
+    body: "Гоо зүй, хувцаслалт, өөрийгөө илэрхийлэх сэдвээр уулзалт, фото төсөл зохион байгуулдаг.",
+  },
+  {
+    name: "Be Happy клуб",
+    nameEn: "Be Happy",
+    logo: "/clubs/be-happy.png",
+    body: "Ажилтнуудын сайн сайхан байдал, эерэг уур амьсгалыг дэмжих арга хэмжээ, сайн дурын ажлуудыг зохион байгуулдаг.",
+  },
+  {
+    name: "Ширээний тоглоомын клуб",
+    nameEn: "Boardgame club",
+    logo: "/brand/logo-lockup.png",
+    photo: "/clubs/photos/boardgame.jpg",
+    body: "Ширээний тоглоомоор багаараа тоглож, стратеги сэтгэлгээ, хамтын ажиллагааг чөлөөт цагаараа хөгжүүлдэг.",
+  },
+  {
+    name: "Инновацийн клуб",
+    nameEn: "Innovation club",
+    logo: "/brand/logo-lockup.png",
+    body: "Ажлын байрны шинэ санаа, сайжруулалтыг дэвшүүлж, туршилтын төслүүдийг хамт олонтойгоо хамтран хэрэгжүүлдэг.",
+  },
 ];
 
-/** HR's figure, which is still one ahead of the lockups in `clubs`. */
-export const clubCount = 14;
+/**
+ * Read off the roster rather than written down beside it.
+ *
+ * The content plan's own figure was 14 against thirteen lockups, and the gap
+ * sat in this file as a TODO for as long as the number was typed by hand. The
+ * roster now names fifteen, and whatever is added next counts itself.
+ */
+export const clubCount = clubs.length;
+
+export type AcademyFigure = {
+  value: string;
+  label: string;
+};
+
+/**
+ * Shunkhlai Academy, 2026 - the figures from HR's own write-up.
+ *
+ * Kept as strings: these are read as shapes, not summed. "10,029" and "90.7%"
+ * carry a separator and a unit that a number would have to be given back.
+ */
+export const academyFigures: AcademyFigure[] = [
+  { value: "10,029", label: "сургалтын хамрагдалт" },
+  { value: "13,883", label: "цагийн сургалт" },
+  { value: "4,197", label: "зохион байгуулсан сургалт" },
+  { value: "90.7%", label: "сургалтын дараах үнэлгээ" },
+];
+
+export type DevelopmentShare = {
+  /** The share itself, and the width the band is drawn at. */
+  share: number;
+  title: string;
+  body: string;
+};
+
+/**
+ * Хөгжлийн 70/20/10 зарчим, from the Academy write-up.
+ *
+ * `share` is both the number printed and the width the band takes, so the
+ * picture cannot drift from the figure beside it: the 70 is seven times the
+ * 10 on screen because it is seven times the 10 in the policy.
+ */
+export const developmentShares: DevelopmentShare[] = [
+  {
+    share: 70,
+    title: "Ажлын байран дээрх туршлага",
+    body: "Бодит ажил, шинэ үүрэг даалгавар, төсөл хөтөлбөр, асуудал шийдвэрлэх, шинэ санаа турших замаар мэдлэгээ бодит ур чадвар болгон хөгжүүлнэ.",
+  },
+  {
+    share: 20,
+    title: "Бусдаас суралцах",
+    body: "Хамтран ажиллах, туршлага хуваалцах, удирдлага болон хамт олноосоо санал хүсэлт авах, coaching, mentoring, дотоод сургагч багшаас суралцах замаар хөгжинө.",
+  },
+  {
+    share: 10,
+    title: "Системтэй сургалт",
+    body: "Танхимын болон цахим сургалт, мэргэжлийн хөтөлбөр, семинар, сертификаттай сургалтаар шинэ мэдлэг, арга барил эзэмшинэ.",
+  },
+];
+
+/** The line the write-up closes the principle with. */
+export const developmentSum =
+  "70% Туршлага + 20% Хүмүүс + 10% Сургалт = Тасралтгүй хөгжил";

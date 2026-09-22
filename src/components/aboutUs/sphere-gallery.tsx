@@ -29,7 +29,15 @@ export type WallItem = {
   logo?: string;
   /** A second line under the title in the dialog. */
   subtitle?: string;
-  /** Set on the Academy voices — the person's job, under their name. */
+  /**
+   * A person's job, set under their name in the dialog, which lays the panel
+   * out across rather than down when it is there.
+   *
+   * Nothing sets it at the moment: the Academy posters were the only wall that
+   * did, and they have been taken out. Kept because the layout it asks for is
+   * the right one for any wall of people, and rebuilding it would cost more
+   * than carrying it.
+   */
   role?: string;
 };
 
@@ -125,6 +133,41 @@ const IDLE = 0.05;
 const SMOOTHING = 0.11;
 /** How many turns the sphere makes over the section's runway. */
 const TURNS = 1.6;
+
+/**
+ * One frame of the turn.
+ *
+ * A hold pauses the drift and nothing else. It used to stop the sphere dead,
+ * and that was a trap rather than a feature: the tiles move, so one slides
+ * under a pointer that has not gone anywhere, the sphere stops, and the tile
+ * that stopped it is now pinned under the pointer for good - the only thing
+ * that could have carried it away was the turn. Scrolling did nothing, the
+ * wall sat frozen, and the moment the pointer moved off, every turn the
+ * scroll had banked up in the meantime was spent at once and the wall took
+ * off. What was meant as "this is being looked at" read as a wall that jams
+ * and then bolts.
+ *
+ * Following the target through a hold fixes both ends of it. There is nothing
+ * left to bank, so there is nothing to spend; and a reader who is scrolling
+ * always sees the wall move, so a tile cannot pin itself. What the hold still
+ * does is exactly what it is for: with the scroll settled the target stops
+ * moving, the drift is paused, and the sphere stands still under the pointer
+ * for as long as it is being read.
+ *
+ * Exported for the test beside it, which is about the banking rather than
+ * about any one frame.
+ */
+export function turnStep(
+  state: { shown: number; idle: number },
+  target: number,
+  held: boolean,
+) {
+  const idle = held ? state.idle : state.idle + IDLE / 60;
+  return {
+    idle,
+    shown: state.shown + (target + idle - state.shown) * SMOOTHING,
+  };
+}
 
 /**
  * Points spread evenly over the band.
@@ -246,6 +289,15 @@ function Details({
 }) {
   const voice = !!item?.role;
 
+  // A club carries both: the lockup, which is what names it on the wall, and a
+  // photograph of the club at something it actually did. On the tile the
+  // wordmark has to win - at that size a group photograph is a smudge and the
+  // wall would no longer say which club is which - but in the dialog the
+  // picture does, because the name has already been read on the way in and is
+  // set again in the title beside it. Dropping `logo` is what says so: the
+  // panel then frames and plates a photograph exactly as the other walls do.
+  const art = item?.image ? { ...item, logo: undefined } : item;
+
   return (
     <Dialog open={!!item} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
@@ -254,7 +306,7 @@ function Details({
           voice ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
       >
-        {item && (
+        {item && art && (
           <div className={cn(voice && "sm:grid sm:grid-cols-[minmax(0,17rem)_1fr]")}>
             <div
               className={cn(
@@ -262,11 +314,11 @@ function Details({
                 voice
                   ? "aspect-4/5 max-h-[42vh] sm:max-h-none"
                   : "aspect-16/10",
-                item.logo && PLATE,
+                art.logo && PLATE,
               )}
             >
               <Visual
-                item={item}
+                item={art}
                 index={index}
                 sizes="(max-width: 640px) 100vw, 272px"
                 pad="p-8"
@@ -311,12 +363,27 @@ function Details({
 
 export function SphereGallery({
   items,
-  /** 0 at the top of the section's runway, 1 at the end of it. */
+  /** 0 at the top of the turning, 1 at the end of it. */
   progress,
+  /**
+   * The gathering, from 0 to 1.
+   *
+   * Past the turning the wall has been all the way round and there is nothing
+   * left for it to show. Rather than leave it turning under whatever comes
+   * next, every tile is drawn home to the middle of the stage, shrinking and
+   * fading as it goes, so the wall ends by becoming one point that the section
+   * can put its own mark on.
+   *
+   * It is spent on the positions the loop already computes - each one scaled
+   * toward the centre - so the sphere keeps turning while it closes and the
+   * two movements are one movement.
+   */
+  gather = 0,
   className,
 }: {
   items: WallItem[];
   progress: number;
+  gather?: number;
   className?: string;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
@@ -364,6 +431,14 @@ export function SphereGallery({
     turn.current.target = progress * TURNS * Math.PI * 2;
   }, [progress]);
 
+  // Through a ref for the same reason the radius is: the loop closes over it
+  // once rather than being rebuilt every frame of the gathering.
+  const pull = React.useRef(gather);
+
+  React.useEffect(() => {
+    pull.current = gather;
+  }, [gather]);
+
   React.useEffect(() => {
     held.current = opened !== null;
   }, [opened]);
@@ -387,14 +462,15 @@ export function SphereGallery({
     const draw = () => {
       const state = turn.current;
 
-      // Held under the pointer — or with a picture open — the sphere stands
-      // still: what is being looked at should not slide out from under the
-      // look. The scroll keeps moving the target while it waits, and the
-      // smoothing eases it back on once the hold is let go.
-      if (!held.current) {
-        idle += IDLE / 60;
-        state.shown += (state.target + idle - state.shown) * SMOOTHING;
-      }
+      // Held under the pointer, or with a picture open: the drift pauses and
+      // the scroll still carries. See <turnStep>.
+      const next = turnStep(
+        { shown: state.shown, idle },
+        state.target,
+        held.current,
+      );
+      idle = next.idle;
+      state.shown = next.shown;
 
       const ry = state.shown;
       const rx = Math.sin(state.shown * 0.5) * TIP;
@@ -402,6 +478,14 @@ export function SphereGallery({
       const sy = Math.sin(ry);
       const cx = Math.cos(rx);
       const sx = Math.sin(rx);
+
+      // How much of the sphere is left, and how small a tile has been drawn
+      // as it comes in. Not all the way to nothing: the tiles are gone on
+      // their own fade before the last of the travel, and a tile that also
+      // scaled to zero would pop at the end of it.
+      const g = pull.current;
+      const open = 1 - g;
+      const shrink = 1 - g * 0.8;
 
       tiles.forEach((tile, index) => {
         const p = points[index];
@@ -413,11 +497,16 @@ export function SphereGallery({
 
         // Translated only, never rotated, so every tile keeps facing the
         // reader; the perspective on the stage does the growing and shrinking.
+        // `open` closes the three radii together, which walks every tile down
+        // its own line to the middle without breaking the turn.
         const r = scale.current;
-        tile.style.transform = `translate3d(${(x * r.x).toFixed(1)}px, ${(y * r.y).toFixed(1)}px, ${(z * r.z).toFixed(1)}px)`;
+        tile.style.transform = `translate3d(${(x * r.x * open).toFixed(1)}px, ${(y * r.y * open).toFixed(1)}px, ${(z * r.z * open).toFixed(1)}px) scale(${shrink.toFixed(3)})`;
         // The far side recedes, but only so far: on the white ground a tile at
         // a tenth of its colour is not a distant picture, it is a blank.
-        tile.style.opacity = (0.45 + 0.55 * ((z + 1) / 2) ** 1.4).toFixed(3);
+        tile.style.opacity = (
+          (0.45 + 0.55 * ((z + 1) / 2) ** 1.4) *
+          Math.max(1 - g * 1.6, 0)
+        ).toFixed(3);
         tile.style.zIndex = String(Math.round((z + 1) * 500));
       });
 
@@ -491,6 +580,11 @@ export function SphereGallery({
         style={{
           perspective: `${PERSPECTIVE}px`,
           transformStyle: "preserve-3d",
+          // Once the wall is on its way in it is no longer something to point
+          // at: a tile caught under the pointer would stop the gathering dead,
+          // and one caught by a click would open a dialog over the mark the
+          // section is closing on.
+          pointerEvents: gather > 0.02 ? "none" : undefined,
         }}
       >
         {items.map((item, index) => (
@@ -525,8 +619,17 @@ export function SphereGallery({
             {/* Under its own picture rather than at the foot of the stage:
                 named where it is, the caption belongs to the tile the eye is
                 already on. `top-full` keeps it out of the tile's own box, so
-                it cannot push the picture off its point on the sphere. */}
-            <p className="absolute inset-x-[-3rem] top-full mt-2 text-center type-kicker leading-snug tracking-[0.04em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                it cannot push the picture off its point on the sphere.
+
+                Set in pixels and small, not on the type scale. The caption is
+                inside the tile, so the stage's perspective grows it with
+                everything else: a tile at the front of the sphere is drawn at
+                about twice its size, and `type-kicker` - 13px on a desktop -
+                arrived there at 25, which is the size of a heading. Nine
+                lands at about eighteen where it is read, and the scale's own
+                floor could not go low enough to allow for a doubling it knows
+                nothing about. */}
+            <p className="absolute inset-x-[-3rem] top-full mt-1.5 text-center text-[9px] leading-snug tracking-[0.03em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
               {item.title}
             </p>
           </div>
