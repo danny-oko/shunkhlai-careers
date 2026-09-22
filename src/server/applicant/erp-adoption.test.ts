@@ -91,3 +91,46 @@ describe("saveBody (experience)", () => {
     });
   });
 });
+
+describe("family: saveBody and adoption", () => {
+  const FATHER: Row = {
+    relativeid: 2003,
+    lastname: "Бат",
+    firstname: "Дорж",
+    gender: "M",
+    famregno: "УБ70010101",
+    birthdate: "1970-01-01",
+    countryid: 28,
+    divisionid: 1,
+    districtid: 11,
+    professionid: 1006,
+    orgname: "ААН",
+    jobid: 8477,
+    phone: "99330033",
+    note: "",
+  };
+  const LABELS: Row = {
+    relativename: "Аав",
+    countryname: "Монгол",
+    divisionname: "Улаанбаатар",
+    districtname: "Хан-Уул",
+    professionname: "Өмгөөлөгч",
+    jobname: "Админ менежер",
+  };
+
+  it("the six labels stay here; every Postman field goes", () => {
+    expect(saveBody({ ...FATHER, ...LABELS, entryid: 31, erp: "pending" })).toEqual({ ...FATHER, entryid: 31 });
+  });
+
+  it("adopted by content: the ERP reads the birthdate back as a datetime and the phone as a number", () => {
+    const erpRow = { ...FATHER, entryid: 901, birthdate: "1970-01-01T00:00:00", phone: 99330033, createdby: 42 };
+    const adoption = planAdoption(docWith("family", { ...FATHER, ...LABELS }), config("family"), [erpRow]);
+    expect(adoption?.renamed.get(LOCAL)).toBe(901);
+  });
+
+  it("nothing is ignored: a field read back differently is not our row", () => {
+    const erpRow = { ...FATHER, entryid: 901, districtid: 4 };
+    const adoption = planAdoption(docWith("family", FATHER), config("family"), [erpRow]);
+    expect(adoption?.renamed.size).toBe(0);
+  });
+});
