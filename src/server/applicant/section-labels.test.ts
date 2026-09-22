@@ -25,6 +25,12 @@ const UNIVERSITIES: Record<string, Array<[number, string]>> = {
 /** GetForLanguageLevelDropDown, live 2026-09-22 (part). */
 const LEVELS: Record<string, string> = { "2": "Анхан", "4": "Дунд", "6": "Дээд түвшин" };
 
+/** GetJobDropDown, live 2026-09-22 (part of 1788). */
+const JOBS: Record<string, string> = {
+  "7134": "Агуулахын стратеги, төсөл хариуцсан менежер",
+  "8477": "Админ менежер",
+};
+
 function recordingLabel() {
   const calls: Array<[string, unknown, Row | undefined]> = [];
   const label: HandlerDeps["label"] = async (dropdown, key, parent) => {
@@ -37,6 +43,9 @@ function recordingLabel() {
     if (dropdown === "get_educationlevel_dropdown") return String(key) === "2010" ? "Бакалавр" : "";
     if (dropdown === "GetForLanguageDropDown") return String(key) === "15" ? "Англи" : "";
     if (dropdown === "GetForLanguageLevelDropDown") return LEVELS[String(key)] ?? "";
+    if (dropdown === "GetJobDropDown") return JOBS[String(key)] ?? "";
+    // Live (2026-09-22) the list is this one row.
+    if (dropdown === "GetBusinessTypeDropDown") return String(key) === "1" ? "Хүнс үйлдвэрлэл" : "";
     return "";
   };
   return { label, calls };
@@ -269,5 +278,93 @@ describe("GetHrAppEducation?entryid", () => {
     expect((await read(doc, "entryid=8"))?.envelope.retdata).toEqual(doc.education[1]);
     expect((await read(doc, "entryid=0"))?.envelope.retdata).toBeNull();
     expect((await read(doc, "entryid=99"))?.envelope.retdata).toBeNull();
+  });
+});
+
+describe("SaveAppExperience", () => {
+  let next = 300;
+  const save = async (doc: ApplicantDoc, body: Row) => {
+    const recorded = recordingLabel();
+    const result = await handleApplicantRequest(
+      { endpoint: "SaveAppExperience", method: "POST", query: new URLSearchParams(), body },
+      doc,
+      { label: recorded.label, nextEntryId: () => (next += 1), jobOrder: () => null },
+    );
+    return { result, calls: recorded.calls };
+  };
+
+  it("names the job, the business type and the head's job", async () => {
+    const doc = emptyDoc();
+    const { calls } = await save(doc, {
+      entryid: 0,
+      orgname: "Шунхлай ХХК",
+      businesstypeid: 1,
+      jobid: 7134,
+      headjobid: 8477,
+      isworking: "Y",
+    });
+    expect(doc.experience[0]).toMatchObject({
+      jobname: "Агуулахын стратеги, төсөл хариуцсан менежер",
+      businesstypename: "Хүнс үйлдвэрлэл",
+      headjobname: "Админ менежер",
+      isworking: "Y",
+    });
+    expect(calls.map(([dropdown, key]) => [dropdown, key])).toEqual([
+      ["GetJobDropDown", 7134],
+      ["GetBusinessTypeDropDown", 1],
+      ["GetJobDropDown", 8477],
+    ]);
+  });
+
+  it("a typed business type (no id) is kept as businesstypenametext, with no list label", async () => {
+    const doc = emptyDoc();
+    const { calls } = await save(doc, {
+      entryid: 0,
+      orgname: "Шунхлай ХХК",
+      jobid: 7134,
+      businesstypenametext: "Шатахуун түгээлт",
+    });
+    expect(doc.experience[0]).toMatchObject({
+      businesstypenametext: "Шатахуун түгээлт",
+      businesstypename: "",
+      headjobname: "",
+    });
+    expect(calls.map(([dropdown]) => dropdown)).toEqual(["GetJobDropDown"]);
+  });
+
+  it("an edit re-labels: a head's job taken away drops its name", async () => {
+    const doc = emptyDoc();
+    await save(doc, { entryid: 0, orgname: "А", jobid: 7134, headjobid: 8477 });
+    const entryid = doc.experience[0].entryid;
+    await save(doc, { entryid, orgname: "А", jobid: 8477 });
+    expect(doc.experience).toHaveLength(1);
+    expect(doc.experience[0]).toMatchObject({ jobname: "Админ менежер", headjobname: "" });
+    expect(doc.experience[0]).not.toHaveProperty("headjobid");
+  });
+});
+
+describe("labelSources (experience)", () => {
+  it("labels hrappexplist in a GetHrAppExperienceData bundle, keeping names the ERP sent", async () => {
+    const bundle = {
+      hrappexplist: [
+        { entryid: 1, jobid: 7134, businesstypeid: 1, headjobid: 8477 },
+        { entryid: 2, jobid: 8477, jobname: "ERP-ийн нэр", businesstypeid: 0 },
+      ],
+      hrappprojectlist: [{ entryid: 3, jobid: 7134 }],
+    };
+    await labelSources({ GetHrAppExperienceData: bundle }, recordingLabel().label);
+    expect(bundle.hrappexplist).toEqual([
+      {
+        entryid: 1,
+        jobid: 7134,
+        businesstypeid: 1,
+        headjobid: 8477,
+        jobname: "Агуулахын стратеги, төсөл хариуцсан менежер",
+        businesstypename: "Хүнс үйлдвэрлэл",
+        headjobname: "Админ менежер",
+      },
+      { entryid: 2, jobid: 8477, jobname: "ERP-ийн нэр", businesstypeid: 0 },
+    ]);
+    expect(bundle.hrappprojectlist).toEqual([{ entryid: 3, jobid: 7134 }]);
   });
 });

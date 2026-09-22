@@ -34,7 +34,10 @@ async function liveGet(endpoint: string, params: Record<string, string>): Promis
 const blank = (value: unknown) => value === null || value === undefined || value === "";
 
 function liveDeps(): Pick<HandlerDeps, "label" | "jobOrder"> {
-  // One request may resolve several keys from the same list.
+  // One request may resolve several keys from the same list. The whole list:
+  // live (2026-09-22) the dropdowns ignore `ids` — the job list asked for one
+  // id, or the university list under Монгол, still answers all 1788 / 1762
+  // rows — so asking for one key would only fetch them under another cache key.
   const lists = new Map<string, Promise<Row[]>>();
 
   const list = (dropdown: string, parent: Row | undefined) => {

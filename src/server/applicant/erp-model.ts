@@ -150,6 +150,7 @@ export const DISPLAY_ONLY = new Set([
   "levelname",
   "jobname",
   "businesstypename",
+  "headjobname",
   "relativename",
   "posgroupname",
   "positionname",
@@ -191,9 +192,26 @@ function normal(value: unknown): string {
   return out === "0" ? "" : out;
 }
 
-/** Every field the body sent reads back the same on the ERP row (extra ERP columns ignored). */
-function sameContent(body: Row, erpRow: Row): boolean {
-  return Object.keys(body).every((key) => normal(body[key]) === normal(erpRow[key]));
+/**
+ * Body fields a section's ERP row may not read back as sent, so content
+ * matching skips them: the ERP derives its own flag from `todate`
+ * (`isgraduated`, `isworking` — seen replaced by `graduated` / `working`), and
+ * `businesstypenametext` is a column the ERP team was only asked to add
+ * (Careers-API-2-fixes, item 2) — until it is live the row comes back without it.
+ */
+export const ADOPTION_IGNORE: Partial<Record<SectionKey, readonly string[]>> = {
+  education: ["isgraduated"],
+  experience: ["isworking", "businesstypenametext"],
+};
+
+/**
+ * Every field the body sent reads back the same on the ERP row (extra ERP
+ * columns ignored, and the section's `ADOPTION_IGNORE` fields too).
+ */
+function sameContent(body: Row, erpRow: Row, ignore: readonly string[] = []): boolean {
+  return Object.keys(body).every(
+    (key) => ignore.includes(key) || normal(body[key]) === normal(erpRow[key]),
+  );
 }
 
 /** One pass over a section's unadopted rows against an ERP list (see `planAdoption`). */
@@ -226,8 +244,12 @@ export function planAdoption(doc: ApplicantDoc, config: SectionConfig, erpRows: 
   });
 
   const present = entries.filter((entry) => rows.some((row) => Number(row.entryid) === entry.id));
+  const ignore = ADOPTION_IGNORE[config.key];
   const candidates = new Map(
-    present.map((entry) => [entry.id, unknown.filter((row) => sameContent(entry.body, row)).map((row) => Number(row.entryid))]),
+    present.map((entry) => [
+      entry.id,
+      unknown.filter((row) => sameContent(entry.body, row, ignore)).map((row) => Number(row.entryid)),
+    ]),
   );
   const claims = new Map<number, number>();
   for (const ids of candidates.values()) for (const id of ids) claims.set(id, (claims.get(id) ?? 0) + 1);
@@ -320,6 +342,16 @@ export const SECTION_LABELS: Partial<Record<SectionKey, LabelSpec[]>> = {
       dropdown: "GetSkillCompLevelDropDown",
       parents: (row) => [{ skillcompid: Number(row.skillcompid) || 0 }],
     },
+  ],
+  // Postman `hrappexplist` is ids only as well. Both job titles read the one
+  // 1788-row list — whole: live (2026-09-22) GetJobDropDown ignores `ids`
+  // (`ids=7134` still answers every row), so it is fetched once per request
+  // and both looked up in it. A business type the list lacks is
+  // `businesstypeid` left out + `businesstypenametext` (no list label).
+  experience: [
+    { name: "jobname", id: "jobid", dropdown: "GetJobDropDown" },
+    { name: "businesstypename", id: "businesstypeid", dropdown: "GetBusinessTypeDropDown" },
+    { name: "headjobname", id: "headjobid", dropdown: "GetJobDropDown" },
   ],
 };
 

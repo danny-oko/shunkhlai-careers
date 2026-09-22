@@ -31,7 +31,8 @@ import type { DropdownOption, DropdownQuery, SectionEntry, SectionResource } fro
 export type FieldDef = {
   name: string;
   label: string;
-  type: "text" | "number" | "date" | "textarea" | "select" | "combobox" | "yesno";
+  /** `switch` holds "Y" / "N" (a Postman `is…` flag), like `yesno` as a toggle. */
+  type: "text" | "number" | "date" | "textarea" | "select" | "combobox" | "yesno" | "switch";
   required?: boolean;
   placeholder?: string;
   hint?: string;
@@ -58,6 +59,12 @@ export type FieldDef = {
    * by either, and so is a dependent field's `depsRequired`.
    */
   freeText?: { name: string; toggle: string; placeholder?: string };
+  /**
+   * The field does not apply while this holds (say, Ажлаас гарсан while
+   * «Одоо ажиллаж байгаа» is on): it is not shown, not required, and sent
+   * empty, so a value typed before it was hidden does not linger.
+   */
+  hidden?: (values: Values) => boolean;
   wide?: boolean;
 };
 
@@ -227,10 +234,12 @@ function EntryForm({
   const answerOf = (field: FieldDef) =>
     field.freeText && manual[field.name] ? values[field.freeText.name] : values[field.name];
 
+  const shownFields = fields.filter((field) => !field.hidden?.(values));
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const missing = fields.find((field) => field.required && isBlank(answerOf(field)));
+    const missing = shownFields.find((field) => field.required && isBlank(answerOf(field)));
     if (missing) {
       setError(`«${missing.label}» талбарыг бөглөнө үү.`);
       return;
@@ -240,6 +249,7 @@ function EntryForm({
     const sent = { ...values };
     for (const field of fields) {
       if (field.freeText && !manual[field.name]) sent[field.freeText.name] = "";
+      if (field.hidden?.(values)) sent[field.name] = "";
     }
 
     setError(null);
@@ -260,11 +270,29 @@ function EntryForm({
       noValidate
     >
       <div className="grid gap-5 sm:grid-cols-2">
-        {fields.map((field) => {
+        {shownFields.map((field) => {
           const id = `field-${field.name}`;
           const raw = values[field.name];
           const value = raw === null || raw === undefined ? "" : String(raw);
           const typed = field.freeText && manual[field.name] ? field.freeText : null;
+
+          if (field.type === "switch") {
+            // A toggle reads as its own sentence, so it sits level with the
+            // inputs beside it rather than under a label of its own.
+            return (
+              <label
+                key={field.name}
+                className={`flex w-fit cursor-pointer items-center gap-2 self-end pb-2 text-sm${field.wide ? " sm:col-span-2" : ""}`}
+              >
+                <Switch
+                  id={id}
+                  checked={value === "Y"}
+                  onCheckedChange={(checked) => set(field.name, checked ? "Y" : "N")}
+                />
+                {field.label}
+              </label>
+            );
+          }
 
           return (
             <Field
@@ -374,6 +402,7 @@ export function SectionManager<TEntry extends SectionEntry>({
   fields,
   defaults,
   payload: toPayload,
+  edit,
   primary,
   secondary,
   emptyText = "Одоогоор бичлэг алга.",
@@ -386,6 +415,8 @@ export function SectionManager<TEntry extends SectionEntry>({
   defaults: Values;
   /** Last word on the save body — for a column derived from the others. */
   payload?: (values: Values) => Values;
+  /** What an edit opens with, from the saved row — for a value derived from the others. */
+  edit?: (values: Values) => Values;
   primary: (row: TEntry) => string;
   secondary: (row: TEntry) => string;
   emptyText?: string;
@@ -471,7 +502,11 @@ export function SectionManager<TEntry extends SectionEntry>({
         <EntryForm
           fields={fields}
           // Defaults are for new rows only; see `initialValues`.
-          initial={initialValues(fields, defaults, editing === "new" ? "new" : (editing as Values))}
+          initial={
+            editing === "new"
+              ? initialValues(fields, defaults, "new")
+              : (edit ?? ((values: Values) => values))(initialValues(fields, defaults, editing as Values))
+          }
           onCancel={() => setEditing(null)}
           onSubmit={save}
         />
