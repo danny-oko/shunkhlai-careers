@@ -85,17 +85,23 @@ export type ExperienceEntry = SectionEntry & {
   orgname?: string;
   businesstypeid?: number;
   businesstypename?: string;
+  /** A business type the list lacks, typed — `businesstypeid` left out (asked of the ERP team). */
+  businesstypenametext?: string;
   jobid?: number;
   jobname?: string;
   fromdate?: string;
+  /** Empty while `isworking` is "Y". */
   todate?: string;
-  /** Derived by the server from `todate`; `isworking` is ignored. */
+  /** "Y" — одоо ажиллаж байгаа; "N" otherwise. */
+  isworking?: "Y" | "N";
+  /** The ERP's own flag, seen derived from `todate`; not sent. */
   working?: string;
   basewage?: number;
   responsibility?: string;
   reason?: string;
   headname?: string;
   headjobid?: number;
+  headjobname?: string;
   headphone?: string;
 };
 

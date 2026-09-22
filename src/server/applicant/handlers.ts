@@ -507,14 +507,7 @@ async function handlePost(
 
     case "SaveAppExperience": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(doc.experience, {
-          ...body,
-          jobname: await label("GetJobDropDown", body.jobid),
-          businesstypename: await label("GetBusinessTypeDropDown", body.businesstypeid),
-        }),
-        true,
-      );
+      return ok(upsert(doc.experience, await labelRow("experience", body, label)), true);
     }
 
     case "SaveAppFamily": {
