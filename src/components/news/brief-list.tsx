@@ -29,7 +29,7 @@ export function BriefList({
           >
             <span
               aria-hidden
-              className="w-7 shrink-0 font-serif text-[1.0625rem] tabular-nums"
+              className="w-7 shrink-0 text-[1.0625rem] font-semibold tabular-nums"
               style={{ color: "var(--paper-accent)" }}
             >
               {String(startAt + index).padStart(2, "0")}

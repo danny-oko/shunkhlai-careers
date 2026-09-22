@@ -9,7 +9,6 @@ import { Masthead } from "@/components/news/masthead";
 import { SectionHead } from "@/components/news/section-head";
 import { StoryGrid } from "@/components/news/story-grid";
 import { getCategoryCounts, getPublishedArticles } from "@/lib/news/service";
-import { todayInUlaanbaatar } from "@/lib/news/today";
 import { categoryLabel, isNewsCategory } from "@/lib/news/types";
 
 export const metadata: Metadata = {
@@ -56,8 +55,11 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
   const deskName = category ? categoryLabel(category) : null;
 
   return (
-    <main data-newsroom className="flex-1 bg-background pt-16 text-foreground">
-      <Masthead storyCount={everything.length} today={todayInUlaanbaatar()} />
+    <main
+      data-newsroom
+      className="flex-1 bg-background pt-16 text-foreground"
+    >
+      <Masthead />
       <CategoryRail active={category} counts={counts} total={everything.length} />
 
       <div className="mx-auto max-w-6xl px-6 pb-20 lg:px-10">

@@ -31,6 +31,7 @@ import {
   statusLabel,
 } from "@/lib/news/types";
 import { confirmDiscard, useUnloadGuard } from "@/components/admin/unsaved-guard";
+import { prepareCover, setInputFile } from "@/components/admin/cover-upload";
 import { cn } from "@/lib/utils";
 
 /**
@@ -134,6 +135,13 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
   const [pane, setPane] = React.useState<"edit" | "preview">("edit");
   const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
   const [removeCover, setRemoveCover] = React.useState(false);
+  const [coverError, setCoverError] = React.useState<string | null>(null);
+  const [preparingCover, setPreparingCover] = React.useState(false);
+  const coverInputRef = React.useRef<HTMLInputElement>(null);
+  // The file the preview shows. Kept outside the input because React resets
+  // the form after every action, a rejected save included, and an
+  // uncontrolled file input comes back empty.
+  const coverFileRef = React.useRef<File | null>(null);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -149,6 +157,15 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
 
   // Off while a save is in flight, so its redirect is never blocked.
   useUnloadGuard(dirty && !isPending);
+
+  // A rejected save has just reset the form. Without this the preview keeps
+  // the new picture while the input is empty, and the next save quietly keeps
+  // the old cover.
+  React.useEffect(() => {
+    const input = coverInputRef.current;
+    const file = coverFileRef.current;
+    if (input && file && !input.files?.length) setInputFile(input, file);
+  }, [state]);
 
   const errors = state.fieldErrors ?? {};
   const bodyDoc = React.useMemo(() => bodyFromField(draft.body), [draft.body]);
@@ -175,10 +192,40 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
   const storedCover = coverUrl(article?.coverKey ?? null);
   const shownCover = coverPreview ?? (removeCover ? null : storedCover);
 
-  const onCoverChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const showCover = (file: File | null) => {
+    coverFileRef.current = file;
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
     setCoverPreview(file ? URL.createObjectURL(file) : null);
-    if (file) setRemoveCover(false);
+  };
+
+  const onCoverChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const picked = input.files?.[0];
+    setCoverError(null);
+    if (!picked) {
+      showCover(null);
+      return;
+    }
+
+    setPreparingCover(true);
+    const prepared = await prepareCover(picked);
+    setPreparingCover(false);
+
+    if ("error" in prepared) {
+      input.value = "";
+      showCover(null);
+      setCoverError(prepared.error);
+      return;
+    }
+    if (prepared.file !== picked && !setInputFile(input, prepared.file)) {
+      input.value = "";
+      showCover(null);
+      setCoverError("Зургийг бэлтгэж чадсангүй. Илүү жижиг зураг сонгоно уу.");
+      return;
+    }
+
+    showCover(prepared.file);
+    setRemoveCover(false);
   };
 
   return (
@@ -273,10 +320,10 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                   href={`/news/${article.slug}`}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label="Нийтлэг харах"
+                  aria-label="Нийтлэл харах"
                 >
                   <ExternalLink aria-hidden />
-                  <span className="hidden sm:inline">Нийтлэг харах</span>
+                  <span className="hidden sm:inline">Нийтлэл харах</span>
                 </Link>
               </Button>
             )}
@@ -287,7 +334,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
               variant="outline"
               name="status"
               value="draft"
-              disabled={isPending}
+              disabled={isPending || preparingCover}
             >
               Ноороглох
             </Button>
@@ -297,7 +344,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
               size="sm"
               name="status"
               value="published"
-              disabled={isPending}
+              disabled={isPending || preparingCover}
             >
               {isPending ? (
                 <Loader2 aria-hidden className="animate-spin" />
@@ -394,10 +441,18 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
           {/* Four options, so a radio rail beats a select: every choice is
               visible and reachable in one press instead of two. */}
           <fieldset>
-            <legend className="text-[0.6875rem] tracking-[0.14em] uppercase">
+            <legend
+              id="category-label"
+              className="text-[0.6875rem] tracking-[0.14em] uppercase"
+            >
               Бүлэг
             </legend>
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {/* `role="radio"` is only a radio inside a radiogroup. */}
+            <div
+              role="radiogroup"
+              aria-labelledby="category-label"
+              className="mt-2.5 flex flex-wrap gap-1.5"
+            >
               {NEWS_CATEGORIES.map((category) => (
                 <button
                   key={category.value}
@@ -456,6 +511,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                     <Upload aria-hidden />
                     Зураг сонгох
                     <input
+                      ref={coverInputRef}
                       type="file"
                       name="cover"
                       accept={COVER_TYPES.join(",")}
@@ -481,9 +537,15 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                   </label>
                 )}
 
-                {errors.cover && (
+                {preparingCover && (
+                  <p aria-live="polite" className="text-[0.75rem] text-muted-foreground">
+                    Зургийг багасгаж байна…
+                  </p>
+                )}
+
+                {(coverError ?? errors.cover) && (
                   <p role="alert" className="text-[0.8125rem] text-destructive">
-                    {errors.cover}
+                    {coverError ?? errors.cover}
                   </p>
                 )}
               </div>
@@ -518,6 +580,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
             className="border-t border-border pt-6"
           >
             <RichEditor
+              id="body"
               name="body"
               labelId="body-label"
               describedBy={errors.body ? "body-error" : undefined}

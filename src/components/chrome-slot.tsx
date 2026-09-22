@@ -13,12 +13,15 @@ import { usePathname } from "next/navigation";
  */
 const OWN_CHROME = ["/admin"];
 
-export function ChromeSlot({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
-  const hasOwnChrome = OWN_CHROME.some(
+/** True for `/admin` and everything under it — not for `/administration`. */
+export function hasOwnChrome(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return OWN_CHROME.some(
     (base) => pathname === base || pathname.startsWith(`${base}/`),
   );
+}
 
-  return hasOwnChrome ? null : <>{children}</>;
+export function ChromeSlot({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  return hasOwnChrome(pathname) ? null : <>{children}</>;
 }
