@@ -1109,7 +1109,15 @@ describe.each(DELETE_CASES)("delete: $name", (c) => {
     await post(c.del, undefined, `?${c.clientParam}=${row.entryid}`);
     await flushAfter(); // flush fails, delete stays queued
     erp.down = false;
-    erp.refuse.set(c.del, "түр алдаа"); // and keeps failing on the next visit
+    // …and keeps failing on the next visit. A cancel the ERP refuses in its
+    // own words is final (see "withdraw refused by the ERP"); a server error
+    // is not, so for applications it fails with a 503.
+    if (c.del === "DeleteOrderApp") {
+      const original = erp.fetch;
+      vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) =>
+        String(input).includes(`/${c.del}?`) ? new Response("busy", { status: 503 }) : original(input, init),
+      );
+    } else erp.refuse.set(c.del, "түр алдаа");
     advance(11 * 60_000);
     await get("get");
     await flushAfter();
@@ -1338,6 +1346,251 @@ describe("application entry id", () => {
     if (mine) expect((mine.erp as Row)?.erpEntryId).toBeUndefined();
     const guessed = stored.filter((r) => Number((r.erp as Row)?.erpEntryId) > 0 && Number(r.recruitmentorderid) === 786);
     expect(guessed).toEqual([]);
+  });
+});
+
+/* --- withdraw vs. the push (audit §11) ------------------------------------ */
+
+describe("withdraw while the application's push is in flight", () => {
+  /**
+   * Runs `during` once, right after the ERP has taken SaveHrRecruitmentOrderApp
+   * and before the push has read the list back or stored anything — the
+   * applicant presses «Цуцлах» while the push is on the wire.
+   */
+  function onSubmit(during: () => Promise<void>, options: { failListRead?: boolean } = {}) {
+    const original = erp.fetch;
+    let fired = false;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (options.failListRead && fired && url.includes("/getRecruitmenRequestList")) {
+        options.failListRead = false;
+        throw new TypeError("fetch failed");
+      }
+      const res = await original(input, init);
+      if (!fired && url.endsWith("/SaveHrRecruitmentOrderApp")) {
+        fired = true;
+        await during();
+      }
+      return res;
+    });
+  }
+
+  const localRow = async () =>
+    (await lists()).applications.find((r) => Number(r.recruitmentorderid) === 786 && Number(r.entryid) >= 1_000_000_000);
+
+  const erpCopy = () => erp.lists.requests.find((r) => Number(r.recruitmentorderid) === 786);
+
+  it("the ERP copy the push created is cancelled (DeleteOrderApp?entryID=) and never comes back", async () => {
+    await firstLoad();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    const local = (await localRow())!;
+    expect(local).toBeDefined();
+    onSubmit(async () => {
+      const r = await post("DeleteOrderApp", undefined, `?entryID=${local.entryid}`);
+      expect(r.body.rettype).toBe(0);
+    });
+    await flushAfter();
+
+    const created = erp.calls.find((c) => c.endpoint === "SaveHrRecruitmentOrderApp");
+    expect(created).toBeDefined();
+    const cancel = erp.calls.find((c) => c.endpoint === "DeleteOrderApp");
+    expect(cancel, "the ERP copy is withdrawn").toBeDefined();
+    expect(cancel!.params.get("entryID")).not.toBeNull();
+    expect(erpCopy()).toBeUndefined();
+    expect((await lists()).applications.filter((r) => r.posname === "ERP pos" || Number(r.recruitmentorderid) === 786)).toEqual([]);
+
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect((await lists()).applications.filter((r) => r.posname === "ERP pos" || Number(r.recruitmentorderid) === 786)).toEqual([]);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
+  });
+
+  it("the push could not read its id back: the next pull finds the ERP copy and cancels it", async () => {
+    await firstLoad();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    const local = (await localRow())!;
+    onSubmit(async () => {
+      await post("DeleteOrderApp", undefined, `?entryID=${local.entryid}`);
+    }, { failListRead: true });
+    await flushAfter();
+    expect(erpCopy()).toBeDefined(); // not known yet which ERP row it is
+    expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toEqual([]);
+
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erpCopy()).toBeUndefined();
+    expect((await lists()).applications.filter((r) => r.posname === "ERP pos")).toEqual([]);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
+
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect((await lists()).applications.filter((r) => r.posname === "ERP pos")).toEqual([]);
+  });
+
+  it("a pull that sees the ERP copy before the push reports back cancels it too", async () => {
+    await firstLoad();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    const local = (await localRow())!;
+    onSubmit(async () => {
+      await post("DeleteOrderApp", undefined, `?entryID=${local.entryid}`);
+      advance(11 * 60_000);
+      await get("get"); // a visit from another tab: background pull
+      // Run just that visit's task now, while the push is still waiting.
+      const queued = state.after.splice(0);
+      for (const task of queued) await task();
+    });
+    await flushAfter();
+    expect(erpCopy()).toBeUndefined();
+    expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toHaveLength(1);
+    expect((await lists()).applications.filter((r) => r.posname === "ERP pos" || Number(r.recruitmentorderid) === 786)).toEqual([]);
+  });
+
+  it("the push failed before the ERP took it: nothing to cancel, the tombstone clears on the next pull", async () => {
+    await firstLoad();
+    erp.refuse.set("SaveHrRecruitmentOrderApp", "Түр алдаа");
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await flushAfter();
+    const local = (await localRow())!;
+    expect((local.erp as Row).status).toBe("failed");
+    await post("DeleteOrderApp", undefined, `?entryID=${local.entryid}`);
+    expect(storedDoc().erp.withdrawn).toHaveLength(1);
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toEqual([]);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
+  });
+
+  it("an application HR or the applicant made on the ERP site meanwhile is never taken for the withdrawn one", async () => {
+    await firstLoad();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    const local = (await localRow())!;
+    onSubmit(async () => {
+      await post("DeleteOrderApp", undefined, `?entryID=${local.entryid}`);
+      // Another application appears on the ERP at the same moment.
+      erp.lists.requests.push({ entryid: erp.id(), recruitmentorderid: 999, posname: "Other" });
+      erp.recruitmentorders.push({ recruitmentorderid: 999 });
+    }, { failListRead: true });
+    await flushAfter();
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    // Two unknown ERP rows: which one is ours cannot be told, so nothing is cancelled.
+    expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toEqual([]);
+    expect(erp.lists.requests.some((r) => r.posname === "Other")).toBe(true);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
+  });
+
+  it("applying again to the same posting after the withdrawal keeps the new application", async () => {
+    await firstLoad();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    const local = (await localRow())!;
+    onSubmit(async () => {
+      await post("DeleteOrderApp", undefined, `?entryID=${local.entryid}`);
+      const again = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+      expect(again.body.rettype).toBe(0);
+    });
+    await flushAfter();
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toEqual([]);
+    expect(erpCopy()).toBeDefined();
+    expect((await lists()).applications.filter((r) => r.posname === "ERP pos")).toHaveLength(1);
+  });
+});
+
+describe("apply again after a cancel", () => {
+  it("apply → cancel (ERP delete fails, queued) → apply again: allowed, held until the cancel lands, then submitted — never lost", async () => {
+    await firstLoad();
+    await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await flushAfter();
+    const first = erp.lists.requests.find((r) => Number(r.recruitmentorderid) === 786)!;
+    expect(first).toBeDefined();
+    const row = (await lists()).applications.find((r) => Number(r.recruitmentorderid) === 786)!;
+
+    // The cancel cannot reach the ERP (server error): it stays queued.
+    const original = erp.fetch;
+    let deleteDown = true;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) =>
+      deleteDown && String(input).includes("/DeleteOrderApp?") ? new Response("busy", { status: 503 }) : original(input, init),
+    );
+    await post("DeleteOrderApp", undefined, `?entryID=${row.entryid}`);
+    await flushAfter();
+    advance(11 * 60_000); // a visit: the pull sees /get still listing 786, the cancel fails again
+    await get("get");
+    await flushAfter();
+    expect(storedDoc().erp.pendingDeletes).toEqual([{ endpoint: "DeleteOrderApp", entryid: first.entryid, recruitmentorderid: 786 }]);
+    expect(storedDoc().erp.appliedOrderIds).toContain(786);
+
+    // Applying again is not refused as "already applied"…
+    const again = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    expect(again.body.rettype).toBe(0);
+    await flushAfter();
+    // …and is not marked sent while the ERP only holds the application being cancelled.
+    const waiting = (await lists()).applications.find((r) => Number(r.recruitmentorderid) === 786)!;
+    expect((waiting.erp as Row).status).not.toBe("sent");
+    expect(erp.calls.filter((c) => c.endpoint === "SaveHrRecruitmentOrderApp")).toHaveLength(1);
+
+    // The ERP is back: the cancel goes first, then the new application is submitted.
+    deleteDown = false;
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    const sent = erp.calls.map((c) => c.endpoint).filter((e) => e === "DeleteOrderApp" || e === "SaveHrRecruitmentOrderApp");
+    expect(sent.slice(-2)).toEqual(["DeleteOrderApp", "SaveHrRecruitmentOrderApp"]);
+    const now = erp.lists.requests.filter((r) => Number(r.recruitmentorderid) === 786);
+    expect(now).toHaveLength(1);
+    expect(now[0].entryid).not.toBe(first.entryid);
+
+    // Still there after later pulls.
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    const mine = (await lists()).applications.filter((r) => Number(r.recruitmentorderid) === 786 || r.posname === "ERP pos");
+    expect(mine).toHaveLength(1);
+    expect(erp.lists.requests.some((r) => Number(r.recruitmentorderid) === 786)).toBe(true);
+  });
+});
+
+describe("withdraw refused by the ERP", () => {
+  const REFUSAL = "Ярилцлагын шатанд орсон хүсэлтийг цуцлах боломжгүй.";
+
+  it("the ERP's retmsg is kept on the row, which comes back; the cancel is not retried", async () => {
+    await firstLoad();
+    const [row] = (await lists()).applications;
+    erp.refuse.set("DeleteOrderApp", REFUSAL);
+    await post("DeleteOrderApp", undefined, `?entryID=${row.entryid}`);
+    expect((await lists()).applications).toEqual([]); // gone here at once…
+    await flushAfter();
+    const back = (await lists()).applications;
+    expect(back).toHaveLength(1); // …back once the ERP said no
+    expect(back[0].entryid).toBe(row.entryid);
+    expect(back[0].withdrawerror).toBe(REFUSAL);
+    expect(storedDoc().erp?.pendingDeletes ?? []).toEqual([]);
+
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toHaveLength(1);
+    expect((await lists()).applications[0].withdrawerror).toBe(REFUSAL);
+  });
+
+  it("trying again clears the message; accepted this time, the row is gone", async () => {
+    await firstLoad();
+    const [row] = (await lists()).applications;
+    erp.refuse.set("DeleteOrderApp", REFUSAL);
+    await post("DeleteOrderApp", undefined, `?entryID=${row.entryid}`);
+    await flushAfter();
+    erp.refuse.delete("DeleteOrderApp");
+    await post("DeleteOrderApp", undefined, `?entryID=${row.entryid}`);
+    expect(storedDoc().erp.withdrawRefused ?? {}).toEqual({});
+    await flushAfter();
+    expect(erp.lists.requests).toEqual([]);
+    expect((await lists()).applications).toEqual([]);
   });
 });
 

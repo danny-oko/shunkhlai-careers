@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { MaritalOption } from "@/lib/api/profile";
 import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
-import type { ApplicantDoc, DocErp, HandlerDeps, PendingDelete, Row } from "./handlers";
+import type { ApplicantDoc, DocErp, HandlerDeps, PendingDelete, Row, WithdrawnApplication } from "./handlers";
 
 /**
  * The pure half of the two-way ERP sync: which D1 list maps to which ERP
@@ -492,6 +492,139 @@ export function mergeApplications(
   return result;
 }
 
+/* --- withdrawn before the ERP id was known ------------------------------ */
+
+/** How long a withdrawn application is looked for in the ERP before giving up. */
+export const WITHDRAWN_TTL_MS = 24 * 60 * 60_000;
+
+/** When the push of this row last started (its claim, else its last attempt). */
+const attemptedAt = (row: Row) => {
+  const erp = appErp(row);
+  return Date.parse(erp?.claimedAt ?? erp?.lastAttemptAt ?? "");
+};
+
+/**
+ * Should withdrawing this row (no ERP id) leave a tombstone? Only when a push
+ * may have created it in the ERP where no pull has seen it yet: its push is
+ * on the wire, or ran after the last pull. A copy an earlier pull saw is its
+ * own row here, withdrawn through its own id.
+ */
+function mayBeUnseenInErp(doc: ApplicantDoc, row: Row, now: number): boolean {
+  const erp = appErp(row);
+  if (!erp || erp.status === "skipped" || !(Number(row.recruitmentorderid) > 0)) return false;
+  if (age(erp.claimedAt, now) < CLAIM_TTL_MS) return true;
+  const pulled = Date.parse(doc.erp?.pulledAt ?? "");
+  const attempted = attemptedAt(row);
+  return !Number.isFinite(pulled) || !Number.isFinite(attempted) || attempted >= pulled;
+}
+
+/**
+ * Postings whose application is being cancelled here: a queued DeleteOrderApp
+ * that knows its posting, or a withdrawn tombstone. The ERP may still list
+ * them as applied (`appliedOrderIds`), but for a new application to the same
+ * posting they do not count — it must really be submitted once the cancel
+ * went through, or it would be lost.
+ */
+export function withdrawingOrderIds(doc: ApplicantDoc): Set<number> {
+  const ids = new Set<number>();
+  for (const d of doc.erp?.pendingDeletes ?? []) {
+    if (d.endpoint === "DeleteOrderApp" && Number(d.recruitmentorderid) > 0) ids.add(Number(d.recruitmentorderid));
+  }
+  for (const t of doc.erp?.withdrawn ?? []) ids.add(t.recruitmentorderid);
+  return ids;
+}
+
+/** Queues DeleteOrderApp for an ERP id; true when newly queued. */
+function queueWithdrawal(erp: DocErp, entryid: number, recruitmentorderid?: number): boolean {
+  const list = (erp.pendingDeletes ??= []);
+  if (list.some((d) => d.endpoint === "DeleteOrderApp" && d.entryid === entryid)) return false;
+  list.push({ endpoint: "DeleteOrderApp", entryid, ...(recruitmentorderid ? { recruitmentorderid } : {}) });
+  erp.flush = undefined; // new work: a fresh set of attempts
+  return true;
+}
+
+function setWithdrawn(erp: DocErp, list: WithdrawnApplication[]) {
+  if (list.length) erp.withdrawn = list;
+  else delete erp.withdrawn;
+}
+
+/**
+ * The push of a D1 row came back. If that row was withdrawn meanwhile, its ERP
+ * copy is cancelled now when the push learnt the id; otherwise the tombstone
+ * waits for a pull (no longer "in flight"). Returns true when a delete was
+ * queued.
+ */
+export function settleWithdrawnPush(
+  doc: ApplicantDoc,
+  entryid: number,
+  result: { status: string; erpEntryId?: number },
+): boolean {
+  const erp = doc.erp;
+  const tomb = erp?.withdrawn?.find((t) => t.entryid === entryid);
+  if (!erp || !tomb) return false;
+  if (result.erpEntryId) {
+    setWithdrawn(erp, erp.withdrawn!.filter((t) => t !== tomb));
+    return queueWithdrawal(erp, result.erpEntryId, tomb.recruitmentorderid);
+  }
+  delete tomb.claimedAt;
+  return false;
+}
+
+/**
+ * A pull, before its request list is merged: finds the ERP copies of
+ * withdrawn applications. The list carries no recruitmentorderid, so a copy
+ * is only recognised when it is unambiguous — exactly one withdrawn posting
+ * the ERP (`/get` recruitmentorders) has an application for, and exactly one
+ * ERP row no row here knows. Then its DeleteOrderApp is queued. A posting the
+ * ERP has no application for, with no push on the wire, was never created:
+ * dropped. Ambiguous ones are dropped too — never a guess (it could cancel
+ * another application); the copy then shows as its own row, which the
+ * applicant can withdraw by its id. Returns true when a delete was queued.
+ */
+export function settleWithdrawnOnPull(
+  doc: ApplicantDoc,
+  erpRows: Row[] | null,
+  recruitmentorders: Row[] | null,
+  now = Date.now(),
+): boolean {
+  const erp = doc.erp;
+  if (!erp?.withdrawn?.length) return false;
+  let list = erp.withdrawn.filter((t) => age(t.at, now) < WITHDRAWN_TTL_MS);
+  if (!erpRows || !recruitmentorders) {
+    setWithdrawn(erp, list);
+    return false;
+  }
+  const applied = new Set(recruitmentorders.map((row) => Number(row.recruitmentorderid)));
+  const inFlight = (t: WithdrawnApplication) => age(t.claimedAt, now) < CLAIM_TTL_MS;
+  list = list.filter((t) => applied.has(t.recruitmentorderid) || inFlight(t));
+
+  const known = new Set(doc.applications.map(erpIdOfApplication).filter((id): id is number => !!id));
+  for (const id of deletedIds(erp.pendingDeletes, "DeleteOrderApp")) known.add(id);
+  const unknown = erpRows.map((row) => Number(row.entryid)).filter((id) => id > 0 && !known.has(id));
+  const inErp = list.filter((t) => applied.has(t.recruitmentorderid));
+
+  let queued = false;
+  // Never while its push is on the wire: the one unknown row could then be an
+  // application made elsewhere, with ours not created yet.
+  if (inErp.length === 1 && unknown.length === 1 && !inFlight(inErp[0])) {
+    queued = queueWithdrawal(erp, unknown[0], inErp[0].recruitmentorderid);
+    list = list.filter((t) => t !== inErp[0]);
+  } else if (inErp.length > 0) {
+    // Cannot tell which row is ours: give up on those no push is still sending.
+    list = list.filter((t) => !applied.has(t.recruitmentorderid) || inFlight(t));
+  }
+  setWithdrawn(erp, list);
+  return queued;
+}
+
+/** Refusals are shown only while the ERP still lists the application. */
+function pruneRefusals(erp: DocErp, erpRows: Row[]) {
+  if (!erp.withdrawRefused) return;
+  const listed = new Set(erpRows.map((row) => String(row.entryid)));
+  for (const id of Object.keys(erp.withdrawRefused)) if (!listed.has(id)) delete erp.withdrawRefused[id];
+  if (Object.keys(erp.withdrawRefused).length === 0) delete erp.withdrawRefused;
+}
+
 /* --- profile & files ---------------------------------------------------- */
 
 /** Profile fields `SaveHrApplicant` takes (see `ProfileInput`). */
@@ -642,8 +775,10 @@ export function applySnapshot(doc: ApplicantDoc, snap: ErpSnapshot, now: Date): 
     doc[config.key] = mergeSection(config, doc[config.key], list, erp.pendingDeletes);
   }
 
+  settleWithdrawnOnPull(doc, snap.applications, snap.recruitmentorders, now.getTime());
   if (snap.applications) {
     doc.applications = mergeApplications(doc.applications, snap.applications, erp.pendingDeletes, now);
+    pruneRefusals(erp, snap.applications);
   }
 
   if (snap.record) {
@@ -749,7 +884,34 @@ export function recordLocalChange(
   } else if (endpoint === "SaveAppPicture") {
     erp.pictureDirty = now;
   } else if (endpoint === "DeleteOrderApp") {
-    queueDelete(endpoint, removed ? erpIdOfApplication(removed) : undefined);
+    const id = removed ? erpIdOfApplication(removed) : undefined;
+    if (id) {
+      queueDelete(endpoint, id);
+      const orderId = Number(removed?.recruitmentorderid);
+      const queued = erp.pendingDeletes?.find((d) => d.endpoint === endpoint && d.entryid === id);
+      if (queued && orderId > 0) queued.recruitmentorderid = orderId;
+      if (erp.withdrawRefused?.[id]) {
+        delete erp.withdrawRefused[id]; // asked again: the old refusal is stale
+        if (Object.keys(erp.withdrawRefused).length === 0) delete erp.withdrawRefused;
+      }
+    } else if (removed && mayBeUnseenInErp(doc, removed, now)) {
+      // No ERP id, but the push may have created it there: remembered, so its
+      // ERP copy is cancelled once found and never pulled back in as sent.
+      const claimedAt = appErp(removed)?.claimedAt;
+      (erp.withdrawn ??= []).push({
+        entryid: Number(removed.entryid),
+        recruitmentorderid: Number(removed.recruitmentorderid),
+        at: new Date(now).toISOString(),
+        ...(claimedAt && age(claimedAt, now) < CLAIM_TTL_MS ? { claimedAt } : {}),
+      });
+    } else {
+      return true; // local-only: dropping the row drops its push
+    }
+  } else if (endpoint === "SaveHrRecruitmentOrderApp") {
+    // Applied again after a withdrawal: the ERP copy, if any, is wanted now.
+    const orderId = Number((retdata as Row | null)?.recruitmentorderid);
+    if (erp.withdrawn) setWithdrawn(erp, erp.withdrawn.filter((t) => t.recruitmentorderid !== orderId));
+    return false;
   } else if (sectionByRemove(endpoint)) {
     queueDelete(endpoint, removed && !isLocalId(removed.entryid) ? Number(removed.entryid) : undefined);
   } else if (sectionBySave(endpoint)) {

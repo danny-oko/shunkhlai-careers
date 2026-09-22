@@ -19,6 +19,7 @@ import {
   saveBody,
   sectionList,
   snapshotOf,
+  withdrawingOrderIds,
 } from "./erp-model";
 import { type PushIdentity, type PushResult, erpRecord, profileOverlay, pushApplication } from "./erp-push";
 import type { ApplicantDoc, PendingDelete, Row } from "./handlers";
@@ -52,6 +53,8 @@ export type FlushOutcome = {
   cv?: { stamp: number; hash: string | null };
   picture?: { stamp: number; hash: string | null };
   deletesDone: PendingDelete[];
+  /** Cancels the ERP refused, with its retmsg: not retried (see `refusedCancel`). */
+  deletesRefused: Array<PendingDelete & { message: string }>;
   pushed: Partial<Record<SectionKey, Set<string>>>;
   /** The adoption pass each section's unadopted rows had (see `planAdoption`). */
   adopted: Partial<Record<SectionKey, Adoption>>;
@@ -77,7 +80,7 @@ function logFailure(code: string, error: unknown) {
 }
 
 /** The ERP answered that the row is already gone: the delete is done. */
-const NOT_FOUND = /олдсонгүй|олдохгүй|байхгүй|not found|does not exist/i;
+const NOT_FOUND = /олдсонгүй|олдохгүй|not found|does not exist/i;
 
 const stripDataUrl = (value: string) => value.replace(/^data:[^,]*,/, "");
 
@@ -159,6 +162,31 @@ async function flushFiles({ input, out, failed }: Ctx) {
   }
 }
 
+/**
+ * The ERP answered a DeleteOrderApp with its own refusal (rettype > 0 on an
+ * ordinary HTTP answer — not an expired token or a server error). Which
+ * stages may still be cancelled is the ERP's rule (the status ids are not
+ * documented), so its word is final: the application stays, and its retmsg
+ * is shown on the row instead of retrying the cancel.
+ */
+function refusedCancel(item: PendingDelete, error: unknown): string | null {
+  if (item.endpoint !== "DeleteOrderApp" || !(error instanceof ErpError)) return null;
+  if (!(Number(error.rettype) > 0) || (error.status !== undefined && error.status >= 400)) return null;
+  return error.message && error.message !== "erp_error" ? error.message : CANCEL_REFUSED_MESSAGE;
+}
+
+/** Shown when the ERP refuses a cancel without saying why. */
+export const CANCEL_REFUSED_MESSAGE = "ERP систем энэ хүсэлтийг цуцлахыг зөвшөөрсөнгүй.";
+
+/** A delete went through. A cancelled application's posting is no longer "applied". */
+function deleted(out: FlushOutcome, item: PendingDelete) {
+  out.deletesDone.push(item);
+  const orderId = Number(item.recruitmentorderid);
+  if (item.endpoint === "DeleteOrderApp" && orderId > 0 && out.appliedOrderIds) {
+    out.appliedOrderIds = out.appliedOrderIds.filter((id) => id !== orderId);
+  }
+}
+
 /** Only deletes the applicant made here; "not found" means already gone. */
 async function flushDeletes({ input, out, failed }: Ctx) {
   for (const item of input.doc.erp?.pendingDeletes ?? []) {
@@ -166,11 +194,22 @@ async function flushDeletes({ input, out, failed }: Ctx) {
     if (!param) continue;
     try {
       await erpPost(item.endpoint, input.token, undefined, `?${param}=${encodeURIComponent(item.entryid)}`);
-      out.deletesDone.push(item);
+      deleted(out, item);
     } catch (error) {
-      if (error instanceof ErpError && NOT_FOUND.test(error.message)) out.deletesDone.push(item);
+      const refusal = refusedCancel(item, error);
+      if (error instanceof ErpError && NOT_FOUND.test(error.message)) deleted(out, item);
+      else if (refusal) out.deletesRefused.push({ ...item, message: refusal });
       else failed("erp_delete_failed", error);
     }
+  }
+  if (out.deletesRefused.length === 0) return;
+  // The refused application is still in the ERP: bring it back now, not at
+  // the next pull.
+  try {
+    const rows = await erpGet<Row[] | null>("getRecruitmenRequestList", input.token);
+    if (Array.isArray(rows)) out.appList = rows;
+  } catch (error) {
+    failed("erp_list_failed", error);
   }
 }
 
@@ -305,6 +344,13 @@ async function flushApplications({ input, out }: Ctx) {
     ...input.doc,
     applications: input.doc.applications.map((row) => ({ ...row })),
   };
+  // Cancels that went through (or were refused) this run are settled; the rest still wait.
+  const key = (d: PendingDelete) => `${d.endpoint}:${d.entryid}`;
+  const settled = new Set([...out.deletesDone, ...out.deletesRefused].map(key));
+  const withdrawing = withdrawingOrderIds({
+    ...input.doc,
+    erp: { ...input.doc.erp, pendingDeletes: (input.doc.erp?.pendingDeletes ?? []).filter((d) => !settled.has(key(d))) },
+  });
   for (const entryid of input.apps) {
     const app = working.applications.find((row) => Number(row.entryid) === entryid);
     if (!app) continue;
@@ -313,6 +359,7 @@ async function flushApplications({ input, out }: Ctx) {
       loadCv: input.loadCv,
       batch,
       appliedOrderIds: out.appliedOrderIds,
+      withdrawingOrderIds: withdrawing,
     });
     out.appResults.set(entryid, result);
     if (result.erpList) out.appList = result.erpList;
@@ -322,7 +369,7 @@ async function flushApplications({ input, out }: Ctx) {
 }
 
 export async function flush(input: FlushInput): Promise<FlushOutcome> {
-  const out: FlushOutcome = { deletesDone: [], pushed: {}, adopted: {}, sources: {}, appResults: new Map() };
+  const out: FlushOutcome = { deletesDone: [], deletesRefused: [], pushed: {}, adopted: {}, sources: {}, appResults: new Map() };
   const ctx: Ctx = {
     input,
     out,
