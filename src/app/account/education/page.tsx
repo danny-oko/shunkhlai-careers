@@ -140,10 +140,20 @@ const skillFields: FieldDef[] = [
     type: "select",
     required: true,
     load: () => reference.computerSkills(),
+    // A program the list does not have: its name goes in `compnametext` with
+    // `skillcompid: 0` (Postman: "Жагсаалтад байхгүй программын нэр").
+    freeText: {
+      name: "compnametext",
+      toggle: "Жагсаалтад байхгүй",
+      placeholder: "Программын нэр",
+    },
+    emptyAs: "zero",
   },
   {
-    // Every skill has its own levels — `skillcompid` is заавал here, so this
-    // list means nothing until a skill is chosen.
+    // The level list hangs off the program (Postman: "Тухайн ур чадварт
+    // харгалзах түвшний жагсаалт"), so it waits for one and is cleared when
+    // it changes. A typed program reads it under `skillcompid: 0` — live
+    // (2026-09-22) that answers the same levels as any listed program.
     name: "levelid",
     label: "Эзэмшсэн түвшин",
     type: "select",
@@ -153,7 +163,6 @@ const skillFields: FieldDef[] = [
     load: (values) =>
       reference.computerSkillLevels({ skillcompid: Number(values.skillcompid) || 0 }),
   },
-  { name: "compnametext", label: "Программ (жагсаалтад байхгүй бол)", type: "text" },
   { name: "note", label: "Тэмдэглэл", type: "textarea", wide: true },
 ];
 
@@ -173,6 +182,13 @@ const educationPayload = (values: Record<string, unknown>) => ({
   ...values,
   isgraduated: isGraduated(values.todate),
 });
+
+/** A typed program has no id, so its name is the one to show. */
+const programOf = (row: ComputerSkillEntry) =>
+  (Number(row.skillcompid) > 0 ? row.skillcompname : row.compnametext) ||
+  row.skillcompname ||
+  row.compnametext ||
+  "Программ";
 
 /** A typed school has no id, so its name is the one to show. */
 const schoolOf = (row: EducationEntry) =>
@@ -228,7 +244,7 @@ export default function EducationPage() {
         resource={sections.computerSkill}
         fields={skillFields}
         defaults={{}}
-        primary={(row) => row.skillcompname || row.compnametext || "Программ"}
+        primary={programOf}
         secondary={(row) => [row.levelname, row.note].filter(Boolean).join(" · ")}
         emptyText="Компьютерийн мэдлэгийн мэдээлэл алга."
       />

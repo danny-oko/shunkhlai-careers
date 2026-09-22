@@ -435,6 +435,34 @@ describe("write-through", () => {
     expect((await lists()).skills.filter((r) => r.note === "Python")).toHaveLength(1);
   });
 
+  it("an edit that empties an optional field reaches the ERP without it, and the re-read does not bring it back", async () => {
+    await firstLoad(
+      new FakeErp((e) => {
+        e.seedRow("hrappedulist", { countryid: 28, divisionid: 1, universityid: 3, educationlevelid: 2010 });
+        e.seedRow("hrappexplist", { orgname: "Шунхлай", basewage: 2_500_000, headjobid: 7 });
+      }),
+    );
+    const before = await lists();
+    // The form omits an emptied numeric (never null): the body lacks the key.
+    const { divisionid: _d, ...education } = before.education[0];
+    const { basewage: _b, ...experience } = before.experience[0];
+    await post("SaveHrAppEducation", education);
+    await post("SaveAppExperience", experience);
+    expect(storedDoc().education[0]).not.toHaveProperty("divisionid");
+    expect(storedDoc().experience[0]).not.toHaveProperty("basewage");
+    await flushAfter();
+
+    const sent = (endpoint: string) => erp.calls.find((c) => c.endpoint === endpoint)!.body as Row;
+    expect(sent("SaveHrAppEducation")).not.toHaveProperty("divisionid");
+    expect(sent("SaveAppExperience")).not.toHaveProperty("basewage");
+    expect(sent("SaveAppExperience")).toMatchObject({ entryid: before.experience[0].entryid, headjobid: 7 });
+    const after = await lists();
+    expect(after.education[0]).toMatchObject({ erp: "synced", countryid: 28, universityid: 3 });
+    expect(after.education[0]).not.toHaveProperty("divisionid");
+    expect(after.experience[0]).toMatchObject({ erp: "synced", orgname: "Шунхлай", headjobid: 7 });
+    expect(after.experience[0]).not.toHaveProperty("basewage");
+  });
+
   it("a pull while local rows are pending does not overwrite them", async () => {
     await firstLoad();
     const [row] = (await lists()).education;
@@ -611,6 +639,300 @@ describe("write-through", () => {
   });
 });
 
+/* --- SaveAppSkillComp: the body is the whole set ------------------------- */
+
+describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mode", (mode) => {
+  /** Three skills in the ERP (ids only, as Postman `hrappcomplist`). */
+  const threeSkills = () =>
+    new FakeErp((e) => {
+      e.batchSaves = mode;
+      e.seedRow("hrappcomplist", { skillcompid: 3, levelid: 2, compnametext: "", note: "" });
+      e.seedRow("hrappcomplist", { skillcompid: 6, levelid: 4, compnametext: "", note: "Pivot" });
+      e.seedRow("hrappcomplist", { skillcompid: 0, levelid: 3, compnametext: "Figma", note: "" });
+    });
+  const skillsSent = () => erp.calls.filter((c) => c.endpoint === "SaveAppSkillComp").map((c) => c.body as Row[]);
+  const erpIds = () => erp.lists.hrappcomplist.map((r) => Number(r.entryid));
+
+  it("editing one row sends every row (with its ERP id) and loses none, in the ERP or here", async () => {
+    await firstLoad(threeSkills());
+    const ids = erpIds();
+    const [, excel] = (await lists()).skills;
+    await post("SaveAppSkillComp", [{ ...excel, levelid: 2 }]);
+    await flushAfter();
+
+    const [body] = skillsSent();
+    expect(body.map((r) => r.entryid)).toEqual(ids);
+    expect(body[1]).toMatchObject({ entryid: ids[1], skillcompid: 6, levelid: 2, note: "Pivot" });
+    for (const row of body) {
+      expect(row).not.toHaveProperty("erp");
+      expect(row).not.toHaveProperty("skillcompname");
+      expect(row).not.toHaveProperty("levelname");
+    }
+    expect(erpIds()).toEqual(ids);
+    expect(erp.lists.hrappcomplist[1]).toMatchObject({ levelid: 2, note: "Pivot" });
+    expect(erp.lists.hrappcomplist[2]).toMatchObject({ skillcompid: 0, compnametext: "Figma" });
+
+    const skills = (await lists()).skills;
+    expect(skills.map((r) => r.entryid)).toEqual(ids);
+    expect(skills.every((r) => r.erp === "synced")).toBe(true);
+    expect(skills[1]).toMatchObject({ levelid: 2, levelname: labelFor("GetSkillCompLevelDropDown", 2) });
+  });
+
+  it("new rows go as entryid 0 next to the synced ones; the re-read gives them their ERP ids, no duplicates", async () => {
+    await firstLoad(threeSkills());
+    const ids = erpIds();
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 11, levelid: 2 }]);
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 0, compnametext: "Blender", levelid: 4 }]);
+    // Both are local until the flush.
+    expect((await lists()).skills.filter((r) => Number(r.entryid) >= 1_000_000_000)).toHaveLength(2);
+    await flushAfter();
+
+    const [body] = skillsSent();
+    expect(skillsSent()).toHaveLength(1); // one array, not one call per row
+    expect(body.map((r) => r.entryid)).toEqual([...ids, 0, 0]);
+    expect(erp.lists.hrappcomplist).toHaveLength(5);
+
+    const skills = (await lists()).skills;
+    expect(skills).toHaveLength(5);
+    expect(skills.map((r) => Number(r.entryid))).toEqual(erpIds());
+    expect(skills.every((r) => Number(r.entryid) < 1_000_000_000 && r.erp === "synced")).toBe(true);
+    expect(skills.find((r) => r.skillcompid === 11)).toMatchObject({
+      skillcompname: labelFor("GetSkillCompDropDown", 11),
+    });
+    const blender = skills.find((r) => r.compnametext === "Blender")!;
+    expect(blender).toMatchObject({ skillcompid: 0, levelname: labelFor("GetSkillCompLevelDropDown", 4) });
+    expect(blender.skillcompname ?? "").toBe(""); // listed by compnametext
+
+    // The next pull finds the same five.
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect((await lists()).skills.map((r) => Number(r.entryid))).toEqual(erpIds());
+  });
+
+  it("a row deleted here is left out of the array (and deleted first); the rest stay", async () => {
+    await firstLoad(threeSkills());
+    const ids = erpIds();
+    await post("DeleteAppSkillComp", undefined, `?entryid=${ids[0]}`);
+    const [excel] = (await lists()).skills; // the deleted one is gone here already
+    await post("SaveAppSkillComp", [{ ...excel, note: "Pivot, VBA" }]);
+    await flushAfter();
+
+    expect(erp.endpoints().filter((e) => e === "DeleteAppSkillComp" || e === "SaveAppSkillComp")).toEqual([
+      "DeleteAppSkillComp",
+      "SaveAppSkillComp",
+    ]);
+    const [body] = skillsSent();
+    expect(body.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
+    expect(erpIds()).toEqual([ids[1], ids[2]]);
+    expect((await lists()).skills.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
+  });
+
+  it("the delete failing: the row still stays out of the array (so replace mode drops it too)", async () => {
+    await firstLoad(threeSkills());
+    const ids = erpIds();
+    erp.refuse.set("DeleteAppSkillComp", "түр алдаа");
+    await post("DeleteAppSkillComp", undefined, `?entryid=${ids[0]}`);
+    const [excel] = (await lists()).skills;
+    await post("SaveAppSkillComp", [{ ...excel, note: "x" }]);
+    await flushAfter();
+    const [body] = skillsSent();
+    expect(body.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
+    expect(storedDoc().erp.pendingDeletes).toEqual([{ endpoint: "DeleteAppSkillComp", entryid: ids[0] }]);
+    expect((await lists()).skills.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
+  });
+
+  /** A new skill the ERP took while the re-read after it was refused: synced here, local id. */
+  async function savedButNotReread() {
+    await firstLoad(threeSkills());
+    erp.refuse.set("GetHrAppEducationData", "түр алдаа");
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 11, levelid: 2 }]);
+    await flushAfter();
+    erp.refuse.delete("GetHrAppEducationData");
+    expect(erp.lists.hrappcomplist).toHaveLength(4);
+    const local = (await lists()).skills.find((r) => r.skillcompid === 11)!;
+    expect(local).toMatchObject({ erp: "synced" });
+    expect(Number(local.entryid)).toBeGreaterThanOrEqual(1_000_000_000);
+    return { local, autocadId: Number(erp.lists.hrappcomplist[3].entryid) };
+  }
+  const autocads = () => erp.lists.hrappcomplist.filter((r) => r.skillcompid === 11);
+
+  it("re-read refused after the save: the next array sends that row with its ERP id, never as 0 again", async () => {
+    const { autocadId } = await savedButNotReread();
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 3, levelid: 4 }]);
+    await flushAfter();
+
+    const body = skillsSent().at(-1)!;
+    expect(body.filter((r) => r.entryid === 0).map((r) => r.skillcompid)).toEqual([3]);
+    expect(body.find((r) => r.skillcompid === 11)!.entryid).toBe(autocadId);
+    expect(autocads()).toHaveLength(1);
+    expect(erp.lists.hrappcomplist).toHaveLength(5);
+    const skills = (await lists()).skills;
+    expect(skills.map((r) => Number(r.entryid))).toEqual(erpIds());
+    expect(storedDoc().erp.unadopted).toBeUndefined();
+  });
+
+  it("…and an edit of that row lands on its ERP row", async () => {
+    const { local, autocadId } = await savedButNotReread();
+    await post("SaveAppSkillComp", [{ ...local, note: "3D" }]);
+    await flushAfter();
+    const body = skillsSent().at(-1)!;
+    expect(body.map((r) => r.entryid)).not.toContain(0);
+    expect(autocads()).toEqual([expect.objectContaining({ entryid: autocadId, note: "3D" })]);
+    expect((await lists()).skills.filter((r) => r.skillcompid === 11)).toEqual([
+      expect.objectContaining({ entryid: autocadId, note: "3D", erp: "synced" }),
+    ]);
+  });
+
+  it("the read before the save refused too: nothing is sent; once the ERP answers it goes, still one copy", async () => {
+    const { local } = await savedButNotReread();
+    erp.refuse.set("GetHrAppEducationData", "түр алдаа");
+    const saves = skillsSent().length;
+    await post("SaveAppSkillComp", [{ ...local, note: "3D" }]);
+    await flushAfter();
+    expect(skillsSent()).toHaveLength(saves); // held, not sent as new
+    erp.refuse.delete("GetHrAppEducationData");
+
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(skillsSent()).toHaveLength(saves + 1);
+    expect(autocads()).toEqual([expect.objectContaining({ note: "3D" })]);
+    expect((await lists()).skills.map((r) => Number(r.entryid))).toEqual(erpIds());
+  });
+
+  it("a pull adopts the ERP id too, so a later edit goes with it", async () => {
+    const { local, autocadId } = await savedButNotReread();
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    const skills = (await lists()).skills;
+    expect(skills.map((r) => Number(r.entryid))).toEqual(erpIds());
+    expect(storedDoc().erp.unadopted).toBeUndefined();
+
+    await post("SaveAppSkillComp", [{ ...local, entryid: autocadId, note: "3D" }]);
+    await flushAfter();
+    expect(autocads()).toEqual([expect.objectContaining({ entryid: autocadId, note: "3D" })]);
+  });
+
+  const sortedIds = (rows: Row[]) => rows.map((r) => Number(r.entryid)).sort((a, b) => a - b);
+  const settled = async () => {
+    expect(sortedIds((await lists()).skills)).toEqual(sortedIds(erp.lists.hrappcomplist));
+    expect(storedDoc().erp.unadopted).toBeUndefined();
+    expect(storedDoc().erp.flush).toBeUndefined(); // nothing held or left to retry
+  };
+
+  it("adoption is by content: the ERP listing the rows in another order changes nothing", async () => {
+    await firstLoad(threeSkills());
+    erp.refuse.set("GetHrAppEducationData", "түр алдаа");
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 11, levelid: 2 }]);
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 10, levelid: 4 }]);
+    await flushAfter();
+    erp.refuse.delete("GetHrAppEducationData");
+    expect(storedDoc().erp.unadopted.skills).toHaveLength(2);
+    erp.lists.hrappcomplist.reverse();
+    const [autocadErp, powerpointErp] = [11, 10].map(
+      (id) => erp.lists.hrappcomplist.find((r) => r.skillcompid === id)!.entryid,
+    );
+
+    const autocad = (await lists()).skills.find((r) => r.skillcompid === 11)!;
+    await post("SaveAppSkillComp", [{ ...autocad, note: "A" }]);
+    await flushAfter();
+    expect(skillsSent().at(-1)!.map((r) => r.entryid)).not.toContain(0);
+    expect(erp.lists.hrappcomplist).toHaveLength(5);
+    expect(erp.lists.hrappcomplist.find((r) => r.entryid === autocadErp)).toMatchObject({ skillcompid: 11, note: "A" });
+    expect(erp.lists.hrappcomplist.find((r) => r.entryid === powerpointErp)).toMatchObject({ skillcompid: 10, levelid: 4 });
+    expect(erp.lists.hrappcomplist.find((r) => r.entryid === powerpointErp)!.note).toBeUndefined();
+    await settled();
+  });
+
+  it("a row HR added meanwhile is not taken for ours; nothing is held", async () => {
+    await savedButNotReread();
+    erp.seedRow("hrappcomplist", { skillcompid: 7, levelid: 3 });
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 8, levelid: 4 }]);
+    await flushAfter();
+    expect(autocads()).toHaveLength(1);
+    expect(skillsSent().at(-1)!.filter((r) => r.entryid === 0).map((r) => r.skillcompid)).toEqual([8]);
+    expect((await lists()).skills.some((r) => r.skillcompid === 7)).toBe(true);
+    await settled();
+  });
+
+  it("HR added an identical row: no unique match, the unedited copy yields to the ERP's two; nothing is held", async () => {
+    await savedButNotReread();
+    erp.seedRow("hrappcomplist", { skillcompid: 11, levelid: 2 });
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 8, levelid: 4 }]);
+    await flushAfter();
+    expect(autocads()).toHaveLength(2); // HR's and ours — no third
+    expect((await lists()).skills.filter((r) => r.skillcompid === 11)).toHaveLength(2);
+    await settled();
+  });
+
+  it("a row whose ERP delete keeps failing is not a candidate: an edit of our identical new row lands on ours", async () => {
+    await firstLoad(threeSkills());
+    const [wordId] = erpIds();
+    erp.refuse.set("DeleteAppSkillComp", "түр алдаа");
+    await post("DeleteAppSkillComp", undefined, `?entryid=${wordId}`);
+    erp.refuse.set("GetHrAppEducationData", "түр алдаа");
+    // The same content as the Word row being deleted.
+    await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 3, levelid: 2, compnametext: "", note: "" }]);
+    await flushAfter();
+    erp.refuse.delete("GetHrAppEducationData");
+    const oursErp = Number(erp.lists.hrappcomplist.at(-1)!.entryid);
+
+    const ours = (await lists()).skills.find((r) => r.skillcompid === 3)!;
+    await post("SaveAppSkillComp", [{ ...ours, note: "mine" }]);
+    await flushAfter();
+    expect(skillsSent().at(-1)!.map((r) => r.entryid)).not.toContain(0);
+    expect(erp.lists.hrappcomplist.find((r) => r.entryid === oursErp)).toMatchObject({ note: "mine" });
+    // Left out of the array: upsert leaves it (its delete still queued), replace drops it.
+    const word = erp.lists.hrappcomplist.find((r) => r.entryid === wordId);
+    if (mode === "upsert") expect(word).toMatchObject({ note: "" });
+    else expect(word).toBeUndefined();
+    expect((await lists()).skills.filter((r) => r.skillcompid === 3)).toEqual([
+      expect.objectContaining({ entryid: oursErp, note: "mine" }),
+    ]);
+    expect(storedDoc().erp.pendingDeletes).toEqual([{ endpoint: "DeleteAppSkillComp", entryid: wordId }]);
+  });
+
+  it("an edited row whose ERP copy no longer matches goes as new: one extra row at worst, the edit kept, nothing stuck", async () => {
+    const { local } = await savedButNotReread();
+    erp.lists.hrappcomplist[3].levelid = 3; // changed in the ERP meanwhile
+    await post("SaveAppSkillComp", [{ ...local, note: "3D" }]);
+    await flushAfter();
+    expect(skillsSent().at(-1)!.filter((r) => r.entryid === 0)).toHaveLength(1);
+    expect(autocads()).toHaveLength(2);
+    expect(autocads().some((r) => r.note === "3D")).toBe(true);
+    await settled();
+  });
+
+  it("a row deleted in the ERP since the last pull (\"Мөр олдсонгүй.\"): read again, left out, saved once more", async () => {
+    await firstLoad(threeSkills());
+    const ids = erpIds();
+    erp.lists.hrappcomplist.shift(); // HR removed Word; no pull since
+    const [, excel] = (await lists()).skills;
+    await post("SaveAppSkillComp", [{ ...excel, note: "VBA" }]);
+    await flushAfter();
+
+    const sent = skillsSent();
+    expect(sent.map((b) => b.map((r) => r.entryid))).toEqual([ids, [ids[1], ids[2]]]);
+    expect(erp.lists.hrappcomplist[0]).toMatchObject({ entryid: ids[1], note: "VBA" });
+    expect((await lists()).skills.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
+    expect(storedDoc().erp.flush).toBeUndefined(); // done, nothing left to retry
+  });
+
+  it("an edit of the row the ERP no longer has is dropped with it; the rest still saves", async () => {
+    await firstLoad(threeSkills());
+    const ids = erpIds();
+    const [word] = (await lists()).skills;
+    erp.lists.hrappcomplist.shift();
+    await post("SaveAppSkillComp", [{ ...word, note: "gone" }]);
+    await flushAfter();
+    expect(skillsSent().at(-1)!.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
+    expect((await lists()).skills.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
+    expect(erpIds()).toEqual([ids[1], ids[2]]);
+  });
+});
+
 /* --- deletes: every section --------------------------------------------- */
 
 type DeleteCase = {
@@ -628,7 +950,7 @@ type DeleteCase = {
 const DELETE_CASES: DeleteCase[] = [
   { name: "education", list: "hrappedulist", ui: "education", save: "SaveHrAppEducation", saveBody: { entryid: 0, universitynametext: "L" }, del: "DeleteHrAppEducation", clientParam: "ENTRYID" },
   { name: "language", list: "hrapplanglist", ui: "languages", save: "SaveAppForLanguage", saveBody: { entryid: 0, forlanguageid: 15, note: "L" }, del: "DeleteAppForLanguage", clientParam: "entryid" },
-  { name: "skill", list: "hrappcomplist", ui: "skills", save: "SaveAppSkillComp", saveBody: [{ entryid: 0, note: "L" }], del: "DeleteAppSkillComp", clientParam: "entryid" },
+  { name: "skill", list: "hrappcomplist", ui: "skills", save: "SaveAppSkillComp", saveBody: [{ entryid: 0, skillcompid: 6, note: "L" }], del: "DeleteAppSkillComp", clientParam: "entryid" },
   { name: "experience", list: "hrappexplist", ui: "experience", save: "SaveAppExperience", saveBody: { entryid: 0, orgname: "L" }, del: "DeleteAppExperience", clientParam: "entryid" },
   { name: "family", list: "hrappfamilylist", ui: "family", save: "SaveAppFamily", saveBody: [{ entryid: 0, firstname: "L" }], del: "DeleteAppFamily", clientParam: "entryid" },
   { name: "interest", list: "interests", ui: "interests", save: "SaveInterestedJobItem", saveBody: { entryid: 0, note: "L" }, del: "deleteInterestedJob", clientParam: "entryid" },

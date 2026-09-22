@@ -15,18 +15,23 @@ import {
   CLAIM_TTL_MS,
   type ErpSnapshot,
   SECTIONS,
+  type SectionKey,
   type SnapshotEffect,
+  type Unadopted,
   applySnapshot,
   erpReady,
   flushDue,
   hasLocalWork,
+  isLocalId,
   linkedRegno,
   markLinked,
   mergeApplications,
   mergeSection,
   migrateForFirstPull,
+  applyAdoption,
   pullDue,
   registering,
+  unadoptedOf,
   sectionList,
   snapshotOf,
 } from "./erp-model";
@@ -290,11 +295,23 @@ function releaseClaim(doc: ApplicantDoc, claimed: Claim) {
   }
 }
 
-/** Saved but not re-read: mark them synced (their ids adopt on the next pull). */
-function markPushed(rows: Row[], pushed: Set<string>) {
-  for (const row of rows) {
-    if (row.erp === "pending" && pushed.has(snapshotOf(row))) row.erp = "synced";
+/**
+ * Saved but not re-read: mark them synced. A new row's ERP id is not known
+ * yet — it is noted as unadopted with the body it was saved with, so it is
+ * never sent as new again before the next pull or flush has looked for its
+ * ERP row (`planAdoption`).
+ */
+function markPushed(doc: ApplicantDoc, key: SectionKey, pushed: Set<string>) {
+  const local: Unadopted[] = [];
+  for (const row of doc[key]) {
+    if (row.erp !== "pending" || !pushed.has(snapshotOf(row))) continue;
+    row.erp = "synced";
+    if (isLocalId(row.entryid)) local.push(unadoptedOf(row));
   }
+  if (local.length === 0) return;
+  const unadopted = ((doc.erp ??= {}).unadopted ??= {});
+  const ids = new Set(local.map((entry) => entry.id));
+  unadopted[key] = [...(unadopted[key] ?? []).filter((entry) => !ids.has(entry.id)), ...local];
 }
 
 /** Stores what a flush achieved, on a freshly loaded document. */
@@ -330,12 +347,14 @@ function applyOutcome(
 
     // Sections: rows the ERP now has are represented by the re-read list.
     for (const config of SECTIONS) {
+      const adoption = outcome.adopted[config.key];
+      if (adoption) applyAdoption(doc, config.key, adoption);
       const pushed = outcome.pushed[config.key];
       const reread = config.source in outcome.sources ? sectionList(config, outcome.sources[config.source]) : null;
       if (reread) {
         doc[config.key] = mergeSection(config, doc[config.key], reread, erp.pendingDeletes, pushed);
       } else if (pushed?.size) {
-        markPushed(doc[config.key], pushed);
+        markPushed(doc, config.key, pushed);
       }
     }
 

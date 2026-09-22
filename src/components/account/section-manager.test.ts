@@ -20,6 +20,7 @@ import type { DropdownOption, DropdownQuery } from "@/lib/api";
 const state = vi.hoisted(() => ({
   rows: [] as Array<Record<string, unknown>>,
   languageRows: [] as Array<Record<string, unknown>>,
+  skillRows: [] as Array<Record<string, unknown>>,
   calls: [] as Array<{ list: string; query?: Record<string, unknown> }>,
   saved: [] as unknown[],
   /** Holds GetCountryDropDown back until released (null: answers at once). */
@@ -46,7 +47,13 @@ vi.mock("@/lib/api", () => {
   };
   const section = (listKey: string) => ({
     list: async () =>
-      listKey === "education" ? state.rows : listKey === "language" ? state.languageRows : [],
+      listKey === "education"
+        ? state.rows
+        : listKey === "language"
+          ? state.languageRows
+          : listKey === "computerSkill"
+            ? state.skillRows
+            : [],
     save: async (body: unknown) => {
       state.saved.push(body);
       return true;
@@ -73,8 +80,12 @@ vi.mock("@/lib/api", () => {
       foreignLanguages: list("foreignLanguages", () => rows([[15, "Англи"], [17, "Орос"]])),
       // GetForLanguageLevelDropDown as live answers it (2026-09-22, part).
       languageLevels: list("languageLevels", () => rows([[2, "Анхан"], [4, "Дунд"], [6, "Дээд түвшин"]])),
-      computerSkills: list("computerSkills", () => []),
-      computerSkillLevels: list("computerSkillLevels", () => []),
+      // GetSkillCompDropDown / GetSkillCompLevelDropDown as live answers them
+      // (2026-09-22, part): the same three levels under every skillcompid, 0 too.
+      computerSkills: list("computerSkills", () => rows([[11, "Autocad"], [3, "Word"], [6, "Excel"]])),
+      computerSkillLevels: list("computerSkillLevels", () =>
+        rows([[2, "Бүрэн эзэмшсэн"], [4, "Анхан шатны"], [3, "Хэрэглээний түвшинд"]]),
+      ),
       defaultCountry: async () => ({ countryid: 28, countryname: "Монгол" }),
     },
     sections: {
@@ -96,6 +107,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   state.rows = [];
   state.languageRows = [];
+  state.skillRows = [];
   state.calls = [];
   state.saved = [];
   state.countriesGate = null;
@@ -280,6 +292,39 @@ describe("education form: saved values the lists cannot show", () => {
     await click(buttonNamed("Засах"));
     await submit();
     expect(state.saved[0]).toMatchObject({ countryid: 3, divisionid: 999, universityid: 500 });
+  });
+});
+
+describe("education form → /api/me: a real edit replaces the row", () => {
+  it("columns the form never renders survive; a field emptied in the form is gone from the stored row", async () => {
+    // As the list serves an ERP row: ERP-only columns and our marker beside the form's fields.
+    const stored = { ...SAVED, schoolname: "МУИС", graduated: "Үгүй", certificateno: "D-77", erp: "synced" };
+    state.rows = [stored];
+    await render();
+    await click(buttonNamed("Засах"));
+    await choose("field-divisionid", ""); // emptied
+    await type("field-gpa", "3.8");
+    await submit();
+    expect(state.saved).toHaveLength(1);
+
+    const { handleApplicantRequest } = await import("@/server/applicant/handlers");
+    const doc = { education: [{ ...stored }] } as unknown as Parameters<typeof handleApplicantRequest>[1];
+    const result = await handleApplicantRequest(
+      { endpoint: "SaveHrAppEducation", method: "POST", query: new URLSearchParams(), body: state.saved[0] },
+      doc,
+      { label: () => "", nextEntryId: () => 1_000_000_001, jobOrder: () => null },
+    );
+    expect(result?.envelope.rettype).toBe(0);
+    expect(doc.education).toHaveLength(1);
+    expect(doc.education[0]).toMatchObject({
+      entryid: 11,
+      schoolname: "МУИС",
+      graduated: "Үгүй",
+      certificateno: "D-77",
+      gpa: 3.8,
+      erp: "synced",
+    });
+    expect(doc.education[0]).not.toHaveProperty("divisionid");
   });
 });
 
@@ -481,5 +526,167 @@ describe("language form", () => {
     await click(languageButton("Засах"));
     await submitLanguage();
     expect(state.saved[0]).toMatchObject({ score: "7" });
+  });
+});
+
+/* --- Компьютерийн мэдлэг ------------------------------------------------ */
+
+/** The third section on the page. */
+const skills = () => container.querySelectorAll("section")[2] as HTMLElement;
+
+const skillButton = (name: string) =>
+  [...skills().querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === name || button.getAttribute("aria-label") === name,
+  )!;
+
+async function submitSkill() {
+  await act(async () => {
+    skills()
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await settle();
+}
+
+const isDisabled = (id: string) => (document.getElementById(id) as HTMLButtonElement).disabled;
+const optionsOf = (id: string) =>
+  [...document.getElementById(id)!.parentElement!.querySelectorAll("option")].map((o) => o.textContent);
+
+const SAVED_SKILL = {
+  entryid: 43,
+  skillcompid: 6,
+  skillcompname: "Excel",
+  levelid: 4,
+  levelname: "Анхан шатны",
+  compnametext: "",
+  note: "Pivot",
+  erp: "synced",
+};
+
+describe("computer skill form: Программ → Эзэмшсэн түвшин", () => {
+  it("the level waits for a program: disabled and not fetched until one is picked", async () => {
+    await render();
+    await click(skillButton("Нэмэх"));
+    expect(isDisabled("field-levelid")).toBe(true);
+    expect(shown("field-levelid")).toBe("Эхлээд «Программ / ур чадвар» сонгоно уу");
+    expect(callsOf("computerSkillLevels")).toEqual([]);
+
+    await choose("field-skillcompid", "6");
+    expect(isDisabled("field-levelid")).toBe(false);
+    expect(callsOf("computerSkillLevels")).toEqual([{ skillcompid: 6 }]);
+    expect(optionsOf("field-levelid")).toEqual(
+      expect.arrayContaining(["Бүрэн эзэмшсэн", "Анхан шатны", "Хэрэглээний түвшинд"]),
+    );
+  });
+
+  it("changing the program empties the level and reads the list again under the new one", async () => {
+    await render();
+    await click(skillButton("Нэмэх"));
+    await choose("field-skillcompid", "6");
+    await choose("field-levelid", "2");
+    expect(shown("field-levelid")).toBe("Бүрэн эзэмшсэн");
+
+    await choose("field-skillcompid", "3");
+    expect(shown("field-levelid")).toBe("- Сонгох -");
+    expect(callsOf("computerSkillLevels")).toEqual([{ skillcompid: 6 }, { skillcompid: 3 }]);
+
+    await submitSkill();
+    expect(state.saved).toEqual([]); // the level is заавал
+    expect(skills().textContent).toContain("«Эзэмшсэн түвшин» талбарыг бөглөнө үү.");
+
+    await choose("field-levelid", "4");
+    await submitSkill();
+    expect(state.saved).toEqual([{ entryid: 0, skillcompid: 3, levelid: 4, compnametext: "" }]);
+  });
+
+  it("an edit opens on the saved program and level, both named, and saves untouched as it was", async () => {
+    state.skillRows = [SAVED_SKILL];
+    await render();
+    expect(skills().textContent).toContain("Excel");
+    expect(skills().textContent).toContain("Анхан шатны · Pivot");
+
+    await click(skillButton("Засах"));
+    expect(shown("field-skillcompid")).toBe("Excel");
+    expect(shown("field-levelid")).toBe("Анхан шатны");
+    expect(isDisabled("field-levelid")).toBe(false);
+    expect(callsOf("computerSkillLevels")).toEqual([{ skillcompid: 6 }]);
+
+    await submitSkill();
+    expect(state.saved).toHaveLength(1);
+    expect(state.saved[0]).toMatchObject({ entryid: 43, skillcompid: 6, levelid: 4, note: "Pivot", compnametext: "" });
+  });
+
+  it("emptying the note on an edit leaves it empty in the body (the row is replaced, not merged)", async () => {
+    state.skillRows = [SAVED_SKILL];
+    await render();
+    await click(skillButton("Засах"));
+    const note = document.getElementById("field-note") as HTMLTextAreaElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(note, "");
+      note.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await settle();
+    await submitSkill();
+    expect(state.saved[0]).toMatchObject({ entryid: 43, note: "" });
+  });
+});
+
+describe("computer skill form: программ жагсаалтад байхгүй", () => {
+  it("a program typed by hand is saved as skillcompid 0 + compnametext; its level list opens once the name is in", async () => {
+    await render();
+    await click(skillButton("Нэмэх"));
+    await click(document.getElementById("field-skillcompid-manual")!);
+    expect(document.getElementById("field-skillcompid")).toBeNull();
+    expect(isDisabled("field-levelid")).toBe(true);
+    expect(callsOf("computerSkillLevels")).toEqual([]);
+
+    await type("field-compnametext", "Figma");
+    expect(isDisabled("field-levelid")).toBe(false);
+    expect(callsOf("computerSkillLevels")).toEqual([{ skillcompid: 0 }]);
+    await type("field-compnametext", "Figma Pro"); // typing on does not refetch
+    expect(callsOf("computerSkillLevels")).toHaveLength(1);
+
+    await choose("field-levelid", "3");
+    await submitSkill();
+    expect(state.saved).toEqual([{ entryid: 0, skillcompid: 0, compnametext: "Figma Pro", levelid: 3 }]);
+  });
+
+  it("neither a listed program nor a typed name: nothing is sent", async () => {
+    await render();
+    await click(skillButton("Нэмэх"));
+    await submitSkill();
+    expect(state.saved).toEqual([]);
+    expect(skills().textContent).toContain("«Программ / ур чадвар» талбарыг бөглөнө үү.");
+  });
+
+  it("going back to the list drops the typed name and the level chosen under it", async () => {
+    await render();
+    await click(skillButton("Нэмэх"));
+    await click(document.getElementById("field-skillcompid-manual")!);
+    await type("field-compnametext", "Figma");
+    await choose("field-levelid", "3");
+    await click(document.getElementById("field-skillcompid-manual")!);
+    expect(shown("field-skillcompid")).toBe("- Сонгох -");
+    expect(shown("field-levelid")).toBe("Эхлээд «Программ / ур чадвар» сонгоно уу");
+    await choose("field-skillcompid", "11");
+    await choose("field-levelid", "2");
+    await submitSkill();
+    expect(state.saved).toEqual([{ entryid: 0, skillcompid: 11, levelid: 2, compnametext: "" }]);
+  });
+
+  it("a saved typed program is listed by its name and opens typed, its level named", async () => {
+    state.skillRows = [
+      { ...SAVED_SKILL, skillcompid: 0, skillcompname: "", compnametext: "Figma", levelid: 3, levelname: "Хэрэглээний түвшинд" },
+    ];
+    await render();
+    expect(skills().querySelector("li")!.textContent).toContain("Figma");
+    await click(skillButton("Засах"));
+    expect(document.getElementById("field-skillcompid")).toBeNull();
+    expect((document.getElementById("field-compnametext") as HTMLInputElement).value).toBe("Figma");
+    expect(shown("field-levelid")).toBe("Хэрэглээний түвшинд");
+    expect(callsOf("computerSkillLevels")).toEqual([{ skillcompid: 0 }]);
+    await submitSkill();
+    expect(state.saved[0]).toMatchObject({ entryid: 43, skillcompid: 0, compnametext: "Figma", levelid: 3 });
   });
 });

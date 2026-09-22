@@ -52,9 +52,10 @@ export type FieldDef = {
    */
   emptyAs?: EmptyAs;
   /**
-   * A `combobox` whose list may not have the answer: a switch under it trades
-   * the list for a text input writing `name` (the id is then left empty — so
-   * `emptyAs` decides what it is sent as). `required` is met by either.
+   * A `select` / `combobox` whose list may not have the answer: a switch
+   * under it trades the list for a text input writing `name` (the id is then
+   * left empty — so `emptyAs` decides what it is sent as). `required` is met
+   * by either, and so is a dependent field's `depsRequired`.
    */
   freeText?: { name: string; toggle: string; placeholder?: string };
   wide?: boolean;
@@ -79,10 +80,23 @@ function depKeyOf(field: FieldDef, values: Values): string {
   return (field.deps ?? []).map((name) => String(values[name] ?? "")).join("|");
 }
 
-/** `false` while a required parent is still unchosen. */
-function isReady(field: FieldDef, values: Values): boolean {
+/**
+ * `false` while a required parent is still unchosen. A parent answered by
+ * hand (its `freeText` switched on) counts once its name is typed — the list
+ * under it is then read with the parent's id empty (`0`).
+ */
+function isReady(
+  field: FieldDef,
+  values: Values,
+  fields: FieldDef[],
+  manual: Record<string, boolean>,
+): boolean {
   if (!field.depsRequired) return true;
-  return (field.deps ?? []).every((name) => String(values[name] ?? "") !== "");
+  return (field.deps ?? []).every((name) => {
+    if (String(values[name] ?? "") !== "") return true;
+    const typed = manual[name] ? fields.find((parent) => parent.name === name)?.freeText : undefined;
+    return !!typed && !isBlank(values[typed.name]);
+  });
 }
 
 function SelectField({
@@ -91,6 +105,7 @@ function SelectField({
   value,
   onChange,
   id,
+  ready,
   waitingFor,
 }: {
   field: FieldDef;
@@ -98,10 +113,10 @@ function SelectField({
   value: string;
   onChange: (value: string) => void;
   id: string;
+  ready: boolean;
   waitingFor: string;
 }) {
   const depKey = depKeyOf(field, values);
-  const ready = isReady(field, values);
 
   // The same loader the standalone forms use, so a dependent list behaves the
   // same way whether it is described by a `FieldDef` or wired up by hand.
@@ -144,6 +159,7 @@ function ComboboxField({
   value,
   onChange,
   id,
+  ready,
   waitingFor,
 }: {
   field: FieldDef;
@@ -151,10 +167,9 @@ function ComboboxField({
   value: string;
   onChange: (value: string) => void;
   id: string;
+  ready: boolean;
   waitingFor: string;
 }) {
-  const ready = isReady(field, values);
-
   return (
     <AsyncCombobox
       id={id}
@@ -198,11 +213,14 @@ function EntryForm({
     setValues((current) => clearDependents({ ...current, [name]: value }, name, edges));
   }
 
-  /** List ⇄ typed: the side switched away from is emptied, so only one is sent. */
+  /**
+   * List ⇄ typed: the side switched away from is emptied, so only one is sent.
+   * Either way the answer changed, so what hangs off the field goes too.
+   */
   function setTyped(field: FieldDef, typed: boolean) {
     setManual((current) => ({ ...current, [field.name]: typed }));
-    if (typed) set(field.name, "");
-    else set(field.freeText!.name, "");
+    set(field.name, "");
+    if (!typed) set(field.freeText!.name, "");
   }
 
   /** What the field holds: the typed name in typed mode, else its value. */
@@ -271,6 +289,7 @@ function EntryForm({
                   field={field}
                   values={values}
                   value={value}
+                  ready={isReady(field, values, fields, manual)}
                   waitingFor={labelOf(field.deps?.[0] ?? "")}
                   onChange={(next) => set(field.name, next)}
                 />
@@ -280,6 +299,7 @@ function EntryForm({
                   field={field}
                   values={values}
                   value={value}
+                  ready={isReady(field, values, fields, manual)}
                   waitingFor={labelOf(field.deps?.[0] ?? "")}
                   onChange={(next) => set(field.name, next)}
                 />

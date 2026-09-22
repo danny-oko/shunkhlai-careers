@@ -90,6 +90,13 @@ export class FakeErp {
   refuse = new Map<string, string>();
   /** Delay (ms) before answering any call — driven by the test's timers. */
   delayMs = 0;
+  /**
+   * How an array save (SaveAppSkillComp, SaveAppFamily) treats the rows it
+   * is NOT sent. Postman only says "бүх мөрийг нэг дор илгээнэ" and a live
+   * write cannot be tried, so both readings are modelled: `upsert` leaves
+   * them, `replace` makes the list exactly the array (unsent rows are gone).
+   */
+  batchSaves: "upsert" | "replace" = "upsert";
 
   constructor(seed?: (erp: FakeErp) => void) {
     this.record = {
@@ -241,17 +248,24 @@ export class FakeErp {
     const save = SAVES[endpoint];
     if (save) {
       const rows = save.batch ? (Array.isArray(body) ? (body as Row[]) : []) : [body as Row];
+      const list = L[save.list];
+      const next = save.batch && this.batchSaves === "replace" ? [] : [...list];
       for (const row of rows) {
         const entryid = Number(row.entryid ?? 0);
-        const list = L[save.list];
         if (entryid > 0) {
-          const i = list.findIndex((r) => Number(r.entryid) === entryid);
-          if (i < 0) return env(null, 1, "Мөр олдсонгүй.");
-          list[i] = { ...list[i], ...row };
+          const old = list.find((r) => Number(r.entryid) === entryid);
+          if (!old) return env(null, 1, "Мөр олдсонгүй.");
+          // An edit is the row as sent (an omitted column is reset, as
+          // SaveHrApplicant's is); only the audit columns stay.
+          const edited = { ...audit(old), ...row, entryid };
+          const i = next.indexOf(old);
+          if (i >= 0) next[i] = edited;
+          else next.push(edited);
         } else {
-          list.push({ ...row, entryid: this.id() });
+          next.push({ ...row, entryid: this.id() });
         }
       }
+      L[save.list] = next;
       return env(true);
     }
 
@@ -271,6 +285,9 @@ export class FakeErp {
     return env(null, 1, `unknown endpoint ${endpoint}`);
   }
 }
+
+/** The ERP's own audit columns of a row (`createdby`, `createddate`, …). */
+const audit = (row: Row) => Object.fromEntries(Object.entries(row).filter(([key]) => /^(created|updated)/.test(key)));
 
 function env(retdata: unknown, rettype = 0, retmsg = "") {
   return new Response(JSON.stringify({ rettype, retmsg, retdata }), {

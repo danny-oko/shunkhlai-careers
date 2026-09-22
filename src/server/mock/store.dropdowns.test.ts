@@ -36,21 +36,12 @@ describe("parent filtering", () => {
     expect(labels(umnugovi)).not.toContain("Баянгол");
   });
 
-  it("offers a different level list per computer skill", () => {
-    const word = dropdownRows(
-      "GetSkillCompLevelDropDown",
-      query("skillcompid=3"),
-    );
-    const sql = dropdownRows(
-      "GetSkillCompLevelDropDown",
-      query("skillcompid=14"),
-    );
-
-    expect(word.length).toBeGreaterThan(0);
-    expect(sql.length).toBeGreaterThan(0);
-    // Keys are unique across skills, so a level chosen under one skill is
-    // never a level of another — which is why the child has to be cleared.
-    expect(keys(word).some((key) => keys(sql).includes(key))).toBe(false);
+  it("answers the one computer-skill level list under every skill, as live does", () => {
+    // Live 2026-09-22: skillcompid=1, 3, 11, 0 and none all answer these three.
+    const expected = ["Бүрэн эзэмшсэн", "Анхан шатны", "Хэрэглээний түвшинд"];
+    for (const search of ["skillcompid=3", "skillcompid=11", "skillcompid=0", ""]) {
+      expect(labels(dropdownRows("GetSkillCompLevelDropDown", query(search)))).toEqual(expected);
+    }
   });
 
   it("treats countryid=0 as every university, per the collection", () => {
@@ -72,15 +63,12 @@ describe("parent filtering", () => {
   });
 
   it("offers nothing when a required parent is absent", () => {
-    // `divisionid` and `skillcompid` are заавал: no parent chosen is not the
-    // same question as "all of them".
+    // `divisionid` is заавал: no parent chosen is not the same question as
+    // "all of them".
     expect(dropdownRows("GetDistrictDropDown", query(""))).toEqual([]);
     expect(dropdownRows("GetDistrictDropDown", query("divisionid=0"))).toEqual(
       [],
     );
-    expect(
-      dropdownRows("GetSkillCompLevelDropDown", query("skillcompid=0")),
-    ).toEqual([]);
   });
 
   it("keeps the parent column off the wire", () => {

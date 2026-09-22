@@ -430,7 +430,9 @@ export const parentOf: Record<string, { param: string; required?: boolean }> = {
   GetDivisionDropDown: { param: "countryid" },
   GetUniversityDropDown: { param: "countryid" },
   GetDistrictDropDown: { param: "divisionid", required: true },
-  GetSkillCompLevelDropDown: { param: "skillcompid", required: true },
+  // GetSkillCompLevelDropDown takes `skillcompid`, but live (2026-09-22) it
+  // answers the same three levels under every skill, 0 and none included —
+  // so it is not filtered here either.
 };
 
 export const dropdowns: Record<string, Array<Record<string, unknown>>> = {
@@ -600,38 +602,23 @@ export const dropdowns: Record<string, Array<Record<string, unknown>>> = {
     { key: 6, text: "Дээд түвшин" },
     { key: 7, text: "Гүнзгий" },
   ],
+  // Both lists as the live ERP answers them (2026-09-22), in its order.
   GetSkillCompDropDown: [
-    { key: 3, text: "Word" },
-    { key: 4, text: "Excel" },
-    { key: 5, text: "PowerPoint" },
     { key: 11, text: "Autocad" },
-    { key: 12, text: "Photoshop" },
-    { key: 13, text: "1С" },
-    { key: 14, text: "SQL" },
+    { key: 3, text: "Word" },
+    { key: 4, text: "Photoshop" },
+    { key: 10, text: "Powerpoint" },
+    { key: 6, text: "Excel" },
+    { key: 7, text: "Access" },
+    { key: 8, text: "Project" },
+    { key: 9, text: "Pagemaker" },
+    { key: 2, text: "MS-365" },
+    { key: 5, text: "Corel Draw" },
   ],
-  // Every skill keeps its own level rows, keyed uniquely, exactly as the
-  // service does — which is why `levelid` from one skill means nothing under
-  // another and the field has to be cleared when the skill changes.
   GetSkillCompLevelDropDown: [
-    { key: 2, text: "Бүрэн эзэмшсэн", skillcompid: 3 },
-    { key: 3, text: "Дунд шат", skillcompid: 3 },
-    { key: 4, text: "Анхан шатны", skillcompid: 3 },
-    { key: 5, text: "Бүрэн эзэмшсэн", skillcompid: 4 },
-    { key: 6, text: "Дунд шат", skillcompid: 4 },
-    { key: 7, text: "Анхан шатны", skillcompid: 4 },
-    { key: 8, text: "Бүрэн эзэмшсэн", skillcompid: 5 },
-    { key: 9, text: "Дунд шат", skillcompid: 5 },
-    { key: 10, text: "Анхан шатны", skillcompid: 5 },
-    { key: 21, text: "2D зураг төсөл", skillcompid: 11 },
-    { key: 22, text: "3D загварчлал", skillcompid: 11 },
-    { key: 31, text: "Засвар, боловсруулалт", skillcompid: 12 },
-    { key: 32, text: "Мэргэжлийн дизайн", skillcompid: 12 },
-    { key: 41, text: "Анхан шатны", skillcompid: 13 },
-    { key: 42, text: "Нягтлан бодох бүртгэл", skillcompid: 13 },
-    { key: 43, text: "Тохиргоо, нэвтрүүлэлт", skillcompid: 13 },
-    { key: 51, text: "Энгийн query бичих", skillcompid: 14 },
-    { key: 52, text: "Хадгалагдсан процедур", skillcompid: 14 },
-    { key: 53, text: "Мэдээллийн сангийн зохиомж", skillcompid: 14 },
+    { key: 2, text: "Бүрэн эзэмшсэн" },
+    { key: 4, text: "Анхан шатны" },
+    { key: 3, text: "Хэрэглээний түвшинд" },
   ],
   GetJobDropDown: [
     { key: 8477, text: "Админ менежер" },

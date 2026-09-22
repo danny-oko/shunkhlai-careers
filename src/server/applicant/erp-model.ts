@@ -97,7 +97,7 @@ export function sectionList(config: SectionConfig, source: unknown): Row[] | nul
 }
 
 /** Ids of ERP rows queued for deletion through `endpoint`. */
-function deletedIds(deletes: PendingDelete[] | undefined, endpoint: string | undefined): Set<number> {
+export function deletedIds(deletes: PendingDelete[] | undefined, endpoint: string | undefined): Set<number> {
   return new Set(
     (deletes ?? []).filter((d) => d.endpoint === endpoint).map((d) => Number(d.entryid)),
   );
@@ -129,6 +129,142 @@ export function mergeSection(
     else result.push(row);
   }
   return result;
+}
+
+/* --- section save bodies ------------------------------------------------ */
+
+/**
+ * Labels our handler adds for display (the ERP derives its own from the ids);
+ * the browser never sent them, so neither do we.
+ */
+export const DISPLAY_ONLY = new Set([
+  "universityname",
+  "professionname",
+  "educationlevelname",
+  "forlanguagename",
+  "listeninglevelname",
+  "speakinglevelname",
+  "readinglevelname",
+  "writinglevelname",
+  "skillcompname",
+  "levelname",
+  "jobname",
+  "businesstypename",
+  "relativename",
+  "posgroupname",
+  "positionname",
+]);
+
+/** The body for a section save: our marker and labels dropped, the ERP id (or 0). */
+export function saveBody(row: Row): Row {
+  const body = Object.fromEntries(
+    Object.entries(row).filter(([key]) => key !== "erp" && !DISPLAY_ONLY.has(key)),
+  );
+  return { ...body, entryid: isLocalId(row.entryid) ? 0 : Number(row.entryid) };
+}
+
+/* --- rows the ERP holds under ids not known here ------------------------- */
+
+/** An unadopted row: its local id and the body the ERP accepted for it (no `entryid`). */
+export type Unadopted = { id: number; body: Row };
+
+/** What `markPushed` notes for a row saved without learning its ERP id. */
+export function unadoptedOf(row: Row): Unadopted {
+  const { entryid: _id, ...body } = saveBody(row);
+  return { id: Number(row.entryid), body };
+}
+
+const DATE = /^\s*(\d{4})[-.](\d{2})[-.](\d{2})(?:[T\s].*)?$/u;
+const NUMERIC = /^\s*-?\d+(?:\.\d+)?\s*$/u;
+
+/**
+ * A value as the ERP may hand it back: numbers and numeric text alike, dates
+ * as YYYY-MM-DD, text trimmed, and empty, null and 0 all "" (an omitted
+ * numeric column comes back as 0 or null).
+ */
+function normal(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const text = String(value).trim();
+  const date = DATE.exec(text);
+  if (date) return `${date[1]}-${date[2]}-${date[3]}`;
+  const out = NUMERIC.test(text) ? String(Number(text)) : text;
+  return out === "0" ? "" : out;
+}
+
+/** Every field the body sent reads back the same on the ERP row (extra ERP columns ignored). */
+function sameContent(body: Row, erpRow: Row): boolean {
+  return Object.keys(body).every((key) => normal(body[key]) === normal(erpRow[key]));
+}
+
+/** One pass over a section's unadopted rows against an ERP list (see `planAdoption`). */
+export type Adoption = {
+  /** Local id → ERP id. */
+  renamed: Map<number, number>;
+  /** Unmatched and unedited: the ERP's own row stands in, the local copy goes. */
+  dropped: number[];
+  /** Every unadopted id this pass settled (all of them). */
+  resolved: number[];
+};
+
+/**
+ * Finds the ERP rows the section's unadopted rows became, by content: the
+ * body each was saved with against the ERP rows no row here carries the id of
+ * (nor a queued delete). Only a unique 1:1 match is adopted. The rest:
+ * unedited → dropped (the ERP list stands in for them); edited → left with
+ * its local id, so it goes as a new row next — at worst one duplicate, never a
+ * lost edit or a stuck section. Every unadopted id is settled by one pass.
+ */
+export function planAdoption(doc: ApplicantDoc, config: SectionConfig, erpRows: Row[]): Adoption | null {
+  const entries = doc.erp?.unadopted?.[config.key] ?? [];
+  if (entries.length === 0) return null;
+  const rows = doc[config.key];
+  const known = new Set(rows.filter((row) => !isLocalId(row.entryid)).map((row) => Number(row.entryid)));
+  const gone = deletedIds(doc.erp?.pendingDeletes, config.remove);
+  const unknown = erpRows.filter((row) => {
+    const id = Number(row.entryid);
+    return id > 0 && !known.has(id) && !gone.has(id);
+  });
+
+  const present = entries.filter((entry) => rows.some((row) => Number(row.entryid) === entry.id));
+  const candidates = new Map(
+    present.map((entry) => [entry.id, unknown.filter((row) => sameContent(entry.body, row)).map((row) => Number(row.entryid))]),
+  );
+  const claims = new Map<number, number>();
+  for (const ids of candidates.values()) for (const id of ids) claims.set(id, (claims.get(id) ?? 0) + 1);
+
+  const adoption: Adoption = { renamed: new Map(), dropped: [], resolved: entries.map((entry) => entry.id) };
+  for (const entry of present) {
+    const ids = candidates.get(entry.id)!;
+    if (ids.length === 1 && claims.get(ids[0]) === 1) adoption.renamed.set(entry.id, ids[0]);
+    else if (rows.find((row) => Number(row.entryid) === entry.id)?.erp !== "pending") adoption.dropped.push(entry.id);
+  }
+  return adoption;
+}
+
+/**
+ * `rows` with an adoption applied (a new array; renamed rows are copies):
+ * ids adopted, unedited unmatched copies gone. Leaves `unadopted` alone.
+ */
+export function adoptRows(rows: Row[], adoption: Adoption): Row[] {
+  const dropped = new Set(adoption.dropped);
+  return rows
+    .filter((row) => !(dropped.has(Number(row.entryid)) && row.erp !== "pending"))
+    .map((row) => {
+      const erpId = adoption.renamed.get(Number(row.entryid));
+      return erpId ? { ...row, entryid: erpId } : row;
+    });
+}
+
+/** Applies an adoption to the document and settles its unadopted ids. */
+export function applyAdoption(doc: ApplicantDoc, key: SectionKey, adoption: Adoption): void {
+  doc[key] = adoptRows(doc[key], adoption);
+  const erp = doc.erp;
+  if (!erp?.unadopted?.[key]) return;
+  const resolved = new Set(adoption.resolved);
+  const left = erp.unadopted[key]!.filter((entry) => !resolved.has(entry.id));
+  if (left.length) erp.unadopted[key] = left;
+  else delete erp.unadopted[key];
+  if (Object.keys(erp.unadopted).length === 0) delete erp.unadopted;
 }
 
 /* --- display labels ----------------------------------------------------- */
@@ -171,6 +307,19 @@ export const SECTION_LABELS: Partial<Record<SectionKey, LabelSpec[]>> = {
       id: `${skill}levelid`,
       dropdown: "GetForLanguageLevelDropDown",
     })),
+  ],
+  // Postman `hrappcomplist` is ids only as well. A program the list lacks is
+  // `skillcompid: 0` + `compnametext` (no list label); its level is still
+  // looked up — live (2026-09-22) the level list is the same under every
+  // `skillcompid`, 0 included.
+  skills: [
+    { name: "skillcompname", id: "skillcompid", dropdown: "GetSkillCompDropDown" },
+    {
+      name: "levelname",
+      id: "levelid",
+      dropdown: "GetSkillCompLevelDropDown",
+      parents: (row) => [{ skillcompid: Number(row.skillcompid) || 0 }],
+    },
   ],
 };
 
@@ -423,6 +572,10 @@ export function applySnapshot(doc: ApplicantDoc, snap: ErpSnapshot, now: Date): 
     if (!(config.source in snap.sources)) continue;
     const list = sectionList(config, snap.sources[config.source]);
     if (!list) continue; // unusable answer: keep D1 as it is
+    // Rows saved into the ERP before without their ids: adopt them first, so an
+    // edit made here since lands on its ERP row instead of beside it.
+    const adoption = planAdoption(doc, config, list);
+    if (adoption) applyAdoption(doc, config.key, adoption);
     doc[config.key] = mergeSection(config, doc[config.key], list, erp.pendingDeletes);
   }
 
