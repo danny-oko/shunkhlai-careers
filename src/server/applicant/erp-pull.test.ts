@@ -32,6 +32,7 @@ function emptyDoc(profile: Row = {}): ApplicantDoc {
     relatives: [],
     interests: [],
     applications: [],
+    cv: null,
     picture: null,
   };
 }
@@ -107,12 +108,9 @@ describe("applySnapshot", () => {
       expect(doc[s.key][0]).not.toHaveProperty("createdby");
     }
     expect(doc.applications).toHaveLength(1);
-    // The live ERP still returns a CV on `get`; it is never imported.
-    expect(doc).not.toHaveProperty("cv");
-    expect(doc.profile).not.toHaveProperty("filedata");
-    expect(doc.profile).not.toHaveProperty("filename");
+    expect(doc.cv).toEqual({ filename: "cv.pdf", filedata: "Q1Y=" });
     expect(doc.picture).toContain("/9j/");
-    expect(effect).toEqual({ picture: true });
+    expect(effect).toEqual({ cv: true, picture: true });
     expect(doc.erp?.appliedOrderIds).toEqual([707]);
   });
 
@@ -188,6 +186,17 @@ describe("recordLocalChange", () => {
     recordLocalChange(doc, "DeleteAppExperience", true, { entryid: LOCAL_ID_BASE + 3, erp: "pending" });
     recordLocalChange(doc, "DeleteAppExperience", true, undefined);
     expect(doc.erp?.pendingDeletes).toEqual([{ endpoint: "DeleteAppExperience", entryid: 501 }]);
+  });
+
+  it("deleteAppCV marks the CV for an ERP delete only when the ERP had it", () => {
+    const synced = emptyDoc();
+    synced.erp = { cvHash: "h" };
+    recordLocalChange(synced, "deleteAppCV", true, undefined);
+    expect(synced.erp?.cvDirty).toBeTruthy();
+    const local = emptyDoc();
+    local.erp = { cvDirty: 1 };
+    recordLocalChange(local, "deleteAppCV", true, undefined);
+    expect(local.erp?.cvDirty).toBeUndefined();
   });
 });
 

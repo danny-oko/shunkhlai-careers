@@ -142,6 +142,7 @@ export function createAccount(input: {
     relatives: [],
     interests: [],
     applications: [],
+    cv: null,
     picture: null,
   };
 

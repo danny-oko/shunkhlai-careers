@@ -15,7 +15,7 @@ src/lib/
       errors.ts     one error shape for the whole app
       factories.ts  the two repeating endpoint patterns (below)
     auth.ts         sign-up / sign-in — one endpoint, as in the collection
-    profile.ts      core record, photo, completion percentages
+    profile.ts      core record, photo, CV, completion percentages
     reference.ts    every dropdown
     sections.ts     the CV sections, over three bundle endpoints
     jobs.ts         open postings, detail, filter data
@@ -111,7 +111,7 @@ are refined client-side over the rows already fetched.
 
 `NEXT_PUBLIC_API_URL` unset → the app talks to `src/app/api/applicant/[...path]`,
 which answers on the same paths with the same envelope, backed by the in-memory
-store in `src/server/mock/`. Accounts, applications and every CV section
+store in `src/server/mock/`. Accounts, CVs, applications and every CV section
 are real writes that survive until the server restarts. Set the env var and the
 client goes to the real origin instead; nothing else changes.
 

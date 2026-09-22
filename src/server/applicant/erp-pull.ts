@@ -42,7 +42,7 @@ function splitGet(data: unknown): { record: Row | null; recruitmentorders: Row[]
 }
 
 export type PullScope = {
-  /** `/get`: profile, photo, recruitmentorders. */
+  /** `/get`: profile, CV, photo, recruitmentorders. */
   record?: boolean;
   /** Section sources (`GetHrAppEducationData`, …, `getInterestedJobsList`). */
   sources?: string[];

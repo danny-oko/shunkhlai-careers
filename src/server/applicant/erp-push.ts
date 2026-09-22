@@ -1,19 +1,21 @@
 import "server-only";
+import { createHash } from "node:crypto";
 
 import { buildProfilePayload } from "@/lib/api/profile-payload";
 import type { ApplicantProfile, ProfileInput } from "@/lib/api/profile";
-import { ErpError, erpGet, erpLogin, erpPost, hasErp } from "./erp";
+import { ErpError, erpGet, erpLogin, erpPost, erpUpload, hasErp } from "./erp";
 import { CLAIM_TTL_MS, MAX_ATTEMPTS, PROFILE_KEYS, RETRY_FAILED_AFTER_MS, RETRY_PENDING_AFTER_MS, erpIdOfApplication } from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
- * Best-effort copy of an application (plus the applicant's profile) to
+ * Best-effort copy of an application (plus the applicant's profile and CV) to
  * the live ERP. D1 is the record of truth: the application is saved there
  * first, and this only reports how the push went so it can be stored on the
  * row and retried.
  *
  * Additive only: it updates the ERP profile (starting from the ERP's own record
- * and overlaying non-empty D1 values — SaveHrApplicant is a full replace), and creates the application. It never deletes or
+ * and overlaying non-empty D1 values — SaveHrApplicant is a full replace), sends
+ * the CV when it changed, and creates the application. It never deletes or
  * replaces other ERP rows and never touches education/experience/family.
  */
 
@@ -35,6 +37,8 @@ export type PushResult = {
   status: "sent" | "failed" | "skipped";
   error?: string;
   erpEntryId?: number;
+  /** Set when the CV was sent; persist as `doc.erp.cvHash`. */
+  cvHash?: string;
   /** The ERP request list read after submitting (for the re-pull). */
   erpList?: Row[];
 };
@@ -43,7 +47,9 @@ export type PushIdentity = { firstname: string; lastname: string; email: string 
 
 export type PushDeps = {
   identity: PushIdentity;
-  /** Shared by the pushes of one batch: one login, one profile sync. */
+  /** The stored CV (base64), loaded only when needed. */
+  loadCv: () => Promise<{ filename: string; data: string } | null>;
+  /** Shared by the pushes of one batch: one login, one profile/CV sync. */
   batch?: PushBatch;
   /** Postings the ERP already has an application for (`/get` recruitmentorders). */
   appliedOrderIds?: number[];
@@ -53,7 +59,7 @@ export type Step<T> = { ok: true; value: T } | { ok: false; error: string };
 
 export type PushBatch = {
   login?: Promise<Step<string>>;
-  sync?: Promise<Step<undefined>>;
+  sync?: Promise<Step<string | undefined>>;
 };
 
 export const createPushBatch = (): PushBatch => ({});
@@ -162,8 +168,12 @@ export async function loginFor(doc: ApplicantDoc): Promise<Step<string>> {
   }
 }
 
-/** Sends the profile. */
-async function syncProfile(doc: ApplicantDoc, token: string): Promise<Step<undefined>> {
+/** Profile, then CV if it changed. Resolves to the CV hash when one was sent. */
+async function syncProfileAndCv(
+  doc: ApplicantDoc,
+  token: string,
+  deps: PushDeps,
+): Promise<Step<string | undefined>> {
   try {
     const record = erpRecord(await erpGet<unknown>("get", token));
     const input = {
@@ -174,7 +184,19 @@ async function syncProfile(doc: ApplicantDoc, token: string): Promise<Step<undef
     logFailure("erp_profile_failed", error);
     return { ok: false, error: "erp_profile_failed" };
   }
-  return { ok: true, value: undefined };
+
+  if (!doc.cv) return { ok: true, value: undefined };
+  try {
+    const cv = await deps.loadCv();
+    if (!cv?.data) return { ok: true, value: undefined };
+    const hash = createHash("sha256").update(cv.data).digest("hex");
+    if (hash === doc.erp?.cvHash) return { ok: true, value: undefined };
+    await erpUpload("SaveAppCV", token, { filename: cv.filename, base64: cv.data });
+    return { ok: true, value: hash };
+  } catch (error) {
+    logFailure("erp_cv_failed", error);
+    return { ok: false, error: "erp_cv_failed" };
+  }
 }
 
 /* --- entry points ------------------------------------------------------- */
@@ -196,13 +218,14 @@ export async function pushApplication(
   if (!session.ok) return { status: "failed", error: session.error };
   const token = session.value;
 
-  batch.sync ??= syncProfile(doc, token);
+  batch.sync ??= syncProfileAndCv(doc, token, deps);
   const synced = await batch.sync;
   if (!synced.ok) return { status: "failed", error: synced.error };
+  const cvHash = synced.value;
 
   // Already applied (per the ERP's own record): never submit it twice.
   if ((deps.appliedOrderIds ?? []).includes(Number(app.recruitmentorderid))) {
-    return { status: "sent" };
+    return { status: "sent", cvHash };
   }
 
   // The request list carries no recruitmentorderid, so the new application is
@@ -220,7 +243,7 @@ export async function pushApplication(
   } catch (error) {
     if (!isDuplicateApplication(error)) {
       logFailure("erp_apply_failed", error);
-      return { status: "failed", error: "erp_apply_failed" };
+      return { status: "failed", error: "erp_apply_failed", cvHash };
     }
   }
 
@@ -241,7 +264,7 @@ export async function pushApplication(
     logFailure("erp_list_failed", error);
   }
 
-  return { status: "sent", erpEntryId, erpList };
+  return { status: "sent", erpEntryId, cvHash, erpList };
 }
 
 /** Withdraws the ERP copy of an application. Best-effort; never throws. */

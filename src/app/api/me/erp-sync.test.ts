@@ -116,7 +116,7 @@ function seedCredentials() {
     .run("p1", "u1", JSON.stringify({ regno: erp.regno, mobilephone: erp.phone }), Date.now());
 }
 
-/** A fake ERP holding one row in every section, a photo and an application. */
+/** A fake ERP holding one row in every section, a CV, a photo and an application. */
 function richErp() {
   return new FakeErp((e) => {
     e.seedRow("hrappedulist", { schoolname: "МУИС", universityid: 3 });
@@ -131,7 +131,6 @@ function richErp() {
     e.seedRow("interests", { posgroupid: 142, note: "Инженер" });
     e.recruitmentorders.push({ recruitmentorderid: 707 });
     e.lists.requests.push({ entryid: e.id(), recruitmentorderid: 707, posname: "Нягтлан", statusname: "Хүлээн авсан" });
-    // The live ERP still holds a CV; this site must ignore it.
     e.record.filedata = Buffer.from("ERP-CV-BYTES").toString("base64");
     e.record.filename = "erp-cv.pdf";
     e.record.picturedata = Buffer.from([0xff, 0xd8, 0xff, 0x01]).toString("base64");
@@ -210,14 +209,14 @@ afterEach(() => {
 /* --- pull ---------------------------------------------------------------- */
 
 describe("first load (pull)", () => {
-  it("imports every section, the profile, the photo and the applications", async () => {
+  it("imports every section, the profile, the CV/photo and the applications", async () => {
     const r = await firstLoad();
     expect(r.status).toBe(200);
     const p = r.body.retdata as Row;
-    // The very first response already carries the ERP profile and photo (inline pull).
+    // The very first response already carries the ERP profile and files (inline pull).
     expect(p).toMatchObject({ lastname: "Дорж", firstname: "Бат", addr2: "ERP хаяг", custom1: "ERP custom", regno: erp.regno });
-    expect(p).not.toHaveProperty("filename");
-    expect(p).not.toHaveProperty("filedata");
+    expect(p.filename).toBe("erp-cv.pdf");
+    expect(p.filedata).toBe(erp.record.filedata);
     expect(String(p.picturedata)).toContain(String(erp.record.picturedata));
 
     const l = await lists();
@@ -543,17 +542,56 @@ describe.each(DELETE_CASES)("delete: $name", (c) => {
   });
 });
 
-describe("CV endpoints are gone", () => {
-  it("SaveAppCV and deleteAppCV are unknown requests: 404, no ERP call, no D1 file row", async () => {
+describe("delete: CV (deleteAppCV)", () => {
+  it("sends deleteAppCV (no params) and the ERP loses the CV; a pull does not bring it back", async () => {
     await firstLoad();
-    erp.calls = [];
+    expect(((await get("get")).body.retdata as Row).filename).toBe("erp-cv.pdf");
+    expect((await post("deleteAppCV")).body.rettype).toBe(0);
+    await flushAfter();
+    const call = erp.calls.find((x) => x.endpoint === "deleteAppCV");
+    expect(call).toBeDefined();
+    expect([...call!.params.keys()]).toEqual([]);
+    expect(erp.record.filedata ?? null).toBeNull();
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(((await get("get")).body.retdata as Row).filename).toBeNull();
+  });
+
+  it("ERP down → stays queued, a pull meanwhile does not restore it, the next due get retries", async () => {
+    await firstLoad();
+    erp.down = true;
+    await post("deleteAppCV");
+    await flushAfter();
+    erp.down = false;
+    erp.refuse.set("deleteAppCV", "түр алдаа");
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(((await get("get")).body.retdata as Row).filename).toBeNull(); // not restored
+    erp.refuse.delete("deleteAppCV");
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.record.filedata ?? null).toBeNull();
+  });
+
+  it("deleting a CV that was only ever local makes no ERP call", async () => {
+    erp = new FakeErp();
+    await firstLoad(erp);
+    erp.down = true;
     const fd = new FormData();
     fd.set("file", new File([new Uint8Array([1, 2, 3])], "local.pdf"));
-    expect((await post("SaveAppCV", fd)).status).toBe(404);
-    expect((await post("deleteAppCV")).status).toBe(404);
+    await post("SaveAppCV", fd);
     await flushAfter();
-    expect(erp.endpoints()).not.toContain("SaveAppCV");
+    erp.down = false;
+    erp.calls = [];
+    await post("deleteAppCV");
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
     expect(erp.endpoints()).not.toContain("deleteAppCV");
+    expect(erp.endpoints()).not.toContain("SaveAppCV");
   });
 });
 
@@ -615,6 +653,7 @@ describe("mock mode (NEXT_PUBLIC_API_URL unset)", () => {
     const created = await post("SaveHrAppEducation", { entryid: 0, schoolname: "S" });
     await post("DeleteHrAppEducation", undefined, `?ENTRYID=${(created.body.retdata as Row).entryid}`);
     await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
+    await post("deleteAppCV");
     await flushAfter();
     advance(60 * 60_000);
     await get("get");
@@ -630,6 +669,7 @@ describe("leaks", () => {
     await firstLoad();
     const p = (await get("get")).body.retdata as Row;
     expect(p).not.toHaveProperty("pendingDeletes");
+    expect(p).not.toHaveProperty("cvHash");
     expect(JSON.stringify(p)).not.toContain(erp.token);
   });
 });

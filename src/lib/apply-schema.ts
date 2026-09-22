@@ -6,6 +6,31 @@ export const REGISTER_ID_PATTERN = /^[А-ЯӨҮ]{2}\d{8}$/;
 /** Mongolian mobile: eight digits, optionally prefixed with +976. */
 export const PHONE_PATTERN = /^(\+?976[\s-]?)?\d{4}[\s-]?\d{4}$/;
 
+export const MAX_CV_BYTES = 5 * 1024 * 1024;
+
+export const ACCEPTED_CV_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+];
+
+export const ACCEPTED_CV_EXTENSIONS = [".pdf", ".doc", ".docx"];
+
+export function describeCvFileError(file: File): string | null {
+  const hasAcceptedType = ACCEPTED_CV_TYPES.includes(file.type);
+  const hasAcceptedExtension = ACCEPTED_CV_EXTENSIONS.some((ext) =>
+    file.name.toLowerCase().endsWith(ext),
+  );
+
+  if (!hasAcceptedType && !hasAcceptedExtension) {
+    return "Upload a PDF, DOC or DOCX file.";
+  }
+  if (file.size > MAX_CV_BYTES) {
+    return "That file is larger than 5 MB.";
+  }
+  return null;
+}
+
 /**
  * The apply endpoint's salary field is a salary-LEVEL key — the `key` of a
  * `getDropDownData.salarylevel` band — not an amount in tögrög. The backend
@@ -51,6 +76,22 @@ export const applicationSchema = z
       .trim()
       .max(1000, "Please keep this under 1000 characters.")
       .optional(),
+    cv: z.custom<File | null>().nullable(),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.cv) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cv"],
+        message: "Attach your CV to continue.",
+      });
+      return;
+    }
+
+    const fileError = describeCvFileError(values.cv);
+    if (fileError) {
+      ctx.addIssue({ code: "custom", path: ["cv"], message: fileError });
+    }
   });
 
 export type ApplicationValues = z.infer<typeof applicationSchema>;
@@ -61,4 +102,5 @@ export const applicationDefaults: ApplicationValues = {
   phone: "",
   registerId: "",
   note: "",
+  cv: null,
 };

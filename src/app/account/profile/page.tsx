@@ -1,7 +1,8 @@
 "use client";
 
-import { PhotoUpload } from "@/components/account/profile-files";
+import { CvManager, PhotoUpload } from "@/components/account/profile-files";
 import { ProfileForm } from "@/components/account/profile-form";
+import { Separator } from "@/components/ui/separator";
 
 export default function ProfilePage() {
   return (
@@ -16,6 +17,12 @@ export default function ProfilePage() {
           Анкет илгээхэд шаардагдах үндсэн мэдээлэл.
         </p>
         <ProfileForm />
+      </section>
+
+      <Separator />
+
+      <section className="border-border/70 rounded-xl border p-6">
+        <CvManager />
       </section>
     </div>
   );

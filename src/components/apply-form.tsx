@@ -1,8 +1,10 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import { FileWarning, Loader2 } from "lucide-react";
 
 import type { DropdownOption } from "@/lib/api";
+import { useSession } from "@/components/auth/session-provider";
 import type { useApplyForm, useApplyOptions } from "@/components/use-apply-form";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage } from "@/components/ui/field";
@@ -39,6 +41,22 @@ const LoadedSelect = ({
   </Select>
 );
 
+const CvNotice = () => {
+  const { profile } = useSession();
+  return profile?.filename ? null : (
+    <div className="border-border/70 bg-muted/40 flex gap-3 rounded-lg border p-4">
+      <FileWarning className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+      <p className="text-muted-foreground text-sm">
+        CV хавсаргаагүй байна.{" "}
+        <Link href="/account/profile" className="text-foreground underline underline-offset-4">
+          Профайлаас хавсаргах
+        </Link>{" "}
+        нь сонгон шалгаруулалтад давуу тал болно.
+      </p>
+    </div>
+  );
+};
+
 const salaryHint = (job: JobDetail) =>
   job.salaryLevel ? `Зарласан түвшин: ${job.salaryLevel}` : undefined;
 
@@ -50,7 +68,7 @@ const SubmitButton = ({ isSending }: { isSending: boolean }) => (
 );
 
 /**
- * `SaveHrRecruitmentOrderApp` attaches the applicant's saved anketa
+ * `SaveHrRecruitmentOrderApp` attaches the applicant's saved anketa and CV
  * automatically, so this form only asks for what is specific to *this*
  * application: salary level (optional), earliest start date, and where they
  * heard about the role.
@@ -73,6 +91,8 @@ export const ApplyForm = ({
     </SheetHeader>
 
     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6">
+      <CvNotice />
+
       <Field label="Хүссэн цалингийн түвшин" htmlFor="salrequest" hint={salaryHint(job)}>
         <LoadedSelect
           id="salrequest"
@@ -104,6 +124,9 @@ export const ApplyForm = ({
 
     <SheetFooter className="border-border/70 mt-0 gap-3 border-t px-6 py-4">
       <SubmitButton isSending={apply.isSending} />
+      <p className="text-muted-foreground text-center text-xs leading-relaxed">
+        Илгээснээр таны хадгалсан анкет болон CV энэ ажлын байранд хавсрагдана.
+      </p>
     </SheetFooter>
   </form>
 );

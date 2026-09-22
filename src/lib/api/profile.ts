@@ -6,7 +6,8 @@ export { buildProfilePayload };
 
 /**
  * The applicant's core record. One call returns the personal details, the
- * profile photo *and* the per-section completion percentages.
+ * profile photo, the CV *and* the per-section completion percentages — there
+ * is no separate endpoint for downloading a CV.
  */
 
 export type MaritalOption = { key: string; text: string };
@@ -49,6 +50,9 @@ export type ApplicantProfile = {
   maritalOptions?: MaritalOption[];
   /** Base64 profile photo. */
   picturedata?: string | null;
+  /** CV file name and Base64 contents. */
+  filename?: string | null;
+  filedata?: string | null;
   /** Completion percentages, 0-100. */
   persinfoper?: number;
   educationper?: number;
@@ -122,6 +126,16 @@ export function saveProfile(body: ProfileInput, loaded?: ApplicantProfile | null
 /** POST /api/me/SaveAppPicture */
 export function uploadPhoto(file: File) {
   return apiUpload<unknown>(`${ME_BASE}/SaveAppPicture`, file);
+}
+
+/** POST /api/me/SaveAppCV — one CV per applicant; re-uploading replaces it. */
+export function uploadCv(file: File) {
+  return apiUpload<unknown>(`${ME_BASE}/SaveAppCV`, file);
+}
+
+/** POST /api/me/deleteAppCV — no parameters; the Clerk session identifies the applicant. */
+export function deleteCv() {
+  return apiPost<unknown>(`${ME_BASE}/deleteAppCV`);
 }
 
 /** Turns the Base64 photo from `getProfile` into something `<img src>` accepts. */

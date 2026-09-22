@@ -63,7 +63,7 @@ export function JobBrowser({
   const salaryLevelId = params.get("salaryLevelID") ?? "";
 
   const visibleJobs = React.useMemo(() => applyFacets(jobs, facets), [jobs, facets]);
-  const { options: groupRows } = useDropdown(() => reference.jobGroups({ ids: 1 }), []);
+  const { options: groupRows } = useDropdown(() => reference.positionGroups(), []);
   const groups = React.useMemo(() => groupOptions(groupRows), [groupRows]);
   const companies = React.useMemo(() => companyOptions(jobs), [jobs]);
   const workTypes = React.useMemo(() => workTypeOptions(jobs), [jobs]);

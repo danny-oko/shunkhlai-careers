@@ -52,7 +52,7 @@ function tally(jobs: Job[], pick: (job: Job) => string, allLabel: string): Facet
   ];
 }
 
-/** From `reference.jobGroups()` (`GetJobDropDown?ids=1`), not tallied from the page's rows. */
+/** From `reference.positionGroups()` (`getPosGroupDropdown`), not tallied from the page's rows. */
 export function groupOptions(options: DropdownOption[]): FacetOption[] {
   return [
     { value: ALL, label: "Бүх бүлэг" },

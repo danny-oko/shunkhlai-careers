@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -89,6 +90,7 @@ const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit
     case "get":
       return envelope({ applicantdata: [erp.record] });
     case "SaveHrApplicant":
+    case "SaveAppCV":
     case "DeleteOrderApp":
       return envelope(true);
     case "SaveHrRecruitmentOrderApp": {
@@ -118,6 +120,7 @@ function doc(profile: Row = {}, over: Partial<ApplicantDoc> = {}): ApplicantDoc 
     relatives: [],
     interests: [],
     applications: [],
+    cv: null,
     picture: null,
     ...over,
   };
@@ -134,8 +137,10 @@ const app: Row = {
 };
 
 const identity = { firstname: "Бат", lastname: "Дорж", email: "bat@x.mn" };
-function deps() {
-  return { identity, batch: createPushBatch() };
+const CV = { filename: "cv.pdf", data: Buffer.from("PDF-BYTES").toString("base64") };
+
+function deps(cv: typeof CV | null = null) {
+  return { identity, loadCv: vi.fn(async () => cv), batch: createPushBatch() };
 }
 
 /** AbortSignal.timeout driven by (fakeable) setTimeout. */
@@ -202,12 +207,14 @@ afterEach(() => {
 
 describe("pushApplication (validator)", () => {
   it("happy path: exact call order, bearer on every authed call, entry id from the list", async () => {
-    const r = await pushApplication(doc(), app, deps());
+    const r = await pushApplication(doc({}, { cv: { filename: "cv.pdf", filedata: "" } }), app, deps(CV));
     expect(r).toMatchObject({ status: "sent", erpEntryId: 900 });
+    expect(r.cvHash).toBe(createHash("sha256").update(CV.data).digest("hex"));
     expect(endpoints()).toEqual([
       "auth/login",
       "get",
       "SaveHrApplicant",
+      "SaveAppCV",
       "SaveHrRecruitmentOrderApp",
       "getRecruitmenRequestList",
     ]);
@@ -215,6 +222,7 @@ describe("pushApplication (validator)", () => {
     for (const c of erp.calls.slice(1)) expect(c.auth).toBe(`Bearer ${TOKEN}`);
     const apply = erp.calls.find((c) => c.endpoint === "SaveHrRecruitmentOrderApp")!.body as Row;
     expect(apply).toMatchObject({ recruitmentorderid: 786, salrequest: 3000000, poshiredate: "2026.10.01", recsourceid: 2 });
+    expect(erp.calls.find((c) => c.endpoint === "SaveAppCV")!.body).toEqual({ filename: "cv.pdf", bytes: CV.data });
   });
 
   it("login fails → never calls SaveHrAppUser → failed erp_login_failed, nothing else sent", async () => {
@@ -254,6 +262,17 @@ describe("pushApplication (validator)", () => {
     }
   });
 
+  it("CV is sent once; the same CV (same hash) is not re-sent", async () => {
+    const d = doc({}, { cv: { filename: "cv.pdf", filedata: "" } });
+    const first = await pushApplication(d, app, deps(CV));
+    expect(endpoints().filter((e) => e === "SaveAppCV")).toHaveLength(1);
+    d.erp = { cvHash: first.cvHash };
+    erp.calls = [];
+    const second = await pushApplication(d, { ...app, recruitmentorderid: 787 }, deps(CV));
+    expect(second.status).toBe("sent");
+    expect(endpoints()).not.toContain("SaveAppCV");
+  });
+
   it("duplicate application from the ERP counts as sent (id looked up)", async () => {
     erp.applyError = "Та энэ ажлын байранд аль хэдийн анкет илгээсэн байна.";
     erp.requestList.push({ entryid: 777, recruitmentorderid: 786 });
@@ -282,7 +301,7 @@ describe("pushApplication (validator)", () => {
 
   it("NEXT_PUBLIC_API_URL unset → skipped, fetch never called", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "");
-    expect(await pushApplication(doc(), app, deps())).toEqual({ status: "skipped" });
+    expect(await pushApplication(doc(), app, deps(CV))).toEqual({ status: "skipped" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -297,7 +316,7 @@ describe("pushApplication (validator)", () => {
 
   it("never calls a delete endpoint while pushing", async () => {
     erp.registered = false;
-    await pushApplication(doc(), app, deps());
+    await pushApplication(doc({}, { cv: { filename: "cv.pdf", filedata: "" } }), app, deps(CV));
     expect(endpoints().filter((e) => /delete/i.test(e))).toEqual([]);
   });
 });

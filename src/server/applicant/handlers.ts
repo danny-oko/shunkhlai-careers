@@ -28,6 +28,7 @@ export type ApplicantDoc = {
   relatives: Row[];
   interests: Row[];
   applications: Row[];
+  cv: { filename: string; filedata: string } | null;
   picture: string | null;
   /** ERP sync state (`/api/me` only; see `erp-sync.ts`). */
   erp?: DocErp;
@@ -42,11 +43,13 @@ export type PendingDelete = { endpoint: string; entryid: number };
  * a flush clears one only if it is still the stamp it pushed.
  */
 export type DocErp = {
-  /** Hash of the photo content D1 and the ERP last agreed on. */
+  /** Hash of the CV / photo content D1 and the ERP last agreed on. */
+  cvHash?: string;
   pictureHash?: string;
   /** The applicant saved their profile on this site at least once. */
   profileEdited?: boolean;
   profileDirty?: number;
+  cvDirty?: number;
   pictureDirty?: number;
   /** Deletes of ERP rows made here, waiting to be sent. */
   pendingDeletes?: PendingDelete[];
@@ -102,12 +105,12 @@ export type HandlerRequest = {
   query: URLSearchParams;
   /** The parsed JSON body (POST), or null. */
   body: unknown;
-  /** The uploaded file for `SaveAppPicture`, base64-encoded. */
+  /** The uploaded file for `SaveAppPicture` / `SaveAppCV`, base64-encoded. */
   upload?: { name: string; data: string } | null;
 };
 
 /** Endpoints whose body is `multipart/form-data` rather than JSON. */
-export const UPLOAD_ENDPOINTS = new Set(["SaveAppPicture"]);
+export const UPLOAD_ENDPOINTS = new Set(["SaveAppPicture", "SaveAppCV"]);
 
 export function envelopeOk(
   retdata: unknown,
@@ -210,7 +213,7 @@ export function completion(doc: ApplicantDoc) {
   );
   const experienceper = Math.min(100, doc.experience.length * 50);
   const familyper = Math.min(100, doc.family.length * 50);
-  const distinctper = Math.min(100, doc.interests.length * 50);
+  const distinctper = Math.min(100, doc.interests.length * 50 + (doc.cv ? 50 : 0));
 
   const totalper = Math.round(
     (persinfoper + educationper + experienceper + familyper + distinctper) / 5,
@@ -240,6 +243,8 @@ function handleGet({ endpoint, query }: HandlerRequest, doc: ApplicantDoc): Hand
       return ok({
         ...doc.profile,
         picturedata: doc.picture,
+        filename: doc.cv?.filename ?? null,
+        filedata: doc.cv?.filedata ?? null,
         ...completion(doc),
       });
 
@@ -338,6 +343,16 @@ async function handlePost(
       doc.picture = `data:image/jpeg;base64,${upload.data}`;
       return ok(true, true);
     }
+
+    case "SaveAppCV": {
+      if (!upload) return fail("file not selected");
+      doc.cv = { filename: upload.name, filedata: upload.data };
+      return ok(true, true);
+    }
+
+    case "deleteAppCV":
+      doc.cv = null;
+      return ok(true, true);
 
     case "SaveHrAppEducation": {
       if (!body) return fail("Мэдээлэл дутуу байна.");

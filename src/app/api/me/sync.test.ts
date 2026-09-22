@@ -137,7 +137,9 @@ async function fakeErp(input: string | URL, init?: RequestInit) {
     case "SaveHrApplicant":
       erp.record = { ...erp.record, ...(body as Row) };
       return env(true);
+    case "SaveAppCV":
     case "SaveAppPicture":
+    case "deleteAppCV":
       return env(true);
     case "SaveHrRecruitmentOrderApp":
       erp.requests.push({ entryid: erp.nextId++, posname: "new" });
@@ -277,15 +279,13 @@ afterEach(() => {
 /* --- tests ----------------------------------------------------------------- */
 
 describe("pull (ERP → D1)", () => {
-  it("the first get pulls the whole анкет inline: sections, interests, applications, photo", async () => {
+  it("the first get pulls the whole анкет inline: sections, interests, applications, CV, photo", async () => {
     await seedAccount();
     const profile = (await get("get")).retdata as Row;
 
     expect(profile.addr2).toBe("ERP хаяг"); // ERP value wins on the first pull
     expect(profile.firstname).toBe("Бат");
-    // The live ERP still returns a CV; it is not imported.
-    expect(profile).not.toHaveProperty("filedata");
-    expect(profile).not.toHaveProperty("filename");
+    expect(profile.filedata).toBe(CV_B64);
     expect(profile.picturedata).toBe("data:image/jpeg;base64,UElD");
     // The ERP's percentages are not copied; ours are computed from the sections.
     expect(profile.totalper).not.toBe(80);
