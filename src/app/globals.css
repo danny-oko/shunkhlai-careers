@@ -1066,83 +1066,40 @@
 }
 /* -------------------------------------------------------------------------
    Newsroom
-   /news and /admin/news run on a warm paper ground rather than the site's
-   pure white, because a broadsheet read as one continuous column of serif
-   type on #fff looks like a document and not like a page. Every token below
-   is scoped to [data-newsroom], and it redefines the *base* variables —
-   --background, --foreground, --border and friends — rather than inventing a
-   parallel set. That way every shadcn primitive and every `bg-background` /
-   `border-border` utility inside the subtree adopts the paper palette with
-   no per-component work, and nothing outside the subtree moves at all.
+   /news and /admin/news used to run on a paper palette of their own: a warm
+   off-white ground, a heavier hairline, a second set of muted greys, all of
+   it built so a page of stories would read as newsprint. It did read as
+   newsprint, which turned out to be the objection - a company's news page is
+   part of the company's site, not a newspaper printed on it. The newsrooms
+   worth copying (Stripe, Siemens, Shell) all do the opposite: the same
+   near-white ground as every other page of the site, sans-serif throughout,
+   and the brand's colour spent on the category label and nothing else.
+
+   So the ground tokens are gone and the subtree inherits --background,
+   --card, --muted and --border from whichever scheme is active - which also
+   means /news follows the alternate colour schemes now, where before it
+   overrode them. Two tokens survive, because they name things the site has
+   no word for.
    ---------------------------------------------------------------------- */
 
 [data-newsroom] {
-  /* Day edition. Warm off-white at L 0.985 with a trace of chroma on the
-     yellow axis: enough to read as stock rather than as screen white,
-     little enough that the photographs on it are not tinted. */
-  --background: oklch(0.985 0.006 85);
-  --foreground: oklch(0.2 0.006 60);
-  --card: oklch(0.999 0.003 85);
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.999 0.003 85);
-  --popover-foreground: var(--foreground);
+  /* The rule that closes a section head. The site's --border is a hairline
+     meant for the gap between two cards and is too light to end a heading on.
+     Moved onto the site's own cool axis at 285, off the warm 60 it carried
+     while there was a warm ground under it. */
+  --rule-strong: oklch(0.42 0.006 285);
 
-  /* 5.8:1 on the paper ground — datelines and bylines are secondary, not
-     optional, so they stay above the 4.5:1 line rather than sitting at the
-     3:1 a "muted" name invites. */
-  --muted: oklch(0.955 0.008 85);
-  --muted-foreground: oklch(0.45 0.01 60);
-  --accent: oklch(0.955 0.008 85);
-  --accent-foreground: var(--foreground);
-  --secondary: oklch(0.955 0.008 85);
-  --secondary-foreground: var(--foreground);
-
-  /* Hairlines are the whole grammar of a front page, so there are two: a
-     quiet one between stories and a black one under the masthead. */
-  --border: oklch(0.815 0.012 80);
-  --input: oklch(0.775 0.012 80);
-  --rule-strong: oklch(0.29 0.008 60);
-
-  /* Brand orange is 3.6:1 on paper — fine on a 40px headline, short of the
-     line for an 11px kicker, which is exactly where it is used most. This is
-     the same hue darkened to clear 4.5:1 at small sizes. */
+  /* Brand orange darkened until an 11px letterspaced kicker clears 4.5:1.
+     Measured on the white ground: 5.9:1. --brand itself is 3.5:1 there and
+     cannot be used at this size, which is the whole reason for the token. */
   --paper-accent: oklch(0.52 0.18 43);
 }
 
 .dark [data-newsroom] {
-  /* Night edition: the same warm axis pulled down, so the paper reads as
-     unlit stock rather than as a grey UI panel. */
-  --background: oklch(0.16 0.004 70);
-  --foreground: oklch(0.94 0.005 85);
-  --card: oklch(0.2 0.005 70);
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.2 0.005 70);
-  --popover-foreground: var(--foreground);
+  --rule-strong: oklch(0.78 0.004 285);
 
-  --muted: oklch(0.235 0.005 70);
-  --muted-foreground: oklch(0.71 0.008 80);
-  --accent: oklch(0.235 0.005 70);
-  --accent-foreground: var(--foreground);
-  --secondary: oklch(0.235 0.005 70);
-  --secondary-foreground: var(--foreground);
-
-  --border: oklch(1 0 0 / 15%);
-  --input: oklch(1 0 0 / 22%);
-  --rule-strong: oklch(0.86 0.006 85);
-
-  /* Brand orange already clears 4.5:1 against the night ground; lifting it
-     slightly keeps the kicker from going muddy next to white type. */
+  /* Orange lifted for the dark ground: 8.1:1 on the site's charcoal. */
   --paper-accent: oklch(0.74 0.16 50);
-}
-
-/* The masthead's closing rule. A newspaper's is always a thick line over a
-   hairline with a sliver of paper between them — one border cannot be two
-   weights, so it is drawn as a background instead. */
-.news-rule-double {
-  height: 5px;
-  background:
-    linear-gradient(var(--rule-strong) 0 0) top / 100% 3px no-repeat,
-    linear-gradient(var(--border) 0 0) bottom / 100% 1px no-repeat;
 }
 
 /* The category line above a headline. Small, letterspaced, in the darkened
@@ -1157,15 +1114,34 @@
   text-transform: uppercase;
 }
 
-/* Headlines. Serif, set tight, with the optical tracking a large size wants
-   and the hanging punctuation a broadsheet gets for free in print. */
+/* The ornament's ink. --paper-accent is scoped to [data-newsroom] and is not
+   registered as a Tailwind colour, so it is reached the way the kicker
+   reaches it — by a rule of its own. A `text-paper-accent` utility would
+   have compiled to nothing.
+
+   The faint pair is dimmed with `opacity` on the element rather than with a
+   translucent ink. The three fan strokes all spring from one point, and a
+   translucent stroke would have printed that junction darker than the rest
+   of the glyph; compositing the finished mark once cannot. */
+.news-ornament {
+  color: var(--paper-accent);
+}
+
+/* Headlines. They were set in the serif, which is the single loudest thing a
+   page can do to say "newspaper" - a column of serif headlines over a grid of
+   photographs is a front page whatever else is done to it. Sans now, the
+   site's own face, so the news pages are typeset like the rest of the site.
+
+   `hanging-punctuation` went with it. It pulls an opening quote out into the
+   margin, which is typesetting a broadsheet does because it has a margin to
+   spare; in a card three columns wide it only makes the first line start in a
+   different place from the two under it. */
 .news-headline {
-  font-family: var(--font-serif);
+  font-family: var(--app-font-sans);
   font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: 1.08;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
   text-wrap: balance;
-  hanging-punctuation: first last;
 }
 
 /* Reading type. 1.0625rem on a phone is the smallest body a long Mongolian
@@ -1192,6 +1168,11 @@
    size - 19px where 15 was written. The size belongs in the same place the
    rule it loses to is, so here it is. */
 .news-body-card {
+  /* Sans, unlike the article body above it. A lede in a card is a one-line
+     summary being scanned, not prose being read, and the serif is here to be
+     read - it earns its place on an article page and looks like a clipping in
+     a grid of three. */
+  font-family: var(--app-font-sans);
   font-size: var(--fluid-copy);
   line-height: 1.6;
 }

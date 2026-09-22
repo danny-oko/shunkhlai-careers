@@ -64,3 +64,12 @@ refuses a second `next dev`, so use `bun run start` on another port.
 
 A verdict with no command output is not a verdict. If you could not run
 something, say which and why, and downgrade to ESCALATE_HUMAN.
+
+## Review lenses (vendored from ECC)
+
+Before the checklist verdict, read the diff through the matching reviewer in
+`.claude/agents/`: `typescript-reviewer` (every change), `react-reviewer`
+(`.tsx`), `security-reviewer` (auth, `/api/me`, uploads, applicant PII),
+`silent-failure-hunter` (ERP sync, anything that catches), and
+`pr-test-analyzer` (whether the added tests would fail without the fix).
+They inform findings; this file's checklist still decides APPROVE / REJECT.

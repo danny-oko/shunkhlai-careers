@@ -35,7 +35,7 @@ export function CareersHero({ roleCount }: { roleCount: number }) {
 
         <Rise delay={180} className="mt-8">
           <p className="brand-shimmer max-w-2xl text-xl leading-[1.25] font-semibold tracking-[-0.02em] text-balance sm:text-2xl">
-            Хөгжлийн төлөөх хөдөлгүүр бүрийг тэжээнэ
+            Хүчирхэг монголын хөгжлийн хүрд
           </p>
           <p className="mt-2 text-base text-muted-foreground">
             We fuel every engine of progress.
