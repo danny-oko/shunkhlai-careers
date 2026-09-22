@@ -98,6 +98,9 @@ export type ProfileInput = {
   custom2?: string;
 };
 
+/** Ids the profile form can empty (`toInput` sends them as null). */
+const CLEARABLE_IDS = ["countryid", "divisionid", "districtid", "relativeid", "relativeid2"] as const;
+
 type Wrapped = { applicantdata: ApplicantProfile[]; maritalstatus?: unknown };
 
 const isWrapped = (data: unknown): data is Wrapped =>
@@ -138,6 +141,12 @@ export function saveProfile(
   options: { retryLink?: boolean } = {},
 ) {
   const payload = buildProfilePayload(body, loaded);
+  // The ERP body leaves a blank id out; /api/me still has to hear that it was
+  // emptied (a missing key would keep the stored one), and the sync then
+  // leaves it out of the ERP's full replace, which empties it there too.
+  for (const key of CLEARABLE_IDS) {
+    if (key in body && (body[key] === null || body[key] === undefined)) payload[key] = null;
+  }
   if (options.retryLink) payload[RETRY_LINK_FLAG] = true;
   return apiPost<unknown>(`${ME_BASE}/SaveHrApplicant`, payload);
 }

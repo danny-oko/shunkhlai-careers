@@ -54,6 +54,9 @@ export const ERP_DELETES: Record<string, { list: ListName; param: string }> = {
 /** The live ERP's answer to an unknown регистр or a wrong phone. */
 export const MISMATCH = "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!";
 
+/** changeUserInfo's answer to a wrong `oldpassword` (as the dev mock words it). */
+export const WRONG_PASSWORD = "Одоогийн нууц үг буруу байна.";
+
 export class FakeErp {
   regno = "УБ99010101";
   phone = "99112233";
@@ -76,6 +79,8 @@ export class FakeErp {
     requests: [],
   };
   recruitmentorders: Row[] = [];
+  /** `/get`'s `maritalstatus[]` sibling (left out while empty). */
+  marital: Row[] = [];
   calls: FakeCall[] = [];
   nextId = 500;
 
@@ -173,7 +178,11 @@ export class FakeErp {
     const L = this.lists;
     switch (endpoint) {
       case "get":
-        return env({ applicantdata: [{ ...this.record, persinfoper: 50 }], recruitmentorders: this.recruitmentorders });
+        return env({
+          applicantdata: [{ ...this.record, persinfoper: 50 }],
+          recruitmentorders: this.recruitmentorders,
+          ...(this.marital.length ? { maritalstatus: this.marital } : {}),
+        });
       case "GetHrAppEducationData":
         return env({ hrappedulist: L.hrappedulist, hrapplanglist: L.hrapplanglist, hrappquallist: L.hrappquallist, hrappcomplist: L.hrappcomplist });
       case "GetHrAppExperienceData":
@@ -185,6 +194,16 @@ export class FakeErp {
       case "getRecruitmenRequestList":
         // Like the real list: no recruitmentorderid.
         return env(L.requests.map(({ recruitmentorderid: _drop, ...row }) => row));
+      case "changeUserInfo": {
+        // Postman 03: type PASSWORD changes what auth/login compares (the утас);
+        // a wrong oldpassword is rettype ≠ 0 and changes nothing.
+        const b = (body ?? {}) as Row;
+        if (b.type !== "PASSWORD") return env(null, 1, `unsupported type ${String(b.type)}`);
+        if (String(b.oldpassword ?? "") !== this.phone) return env(null, 1, WRONG_PASSWORD);
+        if (!b.newpassword) return env(null, 1, "Шинэ нууц үг хоосон байна.");
+        this.phone = String(b.newpassword);
+        return env(true);
+      }
       case "SaveHrApplicant": {
         // Full replace: whatever is not sent is reset (files are separate).
         const { filedata, filename, picturedata } = this.record;
@@ -271,10 +290,10 @@ async function readBody(init?: RequestInit): Promise<unknown> {
     }
   }
   if (b instanceof FormData) {
-    for (const value of b.values()) {
+    for (const [field, value] of b.entries()) {
       if (value instanceof Blob) {
         const name = value instanceof File ? value.name : "blob";
-        return { filename: name, bytes: Buffer.from(await value.arrayBuffer()).toString("base64") };
+        return { field, filename: name, bytes: Buffer.from(await value.arrayBuffer()).toString("base64") };
       }
     }
     return null;

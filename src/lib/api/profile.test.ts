@@ -141,4 +141,14 @@ describe("saveProfile", () => {
     expect(bodies[0]).not.toHaveProperty("retrylink");
     expect(bodies[1]).toMatchObject({ regno: "AA00000000", mobilephone: "99000000", retrylink: true });
   });
+
+  it("tells /api/me about an emptied id (null), which the ERP body itself leaves out", async () => {
+    http.defaults.adapter = capture;
+    const loaded: ApplicantProfile = { relativeid2: 22, contactname2: "Хоёр", divisionid: 5 };
+    await saveProfile({ ...input, relativeid2: null, contactname2: "", divisionid: null, districtid: null }, loaded);
+    expect(bodies[0]).toMatchObject({ relativeid2: null, divisionid: null, districtid: null, contactname2: "" });
+    expect(bodies[0].relativeid).toBe(3);
+    // The shared ERP payload builder is unchanged: blank ids are omitted there.
+    expect(buildProfilePayload({ ...input, relativeid2: null }, loaded)).not.toHaveProperty("relativeid2");
+  });
 });
