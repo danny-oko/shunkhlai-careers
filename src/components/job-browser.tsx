@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
 
+import { useDropdown } from "@/components/account/use-dropdown";
 import { FilterSection } from "@/components/job-filters";
 import {
   applyFacets,
@@ -17,6 +18,7 @@ import {
   type JobFacets,
 } from "@/lib/jobs/filters";
 import { ALL, type Job } from "@/lib/jobs/types";
+import { reference } from "@/lib/api";
 import type { JobFilterData } from "@/lib/api/jobs";
 import { SectionRule } from "@/components/brand/section-rule";
 import { ActiveFilterChips } from "@/components/job-filter-chips";
@@ -61,7 +63,8 @@ export function JobBrowser({
   const salaryLevelId = params.get("salaryLevelID") ?? "";
 
   const visibleJobs = React.useMemo(() => applyFacets(jobs, facets), [jobs, facets]);
-  const groups = React.useMemo(() => groupOptions(jobs), [jobs]);
+  const { options: groupRows } = useDropdown(() => reference.jobGroups({ ids: 1 }), []);
+  const groups = React.useMemo(() => groupOptions(groupRows), [groupRows]);
   const companies = React.useMemo(() => companyOptions(jobs), [jobs]);
   const workTypes = React.useMemo(() => workTypeOptions(jobs), [jobs]);
   const locations = React.useMemo(() => locationOptions(filterData), [filterData]);

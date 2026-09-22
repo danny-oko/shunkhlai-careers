@@ -29,6 +29,8 @@ export const computerSkillLevels = createDropdown<{ skillcompid: number }>(
 );
 
 export const jobTitles = createDropdown(p("GetJobDropDown"));
+/** Backs the careers-page "Албан тушаалын бүлэг" filter — `ids: 1` selects the group list. */
+export const jobGroups = createDropdown(p("GetJobDropDown"));
 export const businessTypes = createDropdown(p("GetBusinessTypeDropDown"));
 
 /* These three take `search` only — no `lfr` / `ids`. */

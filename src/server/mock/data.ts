@@ -622,6 +622,7 @@ export const dropdowns: Record<string, Array<Record<string, unknown>>> = {
     { key: 53, text: "Мэдээллийн сангийн зохиомж", skillcompid: 14 },
   ],
   GetJobDropDown: [
+    { key: 1, text: "Оффис ажилтан" },
     { key: 8477, text: "Админ менежер" },
     { key: 8457, text: "S·O·S Шингэний шинжилгээний шинжээч" },
     { key: 100, text: "Нягтлан бодогч" },

@@ -1,3 +1,4 @@
+import type { DropdownOption } from "@/lib/api/core/factories";
 import type { JobFilterData } from "@/lib/api/jobs";
 
 import { ALL, type FacetOption, type Job } from "./types";
@@ -51,8 +52,12 @@ function tally(jobs: Job[], pick: (job: Job) => string, allLabel: string): Facet
   ];
 }
 
-export function groupOptions(jobs: Job[]) {
-  return tally(jobs, (job) => job.positionGroup, "Бүх бүлэг");
+/** From `reference.jobGroups()` (`GetJobDropDown?ids=1`), not tallied from the page's rows. */
+export function groupOptions(options: DropdownOption[]): FacetOption[] {
+  return [
+    { value: ALL, label: "Бүх бүлэг" },
+    ...options.map((option) => ({ value: option.value, label: option.label })),
+  ];
 }
 
 export function companyOptions(jobs: Job[]) {
@@ -96,7 +101,7 @@ export function matchesFacets(job: Job, facets: JobFacets): boolean {
   // The detail page still renders the expired state, for anyone arriving on
   // an old link.
   if (!job.isOpen) return false;
-  if (facets.group !== ALL && job.positionGroup !== facets.group) return false;
+  if (facets.group !== ALL && String(job.positionGroupId) !== facets.group) return false;
   if (facets.company !== ALL && job.company !== facets.company) return false;
   if (facets.workType !== ALL && job.workType !== facets.workType) return false;
   return true;
