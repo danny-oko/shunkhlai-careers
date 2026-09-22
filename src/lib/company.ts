@@ -15,31 +15,49 @@ export type Stat = {
 };
 
 /**
- * Content plan 1.2 — the four figures HR published, in their order.
+ * The four figures HR published, in their order.
  *
- * Unreferenced at the moment: the landing page's statistics section was taken
- * down to be rebuilt. Kept because this is HR's published copy, not scaffolding.
+ * Updated from HR's own message of 2026-09-22: 33 years, 112 stations, 8
+ * depots, 1200+ employees. The content plan's earlier set - 30+ years, 21
+ * provinces, 99+ stations - was a year older, and the provinces figure gave
+ * way to the headcount because that is the fourth figure HR sent. 21 provinces
+ * is still true and still said, in the haulage line of <RoadScene>'s chain.
  */
 export const stats: Stat[] = [
   {
-    value: 30,
-    suffix: "+",
+    value: 33,
     label: "жилийн туршлага",
     labelEn: "years of operation",
   },
-  { value: 21, label: "аймагт салбартай", labelEn: "provinces covered" },
   {
-    value: 99,
-    suffix: "+",
+    value: 112,
     label: "шатахуун түгээх станц",
     labelEn: "fuel stations",
   },
   { value: 8, label: "бүсийн агуулах", labelEn: "regional depots" },
+  {
+    value: 1200,
+    suffix: "+",
+    label: "нийт ажилтан",
+    labelEn: "employees",
+  },
 ];
 
 export type EraEntry = {
   title: string;
   body: string;
+  /**
+   * The record's own archive photograph, where the group's history poster
+   * (doc/tuuh.pdf) carries one for that year.
+   *
+   * Small on purpose: these are lifted from the poster at the size the poster
+   * itself holds them, 245 to 400px across, so they are shown as a strip
+   * beside the record rather than blown up into the stage frame, which is
+   * where the span's own photograph goes.
+   */
+  image?: string;
+  /** Read in place of `image`. Required alongside it. */
+  imageAlt?: string;
   /**
    * The year the record happened, shown beside its heading.
    *
@@ -76,6 +94,13 @@ export type Era = {
  * This replaces the four-stop summary the section used to carry, which was
  * the fuel business only. The group's own account runs wider than that, and
  * the four spans below are how it divides itself.
+ *
+ * Interleaved with it, and marked by their `image`, are the fuel business's
+ * own milestones off the group's history poster (doc/tuuh.pdf, HR's file):
+ * the first import, the first rural station, the laboratory, the academy, the
+ * network reaching every province, ISO 9001, round-the-clock monitoring, the
+ * ERP and the newest depots. The poster is the source of record for those
+ * years and its wording is kept, as the history page's is above.
  */
 export const eras: Era[] = [
   {
@@ -94,9 +119,18 @@ export const eras: Era[] = [
         body: "1996 оноос газрын тосны бүтээгдэхүүний бөөний худалдааны бизнесийг эрхлэх болж, ширүүн өрсөлдөөн бүхий жижиглэнгийн зах зээлд нэвтрэн өдгөө бид энэхүү салбартаа Монгол улсын тэргүүлэх зэрэглэлийн үндэсний худалдааны компаниудын нэгт зүй ёсоор тооцогдож байна.",
       },
       {
+        title: "Шатахууны импорт",
+        year: "1997",
+        body: "1997 онд шатахуун импортлох, борлуулах үйл ажиллагаагаа эхлүүлэв. Энэ нь өдгөө аймаг бүрт хүрч буй түгээлтийн сүлжээний эхний холбоос болсон юм.",
+        image: "/history/archive-1997-import.webp",
+        imageAlt: "Төмөр замын дагуу эгнэн зогсох вагон цистернүүдээс шатахуун буулгаж байна.",
+      },
+      {
         title: "Анхны нефть бааз",
         year: "1998",
         body: "1998 онд Шунхлай ХХК анхны шатахуун түгээх станц, анхны нефть баазаа барилаа. Энэ нь газрын тосны бүтээгдэхүүн хадгалах, хүлээн авах 5000 метр куб багтаамжтай, найман вагонцистернийг зэрэг ачиж буулгах хүчин чадалтай байв.",
+        image: "/history/archive-1998-station.webp",
+        imageAlt: "Улаанбаатарт байгуулсан анхны шатахуун түгээх станцын саравчны дор хэдэн хүн зогсож буй хуучин гэрэл зураг.",
       },
     ],
   },
@@ -111,6 +145,20 @@ export const eras: Era[] = [
         body: "2001 онд олон нийтэд нээлттэй дуудлага худалдаанд оролцон, уналтад ороод байсан төрийн өмчийн “АПУ” компанийн төрийн эзэмшлийн хувийг худалдан авав.",
       },
       {
+        title: "Орон нутгийн анхны станц",
+        year: "2001",
+        body: "Эх орны өнцөг булан бүрт салбараа байгуулах анхны алхам хийгдэж, орон нутгийн шатахуун түгээх станц Булган аймагт ашиглалтад орлоо.",
+        image: "/history/archive-2001-rural-station.webp",
+        imageAlt: "Булган аймагт ашиглалтад орсон орон нутгийн анхны шатахуун түгээх станцын хуучин гэрэл зураг.",
+      },
+      {
+        title: "Өөрийн лаборатори",
+        year: "2003",
+        body: "Бүтээгдэхүүнд шинжилгээ хийх, чанар стандартын шаардлагыг баталгаажуулах иж бүрэн лабораторийг ашиглалтад оруулав.",
+        image: "/history/archive-2003-laboratory.webp",
+        imageAlt: "Цагаан халаадтай шинжээгч лабораторийн багаж дээр түлшний дээж шинжилж байна.",
+      },
+      {
         title: "Өөдрөг өнгө, өөр өнцөг",
         year: "2006",
         body: "Монголын тэргүүлэгч телевизүүдийн нэг NTV телевиз нь 2006 оноос үйл ажиллагаагаа явуулж эхлэв. Тус телевиз нь улс төр, нийгэм, эдийн засгийн цаг үеийн мэдээ мэдээллээс гадна түүх, соёл урлаг, боловсрол, цэнгээнт, шоу нэвтрүүлгүүд бэлтгэн хүргэдэг.",
@@ -119,6 +167,13 @@ export const eras: Era[] = [
         title: "Жи Эс Би Капитал ББСБ",
         year: "2010",
         body: "Жи Эс Би Капитал ББСБ-г Шунхлай группийн хөрөнгө оруулалтаар 2010 оны 10-р сарын 5-ны өдөр үүсгэн байгуулав. Тус компани нь Улаанбаатар хотод 10, хөдөө орон нутагт 1 салбар нээж нийт 11 салбар нэгжээр дамжуулан тогтвортой, хүртээмжтэй зээлийн үйл ажиллагааг хүргэснээр өдгөө 30,000 гаруй харилцагчтай болсон байна.",
+      },
+      {
+        title: "Шунхлай академийн суурь",
+        year: "2010",
+        body: "Ажилтнуудад зориулсан сургалтуудыг үе шаттайгаар зохион байгуулж, “Шунхлай академи” сургалтын суурь тавигдлаа.",
+        image: "/history/archive-2010-academy.webp",
+        imageAlt: "Сургалтын танхимд ажилтнууд илтгэгчийг сонсож, дэлгэц рүү харж байна.",
       },
     ],
   },
@@ -133,9 +188,32 @@ export const eras: Era[] = [
         body: "2011 онд БНСУ-ын “Hyundai Motors Corporation”, “Kia Motors Corporation”-н авто машин, механизмын албан ёсны онцгой эрхийг авав. Үүрэн холбооны “Скайтел” компанид хувь эзэмшлээ нэмэгдүүлэн, голлох хувьцаа эзэмшигчдийн нэг болов.",
       },
       {
+        title: "Аймаг бүрт салбартай",
+        year: "2011",
+        body: "Монгол орон даяар шатахуун түгээх станцын өргөн сүлжээг бий болгож, аймаг бүрт салбар нэгжтэй боллоо.",
+        image: "/history/archive-2011-network.webp",
+        imageAlt: "Улбар шар, цэнхэр өнгийн Шунхлай шатахуун түгээх станц цэлмэг тэнгэрийн дор.",
+      },
+      {
         title: "Тээвэр, ложистикийн салбар",
         year: "2012",
         body: "Олон улсын тээвэр зуучлалын “Сантранс Ложистикс” ХХК нь 2012 онд үүсгэн байгуулагдсан бөгөөд гаалийн зуучлал болоод олон улсын стандартад нийцсэн хамгийн хямд, түргэн шуурхай, аюулгүй, даатгагдсан ачаа тээврийн үйлчилгээг дэлхийн хаанаас ч зохион байгуулан мэргэжлийн өндөр түвшинд амжилттай гүйцэтгэж байна.",
+        image: "/history/archive-2012-tanker.webp",
+        imageAlt: "Агуулахын талбайд шатахуун ачсан хагас чиргүүлт автоцистерн, хажууд нь төмөр замын цистерн зогсож байна.",
+      },
+      {
+        title: "Чанарын удирдлагын тогтолцоо",
+        year: "2013",
+        body: "Чанарын удирдлагын тогтолцооны ISO 9001:2008 стандартыг үйл ажиллагаандаа нэвтрүүлэв.",
+        image: "/history/archive-2013-iso.webp",
+        imageAlt: "Хүрээлсэн ISO гэрчилгээнүүд ширээн дээр эгнүүлэн тавиастай байна.",
+      },
+      {
+        title: "24 цагийн хяналт",
+        year: "2016",
+        body: "Газрын тосны бүтээгдэхүүний агуулах, шатахуун түгээх станцуудын 24 цагийн хяналт, шуурхай удирдлагыг нэвтрүүллээ.",
+        image: "/history/archive-2016-monitoring.webp",
+        imageAlt: "Хяналтын төвийн дэлгэцийн ханан дээр станцуудын камерын дүрс нэгэн зэрэг харагдаж байна.",
       },
       {
         title: "Дэлхийн тоглогчтой хамтрав",
@@ -155,6 +233,13 @@ export const eras: Era[] = [
         body: "2020 онд БНСУ-ын GS25 сүлжээ дэлгүүрийн мастер франчайз эрхийг эзэмшигч Дижитал Концепт компанийг Монгол талаас Шунхлай Холдинг, АПУ ХК болон БНСУ талаас Жи Эс Ритэйл компани хамтран байгуулав.",
       },
       {
+        title: "ERP систем",
+        year: "2021",
+        body: "Байгууллагын удирдлага, санхүү, нягтлан бодох бүртгэл, хүний нөөц, борлуулалт, түгээлтийн нэгдсэн ERP буюу нөөц төлөвлөлтийн системийг үйл ажиллагаандаа нэвтрүүллээ.",
+        image: "/history/archive-2021-erp.webp",
+        imageAlt: "Хамгаалалтын малгайтай ажилтан хяналтын өрөөнд дэлгэцүүдийн өмнө радио холбоогоор ярьж байна.",
+      },
+      {
         title: "Технологийн салбарт хөрөнгө оруулав",
         year: "2022",
         body: "2022 онд Монголын дата төвийн талбарт шинэчлэлт авчрах зорилго бүхий Эс системс ХХК-г байгуулж, хэмжээгээрээ хамгийн том, технологи шийдлээрээ хамгийн сүүлийн үеийнхэд тооцогдох дата төвийг бүтээн байгуулав.",
@@ -163,6 +248,13 @@ export const eras: Era[] = [
         title: "Зеро технологи компани",
         year: "2023",
         body: "2023 оноос программ хангамж, мэдээллийн технологийн чиглэлээр үйлчилгээ үзүүлэх Зеро технологи ХХК-ны үйл ажиллагааг эхлүүлэв.",
+      },
+      {
+        title: "Шинэ агуулахууд",
+        year: "2023",
+        body: "26000 м.куб багтаамжтай “Таван толгой” агуулах, 1200 м.куб багтаамжтай “Шивээ хүрэн” агуулах тус тус ашиглалтад орлоо.",
+        image: "/history/archive-2023-depot.webp",
+        imageAlt: "Говийн талд шинээр ашиглалтад орсон агуулахын савнууд, хажууд нь төмөр замын цистернүүд.",
       },
     ],
   },
@@ -182,7 +274,7 @@ export const mission = {
   label: "Эрхэм зорилго",
   labelEn: "Mission",
   statement: "Бид хүнийг дээдэлж, эрчимтэй хөгжлийг бүтээнэ.",
-  motto: "Хөгжлийн төлөөх хөдөлгүүр бүрийг тэжээнэ.",
+  motto: "Хүчирхэг монголын хөгжлийн хүрд",
   body: "Хөрөнгө оруулалтын хамгийн том хэсэг нь хүн. Тиймээс бид ажилтан бүрийн ур чадвар, эрүүл мэнд, карьерын өсөлтөд тогтвортой хөрөнгө оруулдаг.",
 };
 

@@ -1,38 +1,29 @@
 import { StoryCard } from "@/components/news/story-card";
 import type { NewsArticle } from "@/lib/news/types";
-import { cn } from "@/lib/utils";
 
 /**
- * Stories in columns, with the rules between them.
+ * Stories in columns.
  *
- * The column rules are the reason this is its own component. They cannot be
- * `divide-x`: in a wrapping grid that draws a line down the left of the first
- * cell of every row after the first. Which cell needs which border depends on
- * the column count, and the column count changes at two breakpoints, so the
- * classes are computed from the index for all three cases at once — one column
- * below `sm`, two to `lg`, three above.
+ * It used to draw hairline rules above and between the cells, which is how a
+ * broadsheet keeps columns of type apart. That was the single most expensive
+ * thing in this folder - which cell needed which border depended on the column
+ * count, the column count changed at two breakpoints, so every cell computed
+ * six classes from its index to get three cases right at once.
+ *
+ * All of it was in service of an effect the page no longer wants. A grid of
+ * photographs with space between them is already read as separate items; the
+ * rules were what made three cards look like three columns of one page. With
+ * them gone the gutter does the work, and the component is the grid it always
+ * was underneath.
  */
 export function StoryGrid({ articles }: { articles: NewsArticle[] }) {
   return (
-    <div className="grid gap-x-7 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
-      {articles.map((article, index) => (
+    <div className="grid gap-x-7 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+      {articles.map((article) => (
         <StoryCard
           key={article.id}
           article={article}
           sizes="(min-width: 1024px) 31vw, (min-width: 640px) 46vw, 100vw"
-          className={cn(
-            // One column: every story after the first sits under a rule.
-            index > 0 && "border-t border-border pt-8",
-            // Two columns: the rule moves to the left of the right-hand cell,
-            // and only rows after the first keep a rule above them.
-            index > 1 ? "sm:border-t sm:pt-8" : "sm:border-t-0 sm:pt-0",
-            index % 2 === 1
-              ? "sm:border-l sm:border-border sm:pl-7"
-              : "sm:border-l-0 sm:pl-0",
-            // Three columns: same rule, one column wider.
-            index > 2 ? "lg:border-t lg:pt-8" : "lg:border-t-0 lg:pt-0",
-            index % 3 === 0 ? "lg:border-l-0 lg:pl-0" : "lg:border-l lg:pl-7",
-          )}
         />
       ))}
     </div>

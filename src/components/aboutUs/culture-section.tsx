@@ -47,16 +47,15 @@ const FIGURES = { from: 0.5, span: 0.32 };
  *
  * `body` is what the dialog shows when a picture is opened. The words are
  * HR's own throughout: the Academy wall is their September write-up, the
- * benefits wall the content plan, and the clubs wall their roster. Where a
- * tile has no `body` yet it shows a standing note rather than invented copy.
+ * benefits wall their "Шунхлайд ажиллахын давуу тал" package plus the two
+ * days of paid leave from the earlier content plan, and the clubs wall their
+ * roster. Where a tile has no `body` yet it shows a standing note rather
+ * than invented copy; nothing on these three walls needs one now.
  *
  * The pictures are HR's own too. The Academy wall carries the photographs
  * they sent of the training hall and its programmes, the benefits wall the
- * wellbeing sessions, and the clubs wall each club's lockup - with the club's
- * own photograph behind it where one was delivered.
- *
- * TODO(HR): the remaining entries without a `body` on the benefits wall are
- * waiting for the rest of the package.
+ * seventeen laid out through that package, and the clubs wall each club's
+ * lockup - with the club's own photograph behind it where one was delivered.
  *
  * The keys are the hashes these used to be their own sections under, so every
  * link already written against them - the site footer - still arrives at the
@@ -151,16 +150,77 @@ const TABS = [
   {
     key: "benefits",
     label: "Хөнгөлөлт, хангамж",
+    // HR's "Шунхлайд ажиллахын давуу тал" package, split back into its nine
+    // headings, each carrying the photographs that were laid out beside it -
+    // four for the sports, three for the grants - which the dialog runs
+    // through. The two days of paid leave and the three wellbeing tiles are
+    // the earlier content plan's, kept beside the heading each belongs under.
     wall: [
+      {
+        title: "Шунхлайд ажиллахын давуу тал",
+        subtitle: "Ажилтныхаа ажил, амьдралын тэнцвэр болон сайн сайхан байдлыг цогцоор нь дэмжинэ",
+        body: "Шунхлай ХХК нь ажилтнуудынхаа эрүүл мэнд, сайн сайхан байдал, гэр бүл, амралт, хөгжлийг дэмжсэн ажлын орчныг бүрдүүлэхийг зорьдог. Эдгээр боломж нь ажилтнуудыг урт хугацаанд тогтвортой ажиллаж, ажил болон хувийн амьдралынхаа тэнцвэрийг хадгалахад дэмжлэг болдог.",
+        image: "/benefits/benefits-lead.jpg",
+      },
+      {
+        title: "Эрүүл мэндийн дэмжлэг",
+        body: "Ажилтнуудынхаа эрүүл мэндэд тогтмол анхаарч, урьдчилан сэргийлэх үзлэг, шинжилгээ болон шаардлагатай үед эмчилгээ, сувиллын дэмжлэг үзүүлдэг. Эрүүл, тогтвортой ажиллах нөхцөлийг бүрдүүлэх нь бидний хүний нөөцийн бодлогын чухал хэсэг юм.",
+        image: "/benefits/health-support.jpg",
+      },
+      {
+        title: "Эрүүл мэндийн өдөр",
+        subtitle: "Health day",
+        body: "Жилд 2 өдрийн цалинтай чөлөө.",
+      },
+      {
+        title: "Спорт, идэвхтэй амьдрал",
+        body: "Ажилтнуудыг эрүүл, идэвхтэй амьдралын хэв маягтай байхад нь дэмжиж, фитнес, спорт заал болон төрөл бүрийн спортын арга хэмжээнд хамрагдах боломжийг бүрдүүлдэг.",
+        images: [
+          "/benefits/sport-cup.jpg",
+          "/benefits/sport-cup-team.jpg",
+          "/benefits/sport-basketball.jpg",
+          "/benefits/sport-hall.jpg",
+        ],
+      },
+      {
+        title: "Амралт, сувилал",
+        body: "Ажилтнуудынхаа эрүүл мэндийг хамгаалах, бие сэтгэлийн алжаалыг тайлж, эрч хүчээ нөхөхөд нь дэмжлэг үзүүлэх зорилгоор рашаан, сувиллын хөтөлбөрт хамруулдаг. Сувиллын төлбөрийг компани бүрэн хариуцаж, ажилтныг цалинтай чөлөөтэйгээр амрах, нөхөн сэргээх боломжийг бүрдүүлдэг.",
+        images: [
+          "/benefits/sanatorium.jpg",
+          "/benefits/resort-outing.jpg",
+        ],
+      },
+      {
+        title: "Ажилтанд зориулсан тэтгэмжүүд",
+        body: "Ажилтны амьдралын чухал үе шат болон шаардлагатай нөхцөлд дэмжлэг үзүүлэх төрөл бүрийн тэтгэмж, тусламжийн бодлого хэрэгжүүлдэг. Үүнд гэр бүл, хүүхэд, эрүүл мэнд болон бусад амьдралын хэрэгцээтэй холбоотой дэмжлэгүүд багтана.",
+        images: [
+          "/benefits/grant-housing.jpg",
+          "/benefits/grant-living.jpg",
+          "/benefits/grant-scholarship.jpg",
+        ],
+      },
+      {
+        title: "Цалинтай чөлөө",
+        body: "Ажил, хувийн амьдралын тэнцвэрийг дэмжих зорилгоор тодорхой нөхцөлд цалинтай чөлөө авах боломжийг бүрдүүлдэг. Ингэснээр ажилтнууд гэр бүл, хувийн хэрэгцээндээ шаардлагатай цаг гаргах боломжтой.",
+        image: "/benefits/paid-leave.jpg",
+      },
       {
         title: "Гэр бүлийн өдөр",
         subtitle: "Family day",
         body: "Жилд 1 өдрийн цалинтай чөлөө.",
       },
       {
-        title: "Эрүүл мэндийн өдөр",
-        subtitle: "Health day",
-        body: "Жилд 2 өдрийн цалинтай чөлөө.",
+        title: "Компанийн арга хэмжээнүүд",
+        body: "Хамт олны уур амьсгал, багийн ажиллагааг дэмжих зорилгоор баяр, спорт, аялал, дотоод арга хэмжээ болон ажилтнуудыг идэвхжүүлэх төрөл бүрийн хөтөлбөрийг тогтмол зохион байгуулдаг.",
+        images: [
+          "/benefits/gala-night.jpg",
+          "/benefits/festival.jpg",
+        ],
+      },
+      {
+        title: "Сэтгэл зүйн эрүүл мэндийг дэмжих хөтөлбөр",
+        body: "Ажилтнуудын сэтгэл зүйн сайн сайхан байдалд анхаарч, стрессээ зөв удирдах, ажлын ачааллаа тэнцвэржүүлэх, шаардлагатай үед мэргэжлийн зөвлөгөө авах боломжийг дэмжсэн хөтөлбөр хэрэгжүүлдэг.",
+        image: "/benefits/wellbeing-session.jpg",
       },
       {
         title: "Сэтгэл зүйн эрүүл мэнд",
@@ -179,12 +239,16 @@ const TABS = [
         body: "Сэтгэл зүйн эрүүл мэндийг дэмжих хөтөлбөрийн уулзалт, хэлэлцүүлэгт компанийн хамт олон бүрэн бүрэлдэхүүнээрээ оролцдог.",
         image: "/benefits/wellbeing-forum.jpg",
       },
-      { title: "Эрүүл мэндийн үзлэг" },
-      { title: "Спортын арга хэмжээ" },
-      { title: "Ажилтны амралт" },
-      { title: "Хүүхдийн баяр" },
-      { title: "Шинэ жилийн үдэшлэг" },
-      { title: "Тэтгэмж, урамшуулал" },
+      {
+        title: "Хүүхдийн зуслан",
+        body: "Ажилтнуудынхаа гэр бүлийг дэмжих хүрээнд хүүхдүүдийг зуны амралтаа үр бүтээлтэй, аюулгүй орчинд өнгөрүүлэх боломжтой зуслан, хөгжлийн хөтөлбөрт хамрагдахад нь дэмжлэг үзүүлдэг.",
+        image: "/benefits/kids-camp.jpg",
+      },
+      {
+        title: "Гадаад болон дотоод аялал",
+        body: "Ажилтнуудынхаа хамтын ажиллагаа, идэвх оролцоо, ажлын урам зоригийг дэмжих зорилгоор дотоод болон гадаад аялал, хамтын хөтөлбөрүүдийг зохион байгуулдаг. Эдгээр аялал нь шинэ орчинд хамт олноороо цагийг үр бүтээлтэй өнгөрүүлэх, харилцаа холбоогоо бэхжүүлэх, шинэ туршлага хуримтлуулах боломжийг бүрдүүлдэг.",
+        image: "/benefits/travel.jpg",
+      },
     ],
   },
   {
@@ -194,8 +258,8 @@ const TABS = [
     // and no invented names: it is the roster in lib/culture, which is what HR
     // sent. The words that used to open the wall are on the first tile, and it
     // carries the Shunkhlai mark the lockups are all built around. Where a club
-    // sent a photograph of itself, that picture opens with the club rather than
-    // its wordmark - see <Details> in the gallery.
+    // sent photographs of itself, those open with the club rather than its
+    // wordmark, all of them - see <Details> in the gallery.
     wall: [
       {
         title: "Хобби клубууд",
@@ -208,7 +272,7 @@ const TABS = [
         subtitle: club.nameEn,
         body: club.body,
         logo: club.logo,
-        image: club.photo,
+        images: club.photos,
       })),
     ],
   },
