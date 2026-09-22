@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { MaritalOption } from "@/lib/api/profile";
 import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
-import type { ApplicantDoc, DocErp, PendingDelete, Row } from "./handlers";
+import type { ApplicantDoc, DocErp, HandlerDeps, PendingDelete, Row } from "./handlers";
 
 /**
  * The pure half of the two-way ERP sync: which D1 list maps to which ERP
@@ -129,6 +129,85 @@ export function mergeSection(
     else result.push(row);
   }
   return result;
+}
+
+/* --- display labels ----------------------------------------------------- */
+
+type Label = HandlerDeps["label"];
+
+/**
+ * A label a section row carries next to its id, for the list to show: `name`
+ * is `id` looked up in `dropdown`, under each of `parents` in turn (the first
+ * list that has the id wins).
+ */
+type LabelSpec = { name: string; id: string; dropdown: string; parents?: (row: Row) => Row[] };
+
+/**
+ * The labels per section. The ERP's own lists document ids only (Postman
+ * `hrappedulist`: `universityid`, `professionid`, `educationlevelid`, …), so a
+ * row pulled from there is labelled here the same way a save through
+ * `/api/me` is.
+ */
+export const SECTION_LABELS: Partial<Record<SectionKey, LabelSpec[]>> = {
+  education: [
+    {
+      name: "universityname",
+      id: "universityid",
+      dropdown: "GetUniversityDropDown",
+      // `countryid=0` is the collection's "every country"; it is also where a
+      // school sits that the country's own list leaves out (live 2026-09-22:
+      // 1841 rows for 0, 1762 for Монгол).
+      parents: (row) =>
+        Number(row.countryid) > 0 ? [{ countryid: row.countryid }, { countryid: 0 }] : [{ countryid: 0 }],
+    },
+    { name: "professionname", id: "professionid", dropdown: "GetProfessionDropDown" },
+    { name: "educationlevelname", id: "educationlevelid", dropdown: "get_educationlevel_dropdown" },
+  ],
+};
+
+const noId = (value: unknown) => value === null || value === undefined || value === "" || Number(value) === 0;
+
+async function labelOf(spec: LabelSpec, row: Row, label: Label): Promise<string> {
+  if (noId(row[spec.id])) return "";
+  for (const parent of spec.parents?.(row) ?? [undefined]) {
+    const text = await label(spec.dropdown, row[spec.id], parent);
+    if (text) return text;
+  }
+  return "";
+}
+
+/**
+ * `row` with its labels (see `SECTION_LABELS`). A save re-labels every one —
+ * its ids may have changed; `keep` fills only the labels a row lacks, so a
+ * name the ERP does send is left as it is.
+ */
+export async function labelRow(section: SectionKey, row: Row, label: Label, keep = false): Promise<Row> {
+  const specs = SECTION_LABELS[section] ?? [];
+  const labelled: Row = { ...row };
+  for (const spec of specs) {
+    if (keep && (noId(row[spec.id]) || (typeof row[spec.name] === "string" && row[spec.name] !== ""))) continue;
+    labelled[spec.name] = await labelOf(spec, row, label);
+  }
+  return labelled;
+}
+
+/**
+ * Fills the missing labels of every section row in fetched ERP sources, in
+ * place (`sources` as `ErpSnapshot.sources`). A failed lookup leaves the row
+ * as it came.
+ */
+export async function labelSources(sources: Record<string, unknown>, label: Label): Promise<void> {
+  for (const config of SECTIONS) {
+    if (!SECTION_LABELS[config.key] || !(config.source in sources)) continue;
+    const source = sources[config.source];
+    const list = sectionList(config, source);
+    if (!list) continue;
+    const labelled = await Promise.all(
+      list.map((row) => labelRow(config.key, row, label, true).catch(() => row)),
+    );
+    if (config.listKey) (source as Row)[config.listKey] = labelled;
+    else sources[config.source] = labelled;
+  }
 }
 
 type AppErp = {

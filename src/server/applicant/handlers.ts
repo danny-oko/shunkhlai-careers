@@ -14,7 +14,7 @@
 
 import { RETRY_LINK_FLAG, isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 import type { MaritalOption } from "@/lib/api/profile";
-import { CLEARABLE_KEYS, linkRefused, linkedRegno } from "./erp-model";
+import { CLEARABLE_KEYS, labelRow, linkRefused, linkedRegno } from "./erp-model";
 
 export type Row = Record<string, unknown>;
 
@@ -176,6 +176,8 @@ export function envelopeFail(retmsg: string, rettype = 1): Envelope {
 }
 
 export const UNAUTHORIZED_MESSAGE = "Нэвтрэх шаардлагатай.";
+
+export const SCHOOL_REQUIRED_MESSAGE = "Сургуулиа жагсаалтаас сонгох эсвэл нэрийг нь бичнэ үү.";
 
 const ok = (retdata: unknown, mutated = false): HandlerResult => ({
   envelope: envelopeOk(retdata),
@@ -455,17 +457,12 @@ async function handlePost(
 
     case "SaveHrAppEducation": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(doc.education, {
-          ...body,
-          universityname: await label("GetUniversityDropDown", body.universityid, {
-            countryid: body.countryid,
-          }),
-          professionname: await label("GetProfessionDropDown", body.professionid),
-          educationlevelname: await label("get_educationlevel_dropdown", body.educationlevelid),
-        }),
-        true,
-      );
+      // The school is заавал: one from the list, or — not listed —
+      // `universityid: 0` with its name typed into `universitynametext`.
+      if (!(Number(body.universityid) > 0) && blank(body.universitynametext)) {
+        return fail(SCHOOL_REQUIRED_MESSAGE);
+      }
+      return ok(upsert(doc.education, await labelRow("education", body, label)), true);
     }
 
     case "SaveAppForLanguage": {

@@ -41,11 +41,15 @@ const educationFields: FieldDef[] = [
     // usable before a country is chosen rather than empty.
     load: (values, query) =>
       reference.universities({ ...query, countryid: Number(values.countryid) || 0 }),
-  },
-  {
-    name: "universitynametext",
-    label: "Сургууль (жагсаалтад байхгүй бол)",
-    type: "text",
+    // An academy or training centre the list does not have: its name goes in
+    // `universitynametext` with `universityid: 0` — the pair the ERP team was
+    // asked to accept (the list has no «Бусад» row to pick instead).
+    freeText: {
+      name: "universitynametext",
+      toggle: "Жагсаалтад байхгүй",
+      placeholder: "Сургуулийн нэр",
+    },
+    emptyAs: "zero",
   },
   {
     name: "professionid",
@@ -62,7 +66,7 @@ const educationFields: FieldDef[] = [
   },
   { name: "fromdate", label: "Элссэн огноо", type: "date" },
   {
-    // The backend derives "graduated" from this date and ignores `isgraduated`.
+    // Also decides `isgraduated` (see `educationPayload`).
     name: "todate",
     label: "Төгссөн огноо",
     type: "date",
@@ -135,6 +139,30 @@ const skillFields: FieldDef[] = [
   { name: "note", label: "Тэмдэглэл", type: "textarea", wide: true },
 ];
 
+/**
+ * `isgraduated` is in the collection's save body; it follows Төгссөн огноо
+ * rather than asking twice (the backend has been seen deriving its own
+ * `graduated` from `todate` and ignoring this — sent anyway, as documented).
+ * A date still ahead is an expected graduation, so not yet "Y".
+ */
+function isGraduated(todate: unknown, today = new Date()): "Y" | "N" {
+  const value = String(todate ?? "").trim().slice(0, 10);
+  if (!value) return "N";
+  return value <= today.toISOString().slice(0, 10) ? "Y" : "N";
+}
+
+const educationPayload = (values: Record<string, unknown>) => ({
+  ...values,
+  isgraduated: isGraduated(values.todate),
+});
+
+/** A typed school has no id, so its name is the one to show. */
+const schoolOf = (row: EducationEntry) =>
+  (Number(row.universityid) > 0 ? row.universityname : row.universitynametext) ||
+  row.universityname ||
+  row.universitynametext ||
+  "Сургууль";
+
 export default function EducationPage() {
   const homeCountry = useHomeCountry();
 
@@ -146,9 +174,8 @@ export default function EducationPage() {
         resource={sections.education}
         fields={educationFields}
         defaults={{ ...(homeCountry ? { countryid: homeCountry } : {}) }}
-        primary={(row) =>
-          row.universityname || row.universitynametext || "Сургууль"
-        }
+        payload={educationPayload}
+        primary={schoolOf}
         secondary={(row) =>
           [
             row.educationlevelname,

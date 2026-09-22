@@ -9,10 +9,12 @@ import {
   type SectionKey,
   hashOf,
   isLocalId,
+  labelSources,
   snapshotOf,
 } from "./erp-model";
 import { type PushIdentity, type PushResult, erpRecord, profileOverlay, pushApplication } from "./erp-push";
 import type { ApplicantDoc, PendingDelete, Row } from "./handlers";
+import { referenceDeps } from "./reference";
 
 /**
  * Write-through (D1 → ERP): sends every piece of local work the document
@@ -216,6 +218,8 @@ async function flushSections(ctx: Ctx) {
       ctx.failed("erp_repull_failed", error);
     }
   }
+  // Those rows carry ids only; the list shows names (as a pull labels them).
+  if (touched.size) await labelSources(ctx.out.sources, referenceDeps().label);
 }
 
 async function flushApplications({ input, out }: Ctx) {

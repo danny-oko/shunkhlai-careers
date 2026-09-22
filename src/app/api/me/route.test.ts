@@ -188,7 +188,7 @@ describe("account document", () => {
   it("isolation: user B never sees user A's data", async () => {
     as("uA", "a@x.mn");
     await post("SaveHrApplicant", { addr2: "A-гийн хаяг", regno: "АА00000001", mobilephone: "99001100" });
-    await post("SaveHrAppEducation", { entryid: 0, schoolname: "A school" });
+    await post("SaveHrAppEducation", { entryid: 0, universitynametext: "A school" });
     await post("SaveAppFamily", [{ entryid: 0, firstname: "A-relative" }]);
     await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
     const cv = new FormData();
@@ -277,7 +277,7 @@ describe("identity gate (регистр, овог, нэр, утас before any w
     const cv = new FormData();
     cv.set("file", new File([new Uint8Array([1, 2, 3])], "cv.pdf"));
     const attempts = [
-      await post("SaveHrAppEducation", { entryid: 0, schoolname: "X" }),
+      await post("SaveHrAppEducation", { entryid: 0, universitynametext: "X" }),
       await post("SaveAppFamily", [{ entryid: 0, firstname: "X" }]),
       await post("SaveInterestedJobItem", { entryid: 0, posgroupid: 142 }),
       await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 }),
@@ -316,7 +316,7 @@ describe("identity gate (регистр, овог, нэр, утас before any w
     expect((await post("SaveHrApplicant", { lastname: "" })).status).toBe(409);
     expect(stored().profile).toMatchObject({ lastname: "Дорж", addr2: "Хан-Уул" });
     // …and the other writes now go through.
-    expect((await post("SaveHrAppEducation", { entryid: 0, schoolname: "X" })).body.rettype).toBe(0);
+    expect((await post("SaveHrAppEducation", { entryid: 0, universitynametext: "X" })).body.rettype).toBe(0);
   });
 
   it("get tells the client whether the регистр is linked to an ERP record", async () => {
@@ -360,7 +360,7 @@ const listOf = (endpoint: string, key?: string) => async () => {
 };
 
 const sections: Section[] = [
-  { name: "education", save: "SaveHrAppEducation", body: (id) => ({ entryid: id, schoolname: "MUST" }), list: listOf("GetHrAppEducationData", "hrappedulist"), del: "DeleteHrAppEducation", marker: "schoolname" },
+  { name: "education", save: "SaveHrAppEducation", body: (id) => ({ entryid: id, universitynametext: "MUST" }), list: listOf("GetHrAppEducationData", "hrappedulist"), del: "DeleteHrAppEducation", marker: "universitynametext" },
   { name: "language", save: "SaveAppForLanguage", body: (id) => ({ entryid: id, forlanguageid: 1, note: "MUST" }), list: listOf("GetHrAppEducationData", "hrapplanglist"), del: "DeleteAppForLanguage", marker: "note" },
   { name: "skill", save: "SaveAppSkillComp", body: (id) => [{ entryid: id, skillcompid: 1, note: "MUST" }], list: listOf("GetHrAppEducationData", "hrappcomplist"), del: "DeleteAppSkillComp", marker: "note" },
   { name: "experience", save: "SaveAppExperience", body: (id) => ({ entryid: id, companyname: "MUST" }), list: listOf("GetHrAppExperienceData", "hrappexplist"), del: "DeleteAppExperience", marker: "companyname" },
