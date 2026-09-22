@@ -57,7 +57,10 @@ export default async function ArticlePage({ params }: PageProps<"/news/[slug]">)
   ]);
 
   return (
-    <main data-newsroom className="flex-1 bg-background pt-16 text-foreground">
+    <main
+      data-newsroom
+      className="flex-1 bg-background pt-16 text-foreground"
+    >
       <ReadingProgress />
 
       <div className="mx-auto max-w-6xl px-6 lg:px-10">

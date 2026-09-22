@@ -16,6 +16,22 @@ const NAME_AFTER_MS = 200;
 const HOLD_MS = 700;
 const FLIGHT_MS = 950;
 
+/**
+ * The company's divisions, as HR names them. Deliberately not the recruitment
+ * API's position groups: this line is the company introducing itself, not a
+ * readout of whatever happens to be hiring.
+ */
+const DIVISIONS = [
+  "Захиргаа, Хүний нөөцийн газар",
+  "Шуурхай зохицуулалтын алба",
+  "Дотоод аудитын алба",
+  "Борлуулалт, Маркетингийн газар",
+  "Гадаад худалдаа, худалдан авалтын алба",
+  "Бизнес технологийн газар",
+  "Техник технологийн газар",
+  "Санхүүгийн газар",
+];
+
 type Phase = "counting" | "naming" | "flying" | "done";
 
 /**
@@ -26,20 +42,14 @@ type Phase = "counting" | "naming" | "flying" | "done";
  * map, the panels sweep the screen away behind it, and it flies into the
  * header's brand where the page takes over.
  *
- * `provinces` and `groups` are the recruitment system's own location and
- * position-group lists, handed down from the page. Either can arrive empty if
- * the API is unreachable, and the screen simply drops that line.
+ * `provinces` is the recruitment system's own location list, handed down from
+ * the page. It can arrive empty if the API is unreachable, and the screen
+ * simply drops that line.
  *
  * Page scrolling is held for the ~3.9s this takes and released on the way
  * out, including if the component is unmounted early.
  */
-export function SiteLoader({
-  provinces,
-  groups,
-}: {
-  provinces: string[];
-  groups: string[];
-}) {
+export function SiteLoader({ provinces }: { provinces: string[] }) {
   const isReduced = useReducedMotion();
   const [progress, setProgress] = React.useState(0);
   const [phase, setPhase] = React.useState<Phase>("counting");
@@ -155,13 +165,11 @@ export function SiteLoader({
           className="flex justify-end transition-opacity duration-300"
           style={{ opacity: isCounting ? 1 : 0 }}
         >
-          {groups.length > 0 && (
-            <LoaderTicker
-              items={groups}
-              intervalMs={520}
-              className="text-muted-foreground"
-            />
-          )}
+          <LoaderTicker
+            items={DIVISIONS}
+            intervalMs={520}
+            className="text-muted-foreground"
+          />
         </div>
       </div>
     </div>

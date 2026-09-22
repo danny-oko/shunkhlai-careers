@@ -55,6 +55,17 @@ const STEPS: Step[] = [
   },
 ];
 
+/**
+ * The ground the closing two beats stand on: HR's own key visual, the four of
+ * them walking up the ramp - which is the principle the panel is about to
+ * state, as a picture, and the one real photograph on this screen.
+ *
+ * Not a fourth STEP. The three above arrive on the line, one per beat, and
+ * hand over to each other; this one arrives behind the word once the line is
+ * finished with, and it is still there when the word has gone.
+ */
+const PRINCIPLE_GROUND = "/academy/principle-ground.jpg";
+
 /** Height of one word in the roller. The slack keeps descenders off the line. */
 const SLOT = "1.25em";
 
@@ -267,6 +278,50 @@ const REVEAL = { from: 0.82, span: 0.18 };
 const HAND_OVER = 0.22;
 
 /**
+ * The ground's own arrival, in shares of the word's beat.
+ *
+ * It opens just after the word does and has finished by the time the word
+ * has, so the two read as one movement - the word coming forward and the
+ * picture coming up behind it - rather than as a word and then a slide.
+ */
+const GROUND = { from: 0.06, span: 0.5 };
+
+/**
+ * And where it stops being the subject.
+ *
+ * From the break onward the picture is what the principle is read on, so it
+ * softens exactly as the panel arrives: it blurs, takes more ink, and drifts
+ * a little further in. Left sharp, the four faces and the logo sit in the
+ * copy's measure and are read before it.
+ */
+const SOFTEN = { from: BREAK.from, span: 1 - BREAK.from };
+
+/**
+ * How far out of focus, standing behind the word and standing under the panel.
+ *
+ * Never quite zero: at full sharpness the picture and the display word are two
+ * subjects on one screen, and a hair of blur is what puts one behind the other.
+ */
+const HAZE = { rest: 2, under: 18 };
+
+/**
+ * And how much ink it carries at each of those, which is a contrast figure
+ * rather than a taste: the picture is mostly white, and white type over it
+ * has to hold 3:1 at display size and the muted copy 4.5:1 at reading size.
+ * Over the brightest part of the photograph - the white wall the lockup is on,
+ * which is where the word crosses it on a wide screen - these two give 5.4:1
+ * for the word and 5.3:1 for `--ink-muted` under the panel.
+ */
+const VEIL = { rest: 0.66, under: 0.85 };
+
+/**
+ * Drawn wider than the screen throughout, because a blur has soft edges: at 18px
+ * the picture fades out over about 27px of its own border, and at 1:1 that
+ * border is the screen's. The overhang keeps it outside.
+ */
+const OVERSCAN = 1.16;
+
+/**
  * Where each letter of "Бидний" goes when the word breaks up.
  *
  * In ems of the word's own size rather than pixels, and applied inside the
@@ -360,7 +415,9 @@ function useWordOrigin(
  *
  * The last two beats are the Academy's: the label steps out of the row, takes
  * the middle of the screen, and breaks apart, and the 70/20/10 principle is
- * standing behind it. That principle had a section of its own
+ * standing behind it. The ground changes with it - the three placeholder
+ * fields give way to HR's key visual, which comes up behind the word and is
+ * then blurred back into a ground for the panel to be read on. That principle had a section of its own
  * under this one and no longer does — arriving out of the thing that was
  * saying "Бидний" all along is what makes it the company's own account of how
  * its people grow rather than a chart further down the page.
@@ -439,6 +496,10 @@ export function StatementBands() {
   // then stands for the rest of the run.
   const principle = ease(clamp((outro - REVEAL.from) / REVEAL.span));
 
+  // The ground behind both: up with the word, out of focus under the panel.
+  const ground = ease(clamp((outro - GROUND.from) / GROUND.span));
+  const soften = ease(clamp((outro - SOFTEN.from) / SOFTEN.span));
+
   /** Lifted as it arrives, so the panel enters rather than switches on. */
   const rise = (shown: number) => ({
     opacity: shown,
@@ -488,6 +549,21 @@ export function StatementBands() {
             There is no word to break apart here because there is no movement
             to break it with. */}
         <article className="relative isolate overflow-hidden bg-ink py-section">
+          {/* The ground the panel is read on there too, at the state the
+              runway leaves it in - there is no beat here to bring it in on. */}
+          <Image
+            src={PRINCIPLE_GROUND}
+            alt=""
+            aria-hidden
+            fill
+            sizes="100vw"
+            className="-z-20 scale-[1.12] object-cover blur-[18px]"
+          />
+          <div
+            aria-hidden
+            className="absolute inset-0 -z-10"
+            style={{ backgroundColor: "var(--ink)", opacity: VEIL.under }}
+          />
           <FeatherLattice className="opacity-[0.18]" tone="brand" />
           <PrinciplePanel />
         </article>
@@ -538,10 +614,46 @@ export function StatementBands() {
             priority={index === 0}
             sizes="100vw"
             className="-z-20 object-cover"
-            style={{ opacity: near(position, index) }}
+            style={{ opacity: near(position, index) * (1 - ground) }}
           />
         ))}
-        <div aria-hidden className="absolute inset-0 -z-10 bg-ink/55" />
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 bg-ink/55"
+          style={{ opacity: 1 - ground }}
+        />
+
+        {/* The closing ground, over the three it replaces and under everything
+            that is read. It carries its own veil rather than borrowing the one
+            above: that one is a fixed 55% over flat placeholder fields, and
+            this is a photograph that has to go from being looked at to being
+            read over. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 overflow-hidden"
+          style={{ opacity: ground }}
+        >
+          <Image
+            src={PRINCIPLE_GROUND}
+            alt=""
+            fill
+            sizes="100vw"
+            className="object-cover"
+            style={{
+              // Eased in from further out and pushed on again as it softens,
+              // so it is still moving when the panel lands on it.
+              transform: `scale(${(OVERSCAN - 0.08 * ground + 0.04 * soften).toFixed(3)})`,
+              filter: `blur(${(HAZE.rest + (HAZE.under - HAZE.rest) * soften).toFixed(2)}px)`,
+            }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundColor: "var(--ink)",
+              opacity: VEIL.rest + (VEIL.under - VEIL.rest) * soften,
+            }}
+          />
+        </div>
         {/* The brandbook's feather ground. The placeholder photographs are flat
             fields of colour, and over a flat field flat type reads as a slide
             rather than a screen. */}

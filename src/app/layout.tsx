@@ -4,7 +4,7 @@ import { Ubuntu_Sans, Ubuntu_Sans_Mono } from "next/font/google";
   import { ThemeProvider } from "@/components/theme-provider";
 import { PaletteProvider } from "@/components/palette-provider";
 import { SessionProvider } from "@/components/auth/session-provider";
-// import { CursorRing } from "@/components/cursor-ring";
+import { CursorRing } from "@/components/cursor-ring";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
@@ -53,6 +53,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 {children}
                 <SiteFooter />
                 <Toaster position="bottom-right" />
+                <CursorRing />
               </SessionProvider>
             </PaletteProvider>
           </ThemeProvider>

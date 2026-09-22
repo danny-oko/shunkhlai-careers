@@ -115,13 +115,14 @@ export type Club = {
   /** The club's own lockup: the Shunkhlai mark beside its wordmark. */
   logo: string;
   /**
-   * A photograph of the club at something it actually did, where HR sent one.
+   * Photographs of the club at something it actually did, where HR sent any.
    *
    * The lockup stays on the tile - it is what names the club on the wall - and
-   * the photograph opens with it, because a wordmark says which club it is and
-   * a picture says what belonging to it looks like.
+   * the pictures open with it, because a wordmark says which club it is and a
+   * picture says what belonging to it looks like. Where a club sent several,
+   * all of them are here and the dialog runs through them.
    */
-  photo?: string;
+  photos?: string[];
   /** What the club does. See the TODO below: these are drafts, not HR's copy. */
   body?: string;
 };
@@ -144,16 +145,16 @@ export type Club = {
  * count and nothing else. Replace them with the clubs' own words; they are
  * marked in one place so the whole set can be swapped in one pass.
  *
- * TODO(HR): Boardgame and Innovation have no lockup yet, so they stand on the
- * company lockup. Drop the two files into `public/clubs` and point `logo` at
- * them; nothing else changes.
+ * TODO(HR): Innovation has no lockup yet, so it stands on the company lockup.
+ * Drop the file into `public/clubs` and point `logo` at it; nothing else
+ * changes.
  */
 export const clubs: Club[] = [
   {
     name: "Шагай харвааны клуб",
     nameEn: "Shagai club",
     logo: "/clubs/shagai.png",
-    photo: "/clubs/photos/shagai.jpg",
+    photos: ["/clubs/photos/shagai.jpg", "/clubs/photos/shagai-2.jpg"],
     body: "Үндэсний шагай харваагаар баг бүрдүүлэн тогтмол бэлтгэл хийж, улсын болон салбарын тэмцээнд Шунхлай ХХК-ийг төлөөлөн оролцдог.",
   },
   {
@@ -166,19 +167,18 @@ export const clubs: Club[] = [
     name: "И-спорт клуб",
     nameEn: "E-sport club",
     logo: "/clubs/e-sport.png",
+    photos: ["/clubs/photos/e-sport.jpg"],
     body: "Онлайн тоглоомын төрлүүдээр дотоод тэмцээн зохион байгуулж, багаар ажиллах, стратеги төлөвлөх чадварыг чөлөөт цагаараа хөгжүүлдэг.",
-  },
-  {
-    name: "Дартс клуб",
-    nameEn: "Darts club",
-    logo: "/clubs/darts.png",
-    body: "Ажлын завсарлагаагаар оффис дотроо бэлтгэл хийж, улирал бүр дотоод тэмцээнээ зохион байгуулдаг.",
   },
   {
     name: "Алхалтын клуб",
     nameEn: "Hiking club",
     logo: "/clubs/hiking.png",
-    photo: "/clubs/photos/hiking.jpg",
+    photos: [
+      "/clubs/photos/hiking.jpg",
+      "/clubs/photos/hiking-2.jpg",
+      "/clubs/photos/hiking-3.jpg",
+    ],
     body: "Улирал бүр хот орчмын болон орон нутгийн уулын маршрутаар явган аялал зохион байгуулдаг. Ажилтан гэр бүлийнхээ хамт оролцох боломжтой.",
   },
   {
@@ -186,18 +186,6 @@ export const clubs: Club[] = [
     nameEn: "Dance club",
     logo: "/clubs/dance.png",
     body: "Долоо хоног бүр бэлтгэл хийж, компанийн баяр ёслол, арга хэмжээнд тоглолтоо бэлддэг.",
-  },
-  {
-    name: "Хөгжмийн клуб",
-    nameEn: "Music club",
-    logo: "/clubs/music.png",
-    body: "Хамтлаг, дуучдын бүрэлдэхүүнтэйгээр компанийн арга хэмжээнд тогтмол тоглолт хийдэг.",
-  },
-  {
-    name: "Подкаст клуб",
-    nameEn: "Podcast club",
-    logo: "/clubs/podcast.png",
-    body: "Ажилтнуудын түүх, ажлын туршлага, салбарын мэдээллийг подкаст хэлбэрээр бэлтгэж, дотооддоо түгээдэг.",
   },
   {
     name: "Шинжлэх ухааны клуб",
@@ -209,34 +197,19 @@ export const clubs: Club[] = [
     name: "Англи хэлний клуб",
     nameEn: "English club",
     logo: "/clubs/english.png",
-    photo: "/clubs/photos/english.jpg",
+    photos: ["/clubs/photos/english.jpg", "/clubs/photos/english-2.jpg"],
     body: "Долоо хоног бүрийн уулзалтаар ярианы дадлага хийж, ажлын байранд хэрэгтэй Business English-ийн мэдлэгээ хөгжүүлдэг.",
-  },
-  {
-    name: "Бизнес клуб",
-    nameEn: "Business club",
-    logo: "/clubs/business.png",
-    body: "Бизнесийн ном, кейс судалгаа хэлэлцэж, ажилтнуудын санаачилга, шинэ санааг дэмжин ярилцдаг.",
   },
   {
     name: "Гоо зүйн клуб",
     nameEn: "Vogue",
     logo: "/clubs/vogue.png",
-    photo: "/clubs/photos/vogue.jpg",
+    photos: [
+      "/clubs/photos/vogue.jpg",
+      "/clubs/photos/vogue-2.jpg",
+      "/clubs/photos/vogue-3.jpg",
+    ],
     body: "Гоо зүй, хувцаслалт, өөрийгөө илэрхийлэх сэдвээр уулзалт, фото төсөл зохион байгуулдаг.",
-  },
-  {
-    name: "Be Happy клуб",
-    nameEn: "Be Happy",
-    logo: "/clubs/be-happy.png",
-    body: "Ажилтнуудын сайн сайхан байдал, эерэг уур амьсгалыг дэмжих арга хэмжээ, сайн дурын ажлуудыг зохион байгуулдаг.",
-  },
-  {
-    name: "Ширээний тоглоомын клуб",
-    nameEn: "Boardgame club",
-    logo: "/brand/logo-lockup.png",
-    photo: "/clubs/photos/boardgame.jpg",
-    body: "Ширээний тоглоомоор багаараа тоглож, стратеги сэтгэлгээ, хамтын ажиллагааг чөлөөт цагаараа хөгжүүлдэг.",
   },
   {
     name: "Инновацийн клуб",
@@ -251,7 +224,8 @@ export const clubs: Club[] = [
  *
  * The content plan's own figure was 14 against thirteen lockups, and the gap
  * sat in this file as a TODO for as long as the number was typed by hand. The
- * roster now names fifteen, and whatever is added next counts itself.
+ * roster names whatever is listed above, and whatever is added next counts
+ * itself.
  */
 export const clubCount = clubs.length;
 
