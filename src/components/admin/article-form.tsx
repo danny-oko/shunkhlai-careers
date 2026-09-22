@@ -273,10 +273,10 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                   href={`/news/${article.slug}`}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label="Нийтлэг харах"
+                  aria-label="Нийтлэл харах"
                 >
                   <ExternalLink aria-hidden />
-                  <span className="hidden sm:inline">Нийтлэг харах</span>
+                  <span className="hidden sm:inline">Нийтлэл харах</span>
                 </Link>
               </Button>
             )}
