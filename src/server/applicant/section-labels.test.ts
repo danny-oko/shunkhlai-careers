@@ -4,6 +4,7 @@ import { labelRow, labelSources } from "./erp-model";
 import {
   type ApplicantDoc,
   type HandlerDeps,
+  LANGUAGE_REQUIRED_MESSAGE,
   type Row,
   SCHOOL_REQUIRED_MESSAGE,
   handleApplicantRequest,
@@ -21,6 +22,9 @@ const UNIVERSITIES: Record<string, Array<[number, string]>> = {
   "3": [[500, "Алтайн их сургууль"]],
 };
 
+/** GetForLanguageLevelDropDown, live 2026-09-22 (part). */
+const LEVELS: Record<string, string> = { "2": "Анхан", "4": "Дунд", "6": "Дээд түвшин" };
+
 function recordingLabel() {
   const calls: Array<[string, unknown, Row | undefined]> = [];
   const label: HandlerDeps["label"] = async (dropdown, key, parent) => {
@@ -31,6 +35,8 @@ function recordingLabel() {
     }
     if (dropdown === "GetProfessionDropDown") return String(key) === "2414" ? "AI Инженер" : "";
     if (dropdown === "get_educationlevel_dropdown") return String(key) === "2010" ? "Бакалавр" : "";
+    if (dropdown === "GetForLanguageDropDown") return String(key) === "15" ? "Англи" : "";
+    if (dropdown === "GetForLanguageLevelDropDown") return LEVELS[String(key)] ?? "";
     return "";
   };
   return { label, calls };
@@ -88,18 +94,22 @@ describe("labelRow (education)", () => {
 });
 
 describe("labelSources", () => {
-  it("labels hrappedulist in a GetHrAppEducationData bundle and leaves its siblings alone", async () => {
+  it("labels hrappedulist and hrapplanglist in a GetHrAppEducationData bundle and leaves their siblings alone", async () => {
     const { label } = recordingLabel();
     const bundle = {
       hrappedulist: [{ entryid: 1, universityid: 68, educationlevelid: 2010 }],
-      hrapplanglist: [{ entryid: 2, forlanguageid: 1 }],
+      hrapplanglist: [{ entryid: 2, forlanguageid: 15, speakinglevelid: 4, writinglevelid: 0 }],
+      hrappquallist: [{ entryid: 3, forlanguageid: 15 }],
     };
     const sources: Record<string, unknown> = { GetHrAppEducationData: bundle };
     await labelSources(sources, label);
     expect(bundle.hrappedulist).toEqual([
       { entryid: 1, universityid: 68, educationlevelid: 2010, universityname: "МУИС-ГХСС", educationlevelname: "Бакалавр" },
     ]);
-    expect(bundle.hrapplanglist).toEqual([{ entryid: 2, forlanguageid: 1 }]);
+    expect(bundle.hrapplanglist).toEqual([
+      { entryid: 2, forlanguageid: 15, speakinglevelid: 4, writinglevelid: 0, forlanguagename: "Англи", speakinglevelname: "Дунд" },
+    ]);
+    expect(bundle.hrappquallist).toEqual([{ entryid: 3, forlanguageid: 15 }]);
   });
 
   it("a failing lookup leaves the row as it came", async () => {
@@ -178,6 +188,67 @@ describe("SaveHrAppEducation", () => {
     await save(doc, { entryid, universityid: 0, universitynametext: "Мандах академи" });
     expect(doc.education).toHaveLength(1);
     expect(doc.education[0]).toMatchObject({ universityname: "", universitynametext: "Мандах академи" });
+  });
+});
+
+describe("labelRow (languages)", () => {
+  it("names the language and each of the four levels from the one level list", async () => {
+    const { label, calls } = recordingLabel();
+    const row = await labelRow(
+      "languages",
+      { forlanguageid: 15, listeninglevelid: 2, speakinglevelid: 4, readinglevelid: 6, writinglevelid: 4 },
+      label,
+    );
+    expect(row).toMatchObject({
+      forlanguagename: "Англи",
+      listeninglevelname: "Анхан",
+      speakinglevelname: "Дунд",
+      readinglevelname: "Дээд түвшин",
+      writinglevelname: "Дунд",
+    });
+    expect(calls.map(([dropdown]) => dropdown)).toEqual([
+      "GetForLanguageDropDown",
+      ...Array(4).fill("GetForLanguageLevelDropDown"),
+    ]);
+  });
+});
+
+describe("SaveAppForLanguage", () => {
+  let next = 200;
+  const save = async (doc: ApplicantDoc, body: Row) =>
+    handleApplicantRequest(
+      { endpoint: "SaveAppForLanguage", method: "POST", query: new URLSearchParams(), body },
+      doc,
+      { label: recordingLabel().label, nextEntryId: () => (next += 1), jobOrder: () => null },
+    );
+
+  it("needs the language", async () => {
+    const doc = emptyDoc();
+    for (const body of [{ entryid: 0 }, { entryid: 0, forlanguageid: 0, speakinglevelid: 4 }]) {
+      const result = await save(doc, body);
+      expect(result?.envelope).toMatchObject({ rettype: 1, retmsg: LANGUAGE_REQUIRED_MESSAGE });
+      expect(result?.mutated).toBe(false);
+    }
+    expect(doc.languages).toEqual([]);
+  });
+
+  it("stores studytime and every label; an edit that empties a level (0) drops its name", async () => {
+    const doc = emptyDoc();
+    await save(doc, { entryid: 0, forlanguageid: 15, studytime: 5, speakinglevelid: 4, score: "IELTS 6.5" });
+    expect(doc.languages[0]).toMatchObject({
+      forlanguagename: "Англи",
+      studytime: 5,
+      speakinglevelname: "Дунд",
+      score: "IELTS 6.5",
+    });
+    const entryid = doc.languages[0].entryid;
+    await save(doc, { entryid, forlanguageid: 15, studytime: 5, speakinglevelid: 0, readinglevelid: 6 });
+    expect(doc.languages).toHaveLength(1);
+    expect(doc.languages[0]).toMatchObject({
+      speakinglevelid: 0,
+      speakinglevelname: "",
+      readinglevelname: "Дээд түвшин",
+    });
   });
 });
 

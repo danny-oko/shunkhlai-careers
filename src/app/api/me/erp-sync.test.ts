@@ -266,6 +266,51 @@ describe("first load (pull)", () => {
     expect(sent).not.toHaveProperty("educationlevelname");
   });
 
+  it("ERP language rows (ids only, per Postman hrapplanglist) are listed with the language and level names", async () => {
+    await firstLoad();
+    const [row] = (await lists()).languages;
+    expect(row.forlanguagename).toBe(labelFor("GetForLanguageDropDown", 1));
+    expect(erp.lists.hrapplanglist[0]).not.toHaveProperty("forlanguagename");
+  });
+
+  it("a language saved here goes out as the Postman body — no labels — and keeps its names after the re-read", async () => {
+    await firstLoad(new FakeErp());
+    const body = {
+      entryid: 0,
+      forlanguageid: 15,
+      studytime: 5,
+      listeninglevelid: 4,
+      speakinglevelid: 4,
+      readinglevelid: 6,
+      writinglevelid: 0,
+      score: "IELTS 6.5",
+    };
+    await post("SaveAppForLanguage", body);
+    await flushAfter();
+    const sent = erp.calls.find((c) => c.endpoint === "SaveAppForLanguage")!.body as Row;
+    expect(sent).toEqual(body);
+    const [row] = (await lists()).languages;
+    expect(row).toMatchObject({
+      erp: "synced",
+      entryid: erp.lists.hrapplanglist[0].entryid,
+      studytime: 5,
+      forlanguagename: "Англи",
+      listeninglevelname: "Дунд",
+      speakinglevelname: "Дунд",
+      readinglevelname: "Дээд түвшин",
+    });
+    expect(row).not.toHaveProperty("writinglevelname"); // 0 = none, nothing to name
+  });
+
+  it("a language row without the language is refused before it reaches D1 or the ERP", async () => {
+    await firstLoad(new FakeErp());
+    const r = await post("SaveAppForLanguage", { entryid: 0, speakinglevelid: 4 });
+    expect(r.body).toMatchObject({ rettype: 1, retmsg: "«Гадаад хэл» талбарыг бөглөнө үү." });
+    await flushAfter();
+    expect((await lists()).languages).toEqual([]);
+    expect(erp.endpoints()).not.toContain("SaveAppForLanguage");
+  });
+
   it("10-minute throttle: no pull within 10 min, background pull after", async () => {
     await firstLoad();
     const gets = () => erp.endpoints().filter((e) => e === "get").length;
@@ -582,7 +627,7 @@ type DeleteCase = {
 
 const DELETE_CASES: DeleteCase[] = [
   { name: "education", list: "hrappedulist", ui: "education", save: "SaveHrAppEducation", saveBody: { entryid: 0, universitynametext: "L" }, del: "DeleteHrAppEducation", clientParam: "ENTRYID" },
-  { name: "language", list: "hrapplanglist", ui: "languages", save: "SaveAppForLanguage", saveBody: { entryid: 0, note: "L" }, del: "DeleteAppForLanguage", clientParam: "entryid" },
+  { name: "language", list: "hrapplanglist", ui: "languages", save: "SaveAppForLanguage", saveBody: { entryid: 0, forlanguageid: 15, note: "L" }, del: "DeleteAppForLanguage", clientParam: "entryid" },
   { name: "skill", list: "hrappcomplist", ui: "skills", save: "SaveAppSkillComp", saveBody: [{ entryid: 0, note: "L" }], del: "DeleteAppSkillComp", clientParam: "entryid" },
   { name: "experience", list: "hrappexplist", ui: "experience", save: "SaveAppExperience", saveBody: { entryid: 0, orgname: "L" }, del: "DeleteAppExperience", clientParam: "entryid" },
   { name: "family", list: "hrappfamilylist", ui: "family", save: "SaveAppFamily", saveBody: [{ entryid: 0, firstname: "L" }], del: "DeleteAppFamily", clientParam: "entryid" },
