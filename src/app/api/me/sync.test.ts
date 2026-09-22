@@ -390,11 +390,11 @@ describe("write-through (D1 → ERP)", () => {
     expect(doc().erp?.pendingDeletes).toHaveLength(3);
     await runAfter();
 
-    const deletes = erp.calls.filter((c) => /^delete/i.test(c.endpoint)).map((c) => `${c.endpoint}${c.query}`);
+    const deletes = erp.calls.filter((c) => /^delete/i.test(c.endpoint)).map((c) => [c.endpoint, c.query]);
     expect(deletes).toEqual([
-      "DeleteHrAppEducation?ENTRYID=11",
-      "deleteInterestedJob?entryid=15",
-      "DeleteOrderApp?entryID=16",
+      ["DeleteHrAppEducation", "?ENTRYID=11"],
+      ["deleteInterestedJob", "?entryid=15"],
+      ["DeleteOrderApp", "?entryID=16"],
     ]);
     expect(doc().erp?.pendingDeletes).toBeUndefined();
     expect(erp.lists.hrappedulist).toEqual([]);
@@ -471,7 +471,9 @@ describe("write-through (D1 → ERP)", () => {
     expect(apps[1]).toMatchObject({ recruitmentorderid: 707, erp: { status: "sent", erpEntryId: 500 } });
   });
 
-  it("never sends SaveHrAppUser", async () => {
+  // Login first: SaveHrAppUser is only the fallback for a 401 (a регистр new to
+  // the ERP), so an applicant whose login works is never sent through it.
+  it("never sends SaveHrAppUser while auth/login works", async () => {
     await pulled();
     await post("SaveHrApplicant", { addr2: "x" });
     await runAfter();

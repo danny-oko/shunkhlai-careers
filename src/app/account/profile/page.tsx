@@ -1,5 +1,6 @@
 "use client";
 
+import { IdentityLock } from "@/components/account/identity-gate";
 import { CvManager, PhotoUpload } from "@/components/account/profile-files";
 import { ProfileForm } from "@/components/account/profile-form";
 import { Separator } from "@/components/ui/separator";
@@ -8,7 +9,9 @@ export default function ProfilePage() {
   return (
     <div className="space-y-10">
       <section className="border-border/70 rounded-xl border p-6">
-        <PhotoUpload />
+        <IdentityLock>
+          <PhotoUpload />
+        </IdentityLock>
       </section>
 
       <section>
@@ -22,7 +25,9 @@ export default function ProfilePage() {
       <Separator />
 
       <section className="border-border/70 rounded-xl border p-6">
-        <CvManager />
+        <IdentityLock>
+          <CvManager />
+        </IdentityLock>
       </section>
     </div>
   );

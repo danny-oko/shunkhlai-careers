@@ -83,7 +83,7 @@ export const ProfileForm = () => {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const problem = missingRequired(values);
+    const problem = missingRequired(values, profile);
     setError(problem);
     if (problem) return;
 

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ApplicantDoc } from "./handlers";
-import { findErpEntryId, isDue, profileOverlay, pushApplication } from "./erp-push";
+import { findErpEntryId, isDue, loginFor, profileOverlay, pushApplication } from "./erp-push";
 
 type Call = { endpoint: string; body: unknown; auth: string | null };
 
@@ -12,7 +12,7 @@ const fail = (retmsg: string) => ({ rettype: 1, retmsg, retdata: null });
 
 function doc(profile: Record<string, unknown> = {}): ApplicantDoc {
   return {
-    profile: { regno: "АА00000000", mobilephone: "99112233", firstname: "Бат", ...profile },
+    profile: { regno: "АА00000000", mobilephone: "99112233", firstname: "Бат", lastname: "Дорж", ...profile },
     education: [],
     languages: [],
     qualifications: [],
@@ -47,6 +47,8 @@ const deps = (cv: { filename: string; data: string } | null = null) => ({
 
 let calls: Call[];
 let answers: Record<string, unknown[]>;
+/** HTTP status per endpoint (default 200). */
+let statuses: Record<string, number>;
 
 function answer(endpoint: string, ...bodies: unknown[]) {
   answers[endpoint] = bodies;
@@ -56,6 +58,7 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_API_URL", "https://erp.test");
   calls = [];
   answers = {};
+  statuses = {};
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(String(input));
     const endpoint = url.pathname.replace("/api/applicant/", "");
@@ -65,7 +68,7 @@ beforeEach(() => {
     calls.push({ endpoint, body, auth: headers.Authorization ?? null });
     const queue = answers[endpoint] ?? [ok(null)];
     const next = queue.length > 1 ? queue.shift() : queue[0];
-    return new Response(JSON.stringify(next), { status: 200 });
+    return new Response(JSON.stringify(next), { status: statuses[endpoint] ?? 200 });
   });
 });
 
@@ -81,9 +84,11 @@ describe("pushApplication", () => {
     expect(calls).toEqual([]);
   });
 
-  it("fails fast without regno/phone", async () => {
-    const result = await pushApplication(doc({ regno: "" }), app, deps());
-    expect(result).toEqual({ status: "failed", error: "profile_incomplete" });
+  it("fails fast without регистр, овог, нэр or утас", async () => {
+    for (const key of ["regno", "lastname", "firstname", "mobilephone"]) {
+      const result = await pushApplication(doc({ [key]: "" }), app, deps());
+      expect(result).toEqual({ status: "failed", error: "profile_incomplete" });
+    }
     expect(calls).toEqual([]);
   });
 
@@ -116,11 +121,83 @@ describe("pushApplication", () => {
     expect(calls.slice(1).every((c) => c.auth === "Bearer tok")).toBe(true);
   });
 
-  it("a failed login never auto-registers (SaveHrAppUser would overwrite by регистр)", async () => {
-    answer("auth/login", fail("зөрж байна"));
+  // Policy (Postman 01/02): login first; SaveHrAppUser only when the login
+  // 401s. On a new регистр it creates the ERP applicant and returns a token; on
+  // an existing one with another phone it answers "…зөрж байна!" and changes
+  // nothing — so it can never overwrite someone else's record.
+  it("a 401 login registers once through SaveHrAppUser and uses its token", async () => {
+    statuses["auth/login"] = 401;
+    answer("auth/login", { rettype: -1, retmsg: "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!", retdata: null });
+    answer("SaveHrAppUser", ok({ access_token: "new-tok" }));
     const result = await pushApplication(doc(), app, deps());
-    expect(result).toEqual({ status: "failed", error: "erp_login_failed" });
+    expect(result.status).toBe("sent");
+    expect(calls.slice(0, 3).map((c) => c.endpoint)).toEqual(["auth/login", "SaveHrAppUser", "get"]);
+    expect(calls[1]).toMatchObject({
+      auth: null,
+      body: { lastname: "Дорж", firstname: "Бат", regno: "АА00000000", email: "a@b.mn", mobilephone: "99112233" },
+    });
+    expect(calls.slice(2).every((c) => c.auth === "Bearer new-tok")).toBe(true);
+  });
+
+  it("registering with an existing регистр and another phone: failed, message kept, no retry", async () => {
+    const message = "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!";
+    statuses["auth/login"] = 401;
+    answer("auth/login", { rettype: -1, retmsg: message, retdata: null });
+    answer("SaveHrAppUser", fail(message));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const refused = await loginFor(doc());
+    expect(refused).toMatchObject({ ok: false, error: "erp_link_mismatch", linkError: message });
+    expect(calls.map((c) => c.endpoint)).toEqual(["auth/login", "SaveHrAppUser"]);
+
+    // Stored with its key, the same credentials are never sent again…
+    const key = (refused as { linkKey: string }).linkKey;
+    expect(key).toMatch(/^[0-9a-f]{64}$/);
+    const stored = { ...doc(), erp: { linkError: message, linkKey: key } };
+    expect(await loginFor(stored)).toMatchObject({ ok: false, error: "erp_link_refused" });
+    expect(calls).toHaveLength(2);
+    // …but a changed phone is tried.
+    answer("SaveHrAppUser", ok({ access_token: "tok" }));
+    const fixed = { ...stored, profile: { ...stored.profile, mobilephone: "88112233" } };
+    expect(await loginFor(fixed)).toEqual({ ok: true, value: "tok" });
+  });
+
+  it("a 401 on an account already linked is a refusal, never a registration", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    statuses["auth/login"] = 401;
+    answer("auth/login", { message: "Unauthorized" }); // no retmsg: the standard wording is used
+    const linked = { ...doc(), erp: { linkedRegno: "АА00000000" } };
+    const claim = vi.fn(async () => true);
+    expect(await loginFor(linked, { claimRegister: claim })).toMatchObject({
+      ok: false,
+      error: "erp_link_mismatch",
+      linkError: "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!",
+      linkKey: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(claim).not.toHaveBeenCalled();
     expect(calls.map((c) => c.endpoint)).toEqual(["auth/login"]);
+  });
+
+  it("only the claim holder sends SaveHrAppUser", async () => {
+    statuses["auth/login"] = 401;
+    answer("auth/login", { rettype: -1, retmsg: "зөрж байна", retdata: null });
+    expect(await loginFor(doc(), { claimRegister: async () => false })).toEqual({ ok: false, error: "erp_register_busy" });
+    expect(calls.map((c) => c.endpoint)).toEqual(["auth/login"]);
+  });
+
+  it("a login that fails for any other reason (5xx, envelope refusal) never registers", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    statuses["auth/login"] = 503;
+    answer("auth/login", { message: "down" });
+    expect(await loginFor(doc())).toEqual({ ok: false, error: "erp_login_failed" });
+    answer("auth/login", fail("зөрж байна"));
+    statuses["auth/login"] = 200;
+    expect(await loginFor(doc())).toEqual({ ok: false, error: "erp_login_failed" });
+    expect(calls.map((c) => c.endpoint)).toEqual(["auth/login", "auth/login"]);
+  });
+
+  it("blank identity: no ERP call at all", async () => {
+    expect(await loginFor(doc({ firstname: " " }))).toEqual({ ok: false, error: "profile_incomplete" });
+    expect(calls).toEqual([]);
   });
 
   it("Clerk defaults never replace ERP values until the applicant saves their profile", async () => {

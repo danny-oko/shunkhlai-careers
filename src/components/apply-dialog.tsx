@@ -1,8 +1,9 @@
 "use client";
 
+import { useIdentityReady } from "@/components/account/identity-gate";
 import { useSession } from "@/components/auth/session-provider";
 import { ApplyForm } from "@/components/apply-form";
-import { SentPanel, SignInPanel } from "@/components/apply-panels";
+import { IdentityPanel, SentPanel, SignInPanel } from "@/components/apply-panels";
 import { useApplyForm, useApplyOptions } from "@/components/use-apply-form";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import type { JobDetail } from "@/lib/jobs/types";
@@ -25,6 +26,7 @@ export const ApplyDialog = ({
   onOpenChange: (open: boolean) => void;
 }) => {
   const { status } = useSession();
+  const { blocked } = useIdentityReady();
   const options = useApplyOptions(open);
   const apply = useApplyForm(job, options.salaryLevels.options);
 
@@ -38,6 +40,8 @@ export const ApplyDialog = ({
     <SentPanel job={job} onClose={() => handleOpenChange(false)} />
   ) : status !== "authenticated" ? (
     <SignInPanel />
+  ) : blocked ? (
+    <IdentityPanel />
   ) : (
     <ApplyForm job={job} apply={apply} options={options} />
   );

@@ -21,6 +21,8 @@ const NOT_ECHOED = new Set([
   "districtname",
   "relativename",
   "relativename2",
+  "erplinked",
+  "erplinkerror",
 ]);
 
 /**

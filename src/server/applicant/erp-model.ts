@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 import type { ApplicantDoc, DocErp, PendingDelete, Row } from "./handlers";
 
 /**
@@ -453,6 +454,44 @@ export function pullDue(doc: ApplicantDoc, now = Date.now()): boolean {
   }
   return age(erp.pulledAt, now) >= PULL_EVERY_MS;
 }
+
+/* --- ERP account link ---------------------------------------------------- */
+
+/**
+ * Fingerprint of a регистр + утас pair, so a refusal can be tied to the exact
+ * credentials the ERP refused (the values themselves are not copied).
+ */
+export const credentialKey = (profile: Row) =>
+  hashOf(`${normalizeRegno(profile.regno)}|${normalizePhone(profile.mobilephone)}`);
+
+/** The ERP already refused the регистр + утас stored now: do not send them again. */
+export const linkRefused = (doc: ApplicantDoc) =>
+  !!doc.erp?.linkError && doc.erp.linkKey === credentialKey(doc.profile);
+
+/** Worth talking to the ERP at all: all four identity fields, not already refused. */
+export const erpReady = (doc: ApplicantDoc) => isIdentityComplete(doc.profile) && !linkRefused(doc);
+
+/**
+ * The регистр this account is linked to in the ERP ("" = not linked). Set at
+ * the first token; documents pulled before that was recorded count as linked
+ * to their stored регистр.
+ */
+export const linkedRegno = (doc: ApplicantDoc) =>
+  doc.erp?.linkedRegno ?? (doc.erp?.pulledAt ? normalizeRegno(doc.profile.regno) : "");
+
+/** A token was issued for `regno`: linked, and any refusal or claim is over. */
+export function markLinked(doc: ApplicantDoc, regno: unknown, now = new Date()): void {
+  const erp = (doc.erp ??= {});
+  erp.linkedRegno ??= normalizeRegno(regno);
+  erp.linkedAt ??= now.toISOString();
+  delete erp.linkError;
+  delete erp.linkKey;
+  delete erp.registeringAt;
+}
+
+/** Another request is registering this applicant (SaveHrAppUser in flight). */
+export const registering = (doc: ApplicantDoc, now = Date.now()) =>
+  age(doc.erp?.registeringAt, now) < CLAIM_TTL_MS;
 
 /** A sync task for this account is already scheduled and has not started. */
 export const syncScheduled = (doc: ApplicantDoc, now = Date.now()) =>

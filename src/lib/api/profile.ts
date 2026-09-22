@@ -60,6 +60,13 @@ export type ApplicantProfile = {
   distinctper?: number;
   familyper?: number;
   totalper?: number;
+  /**
+   * `/api/me` only: the account is linked to an ERP record, so the регистр
+   * can no longer change. Never sent back.
+   */
+  erplinked?: boolean;
+  /** `/api/me` only: the ERP's refusal of the stored регистр + утас, else null. */
+  erplinkerror?: string | null;
   [extra: string]: unknown;
 };
 

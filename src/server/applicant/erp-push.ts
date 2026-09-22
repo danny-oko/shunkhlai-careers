@@ -3,8 +3,19 @@ import { createHash } from "node:crypto";
 
 import { buildProfilePayload } from "@/lib/api/profile-payload";
 import type { ApplicantProfile, ProfileInput } from "@/lib/api/profile";
-import { ErpError, erpGet, erpLogin, erpPost, erpUpload, hasErp } from "./erp";
-import { CLAIM_TTL_MS, MAX_ATTEMPTS, PROFILE_KEYS, RETRY_FAILED_AFTER_MS, RETRY_PENDING_AFTER_MS, erpIdOfApplication } from "./erp-model";
+import { isIdentityComplete } from "@/lib/applicant-identity";
+import { ErpError, erpGet, erpLogin, erpPost, erpRegister, erpUpload, hasErp } from "./erp";
+import {
+  CLAIM_TTL_MS,
+  MAX_ATTEMPTS,
+  PROFILE_KEYS,
+  RETRY_FAILED_AFTER_MS,
+  RETRY_PENDING_AFTER_MS,
+  credentialKey,
+  erpIdOfApplication,
+  linkRefused,
+  linkedRegno,
+} from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
@@ -55,7 +66,29 @@ export type PushDeps = {
   appliedOrderIds?: number[];
 };
 
-export type Step<T> = { ok: true; value: T } | { ok: false; error: string };
+/**
+ * `linkError`: the ERP's own refusal of the регистр + утас, worth showing the
+ * applicant; `linkKey` is the `credentialKey` of the pair it refused.
+ */
+export type Step<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; linkError?: string; linkKey?: string };
+
+/**
+ * Failures that mean "not ready", not "the ERP failed": nothing was sent, so
+ * they never count towards a pull backoff.
+ */
+export const NOT_READY = new Set(["profile_incomplete", "erp_link_refused", "erp_register_busy"]);
+
+export type LoginOptions = {
+  /** Clerk email, used when the profile has none. */
+  email?: string;
+  /**
+   * Claims the one SaveHrAppUser for this applicant (stored on the document
+   * under its optimistic lock). False: another request is registering.
+   */
+  claimRegister?: () => Promise<boolean>;
+};
 
 export type PushBatch = {
   login?: Promise<Step<string>>;
@@ -152,19 +185,72 @@ function entryIdFrom(retdata: unknown): number | undefined {
 
 /* --- steps -------------------------------------------------------------- */
 
-/** One ERP login with the applicant's регистр + phone. Never throws. */
-export async function loginFor(doc: ApplicantDoc): Promise<Step<string>> {
+/** SaveHrAppUser's answer when the регистр exists with another phone (password). */
+const MISMATCH = /зөрж байна/i;
+
+/** The ERP's wording, for a refusal that came without it. */
+export const MISMATCH_MESSAGE = "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!";
+
+/**
+ * The ERP token for this applicant. Never throws; one attempt per batch.
+ *
+ * Nothing is called until регистр, овог, нэр and утас are all stored — the
+ * ERP cannot be logged into (or registered with) on less.
+ *
+ * Login first (`auth/login`), so an applicant the ERP already knows is never
+ * sent through SaveHrAppUser. Only a 401 falls back to SaveHrAppUser (Postman
+ * 01/02), which tells the two 401 causes apart: a new регистр is created and
+ * answered with a token; an existing регистр with another phone gets
+ * "…зөрж байна!" and no change — that message comes back as `linkError`
+ * (stored with `linkKey`), and from then on these credentials are not sent at
+ * all until the applicant changes регистр or утас. Only one SaveHrAppUser
+ * per applicant is in flight (`claimRegister`). Other failures (timeout, 5xx)
+ * never register, and neither does a 401 on an account already linked.
+ */
+export async function loginFor(doc: ApplicantDoc, options: LoginOptions = {}): Promise<Step<string>> {
+  if (!isIdentityComplete(doc.profile)) return { ok: false, error: "profile_incomplete" };
+  if (linkRefused(doc)) return { ok: false, error: "erp_link_refused", linkError: doc.erp?.linkError };
   const regno = str(doc.profile.regno);
   const phone = str(doc.profile.mobilephone);
-  // No auto-register: the ERP answers "not registered" and "wrong phone" with
-  // the same 401, and SaveHrAppUser is a create-or-update keyed by регистр
-  // that returns a token — registering on a failed login could overwrite (or
-  // hand over) another applicant's ERP record. The row stays in D1 as failed.
   try {
     return { ok: true, value: await erpLogin(regno, phone) };
   } catch (error) {
-    logFailure("erp_login_failed", error);
-    return { ok: false, error: "erp_login_failed" };
+    if (!(error instanceof ErpError && error.status === 401)) {
+      logFailure("erp_login_failed", error);
+      return { ok: false, error: "erp_login_failed" };
+    }
+    // Already linked: the ERP knows this applicant, so a 401 means the stored
+    // регистр + утас are wrong (e.g. утас edited here). Registering is not the
+    // point — record the refusal so the applicant sees it and calls stop.
+    if (linkedRegno(doc)) {
+      logFailure("erp_link_mismatch", error);
+      return {
+        ok: false,
+        error: "erp_link_mismatch",
+        linkError: MISMATCH.test(error.message) ? error.message : MISMATCH_MESSAGE,
+        linkKey: credentialKey(doc.profile),
+      };
+    }
+  }
+  if (options.claimRegister && !(await options.claimRegister())) {
+    return { ok: false, error: "erp_register_busy" };
+  }
+  try {
+    const token = await erpRegister({
+      lastname: str(doc.profile.lastname),
+      firstname: str(doc.profile.firstname),
+      regno,
+      email: str(doc.profile.email2) || (options.email ?? ""),
+      mobilephone: phone,
+    });
+    return { ok: true, value: token };
+  } catch (error) {
+    if (error instanceof ErpError && MISMATCH.test(error.message)) {
+      logFailure("erp_link_mismatch", error);
+      return { ok: false, error: "erp_link_mismatch", linkError: error.message, linkKey: credentialKey(doc.profile) };
+    }
+    logFailure("erp_register_failed", error);
+    return { ok: false, error: "erp_register_failed" };
   }
 }
 
@@ -208,12 +294,10 @@ export async function pushApplication(
   deps: PushDeps,
 ): Promise<PushResult> {
   if (!hasErp()) return { status: "skipped" };
-  if (!str(doc.profile.regno) || !str(doc.profile.mobilephone)) {
-    return { status: "failed", error: "profile_incomplete" };
-  }
+  if (!isIdentityComplete(doc.profile)) return { status: "failed", error: "profile_incomplete" };
 
   const batch = deps.batch ?? createPushBatch();
-  batch.login ??= loginFor(doc);
+  batch.login ??= loginFor(doc, { email: deps.identity.email });
   const session = await batch.login;
   if (!session.ok) return { status: "failed", error: session.error };
   const token = session.value;
