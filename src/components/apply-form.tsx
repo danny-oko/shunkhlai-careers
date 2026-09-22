@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FileWarning, Loader2 } from "lucide-react";
 
 import type { DropdownOption } from "@/lib/api";
+import { LinkErrorNotice } from "@/components/account/identity-gate";
 import { useSession } from "@/components/auth/session-provider";
 import type { useApplyForm, useApplyOptions } from "@/components/use-apply-form";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,8 @@ export const ApplyForm = ({
     </SheetHeader>
 
     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6">
+      {/* The ERP refused регистр + утас: the application is kept here but cannot reach it until fixed. */}
+      <LinkErrorNotice fixHref="/account/profile" />
       <CvNotice />
 
       <Field label="Хүссэн цалингийн түвшин" htmlFor="salrequest" hint={salaryHint(job)}>

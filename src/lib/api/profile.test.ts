@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest";
+import type { AxiosAdapter } from "axios";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { buildProfilePayload, unwrapProfile, type ApplicantProfile, type ProfileInput } from "./profile";
+import { http } from "./core/client";
+import {
+  buildProfilePayload,
+  saveProfile,
+  unwrapProfile,
+  type ApplicantProfile,
+  type ProfileInput,
+} from "./profile";
 
 const input: ProfileInput = {
   lastname: "Test",
@@ -105,5 +113,32 @@ describe("unwrapProfile", () => {
     expect(unwrapProfile({ firstname: "B" }).firstname).toBe("B");
     expect(unwrapProfile(null)).toEqual({});
     expect(unwrapProfile({ applicantdata: [] }).firstname).toBeUndefined();
+  });
+});
+
+describe("saveProfile", () => {
+  const bodies: Record<string, unknown>[] = [];
+  const capture: AxiosAdapter = async (config) => {
+    bodies.push(JSON.parse(String(config.data)));
+    return {
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+      data: { totalrow: 0, affectedrows: 1, retmsg: "", traceno: 0, rettype: 0, retdata: true },
+    };
+  };
+
+  afterEach(() => {
+    delete http.defaults.adapter;
+    bodies.length = 0;
+  });
+
+  it("asks for an ERP retry only when told to (an ordinary save never does)", async () => {
+    http.defaults.adapter = capture;
+    await saveProfile(input);
+    await saveProfile(input, null, { retryLink: true });
+    expect(bodies[0]).not.toHaveProperty("retrylink");
+    expect(bodies[1]).toMatchObject({ regno: "AA00000000", mobilephone: "99000000", retrylink: true });
   });
 });

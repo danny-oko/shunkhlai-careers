@@ -129,6 +129,24 @@ describe("applySnapshot", () => {
     });
   });
 
+  it("a different ERP regno/phone never replaces D1's either (the phone there is the contact number, not the password)", () => {
+    for (const first of [true, false]) {
+      const pulled = pulledProfile(
+        { regno: "УБ99010101", mobilephone: "PASS1234" },
+        { regno: "уб99010101", mobilephone: "99887766", addr2: "a" },
+        first,
+      );
+      expect(pulled.profile).toMatchObject({ regno: "УБ99010101", mobilephone: "PASS1234", addr2: "a" });
+      // Nothing to send back: D1 keeping its login is not a profile edit.
+      expect(pulled.d1Only).toBe(false);
+    }
+    // Blank in D1 (never the case once logged in): the ERP value fills it.
+    expect(pulledProfile({ regno: "R" }, { regno: "X", mobilephone: "99887766" }).profile).toMatchObject({
+      regno: "R",
+      mobilephone: "99887766",
+    });
+  });
+
   it("an unusable section answer keeps D1 as it is (no mass delete)", async () => {
     const doc = emptyDoc();
     doc.education = [{ entryid: 501, schoolname: "keep", erp: "synced" }];

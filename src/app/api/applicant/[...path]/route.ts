@@ -35,7 +35,8 @@ import { readJson, readUpload } from "@/server/applicant/request-body";
  *
  * The per-account endpoints are shared with `/api/me` (see
  * `src/server/applicant/handlers.ts`); this route adds the public reference
- * data, sign-up/sign-in and the password change on top.
+ * data, sign-up/sign-in (`SaveHrAppUser`, `auth/login`) and the password
+ * change on top.
  *
  * State is in memory (see `src/server/mock/store.ts`), and in development it
  * is mirrored to `.mock-data/db.json` so a dev-server restart does not sign
@@ -74,6 +75,9 @@ function fail(retmsg: string, status = 200, rettype = 1) {
     { status },
   );
 }
+
+/** The ERP's answer to a регистр + утас (password) pair it does not accept. */
+const MISMATCH_MESSAGE = "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!";
 
 function unauthorized() {
   return fail(UNAUTHORIZED_MESSAGE, 401);
@@ -169,7 +173,21 @@ async function post(request: Request, ctx: Ctx) {
   const endpoint = path.join("/");
   const url = new URL(request.url);
 
-  /* --- sign up / sign in (one endpoint) -------------------------------- */
+  /* --- sign in: auth/login {regNo, mobile} ----------------------------- */
+
+  // As the live ERP answers it (verified 2026-09-22): the token under
+  // `retdata`; an unknown регистр or a wrong phone (password) is one HTTP 401
+  // with rettype -1. Only reads — never creates or changes an account.
+  if (endpoint === "auth/login") {
+    const body = (await readJson(request)) as { regNo?: unknown; mobile?: unknown } | null;
+    const existing = findAccount(String(body?.regNo ?? "").trim().toUpperCase());
+    if (!existing || existing.password !== String(body?.mobile ?? "").trim()) {
+      return fail(MISMATCH_MESSAGE, 401, -1);
+    }
+    return ok(issueToken(existing));
+  }
+
+  /* --- sign up / sign in (one endpoint, Postman 01/02) ----------------- */
 
   if (endpoint === "SaveHrAppUser") {
     const body = (await readJson(request)) as Record<string, string> | null;
@@ -183,13 +201,13 @@ async function post(request: Request, ctx: Ctx) {
     const existing = findAccount(regno);
     if (existing) {
       if (existing.password !== mobilephone) {
-        return fail("Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!");
+        return fail(MISMATCH_MESSAGE);
       }
       return ok(issueToken(existing));
     }
 
     if (!body?.lastname || !body?.firstname) {
-      return fail("Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!");
+      return fail(MISMATCH_MESSAGE);
     }
 
     const account = createAccount({
