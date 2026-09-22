@@ -9,16 +9,16 @@ export async function readJson(request: Request): Promise<unknown> {
   }
 }
 
-/** The first non-empty file of a multipart body, base64-encoded. */
+/** The first non-empty file of a multipart body, base64-encoded, with its reported MIME type. */
 export async function readUpload(
   request: Request,
-): Promise<{ name: string; data: string } | null> {
+): Promise<{ name: string; type: string; data: string } | null> {
   try {
     const form = await request.formData();
     for (const value of form.values()) {
       if (value instanceof File && value.size > 0) {
         const buffer = Buffer.from(await value.arrayBuffer());
-        return { name: value.name, data: buffer.toString("base64") };
+        return { name: value.name, type: value.type, data: buffer.toString("base64") };
       }
     }
   } catch {

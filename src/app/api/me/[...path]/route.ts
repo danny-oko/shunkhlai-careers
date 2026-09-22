@@ -5,8 +5,10 @@ import {
   AccountConflictError,
   type ClerkIdentity,
   loadAccount,
+  readCv,
   saveAccount,
 } from "@/server/applicant/account-store";
+import { CV_MISSING_MESSAGE, cvResponse } from "@/server/applicant/cv-download";
 import {
   UNAUTHORIZED_MESSAGE,
   UPLOAD_ENDPOINTS,
@@ -16,6 +18,7 @@ import {
 import { identityGate } from "@/server/applicant/identity-gate";
 import { referenceDeps } from "@/server/applicant/reference";
 import { readJson, readUpload } from "@/server/applicant/request-body";
+import { uploadProblem } from "@/server/applicant/upload-check";
 import {
   type InlinePull,
   markScheduled,
@@ -46,6 +49,10 @@ import { MAX_CV_BYTES } from "@/lib/apply-schema";
  * `get` pulls the ERP анкет — inline and time-boxed the first time, in
  * `after()` when stale — and retries due work. The `erp` markers on rows are
  * ignored by the UI. Without `NEXT_PUBLIC_API_URL` none of this runs.
+ *
+ * One path is not an ERP endpoint: `GET /api/me/cv` downloads the stored CV.
+ * `get` carries only its `filename` (the ERP's `get` also has the whole file
+ * as base64 `filedata` — too heavy for every session load).
  */
 
 export const dynamic = "force-dynamic";
@@ -103,6 +110,16 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
   const endpoint = path.join("/");
   const url = new URL(request.url);
 
+  if (method === "GET" && endpoint === "cv") {
+    try {
+      const cv = await readCv(identity.email);
+      return cv?.data ? cvResponse(cv) : envelope(CV_MISSING_MESSAGE, 404);
+    } catch (error) {
+      console.error("[api/me] GET cv failed", error);
+      return envelope("Алдаа гарлаа. Дахин оролдоно уу.", 500);
+    }
+  }
+
   const isUpload = method === "POST" && UPLOAD_ENDPOINTS.has(endpoint);
   if (isUpload && Number(request.headers.get("content-length")) > MAX_UPLOAD_REQUEST_BYTES) {
     return envelope(FILE_TOO_LARGE_MESSAGE, 413);
@@ -111,6 +128,9 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
   if (upload && Buffer.byteLength(upload.data, "base64") > MAX_CV_BYTES) {
     return envelope(FILE_TOO_LARGE_MESSAGE, 413);
   }
+  // Wrong kind of file: refused before anything is stored or queued for the ERP.
+  const uploadRefusal = upload ? uploadProblem(endpoint, upload) : null;
+  if (uploadRefusal) return envelope(uploadRefusal, 415);
   const body = method === "POST" && !isUpload ? await readJson(request) : null;
 
   // First visit with the ERP configured: bring the ERP анкет in before
@@ -147,7 +167,7 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
 
   async function run() {
     const account = await loadAccount(identity!, {
-      withFiles: method === "GET" && endpoint === "get",
+      withPicture: method === "GET" && endpoint === "get",
     });
 
     // No write before регистр, овог, нэр, утас are stored (see identity-gate.ts).
@@ -182,6 +202,10 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
       },
     );
     if (!result) return envelope(`Тодорхойгүй хүсэлт: ${endpoint}`, 404);
+    // The CV's bytes are served by GET /api/me/cv, not on every session load.
+    if (method === "GET" && endpoint === "get") {
+      delete (result.envelope.retdata as Record<string, unknown>).filedata;
+    }
 
     // A new application is saved as pending; the ERP push runs after the reply.
     const submitted =

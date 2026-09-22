@@ -18,7 +18,7 @@ so ERP auth becomes invisible plumbing, while the user knowingly applies/edits.
 - Account-edit UI (`src/components/account/profile-form.tsx`) already renders the
   personal-info form (screenshot 1) and calls the `profile`/`account` modules.
 - A **mock session auth** (`src/components/auth/session-provider.tsx`,
-  `src/lib/api/auth.ts`) and dev persistence in `.mock-data/db.json`.
+  `src/lib/api/auth.ts (removed in step 02)`) and dev persistence in `.mock-data/db.json`.
 
 ## What this branch adds
 

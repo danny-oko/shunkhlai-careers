@@ -15,11 +15,15 @@ const SEARCH_ONLY = new Set(["getPosGroupDropdown", "getPositionsDropdown", "Get
 
 type Envelope = { rettype?: number; retdata?: unknown };
 
+const LOOKUP_TIMEOUT_MS = 10_000;
+
 async function liveGet(endpoint: string, params: Record<string, string>): Promise<unknown> {
   const query = new URLSearchParams(params).toString();
   const res = await fetch(`${API_BASE_URL}${APPLICANT_BASE}/${endpoint}?${query}`, {
     headers: { Accept: "application/json", language: LANGUAGE },
     cache: "no-store",
+    // A pull labels its rows through here; a hung list must not hold it.
+    signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`${endpoint}: HTTP ${res.status}`);
   const body = (await res.json()) as Envelope;
