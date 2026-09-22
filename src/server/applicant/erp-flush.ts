@@ -6,10 +6,18 @@ import { ErpError, erpGet, erpPost, erpUpload } from "./erp";
 import {
   DELETE_PARAMS,
   SECTIONS,
+  type SectionConfig,
   type SectionKey,
+  type Adoption,
+  adoptRows,
+  deletedIds,
   hashOf,
   isLocalId,
   labelSources,
+  mergeSection,
+  planAdoption,
+  saveBody,
+  sectionList,
   snapshotOf,
 } from "./erp-model";
 import { type PushIdentity, type PushResult, erpRecord, profileOverlay, pushApplication } from "./erp-push";
@@ -45,7 +53,14 @@ export type FlushOutcome = {
   picture?: { stamp: number; hash: string | null };
   deletesDone: PendingDelete[];
   pushed: Partial<Record<SectionKey, Set<string>>>;
-  /** Sources re-read after saving into them. */
+  /** The adoption pass each section's unadopted rows had (see `planAdoption`). */
+  adopted: Partial<Record<SectionKey, Adoption>>;
+  /**
+   * Sources as the ERP last answered them in this run: re-read after saving
+   * into them, or read before a save that needed it. A post-save re-read that
+   * fails leaves its source out (a read from before the save would lack the
+   * rows just saved).
+   */
   sources: Record<string, unknown>;
   appResults: Map<number, PushResult>;
   /** Request list read after the last submit. */
@@ -65,36 +80,6 @@ function logFailure(code: string, error: unknown) {
 const NOT_FOUND = /олдсонгүй|олдохгүй|байхгүй|not found|does not exist/i;
 
 const stripDataUrl = (value: string) => value.replace(/^data:[^,]*,/, "");
-
-/**
- * Labels our handler adds for display (the ERP derives its own from the ids);
- * the browser never sent them, so neither do we.
- */
-const DISPLAY_ONLY = new Set([
-  "universityname",
-  "professionname",
-  "educationlevelname",
-  "forlanguagename",
-  "listeninglevelname",
-  "speakinglevelname",
-  "readinglevelname",
-  "writinglevelname",
-  "skillcompname",
-  "levelname",
-  "jobname",
-  "businesstypename",
-  "relativename",
-  "posgroupname",
-  "positionname",
-]);
-
-/** The body for a section save: our marker and labels dropped, the ERP id (or 0). */
-function saveBody(row: Row): Row {
-  const body = Object.fromEntries(
-    Object.entries(row).filter(([key]) => key !== "erp" && !DISPLAY_ONLY.has(key)),
-  );
-  return { ...body, entryid: isLocalId(row.entryid) ? 0 : Number(row.entryid) };
-}
 
 type Ctx = {
   input: FlushInput;
@@ -189,18 +174,99 @@ async function flushDeletes({ input, out, failed }: Ctx) {
   }
 }
 
-/** Saves one section's pending rows; returns true when any went through. */
-async function flushSection(ctx: Ctx, config: (typeof SECTIONS)[number]): Promise<boolean> {
-  const pending = ctx.input.doc[config.key].filter((row) => row.erp === "pending");
-  if (!config.save || pending.length === 0) return false;
-  const done = (ctx.out.pushed[config.key] ??= new Set());
-  const groups = config.batch ? [pending] : pending.map((row) => [row]);
-  let any = false;
-  for (const group of groups) {
+/**
+ * What an array save sends: EVERY row of the section, not only the pending
+ * ones — synced rows with their ERP id, new rows with 0 — minus rows queued for
+ * deletion. Postman: "бүх мөрийг нэг дор илгээнэ". Whether the ERP replaces
+ * the set with the array or upserts row by row is not verifiable without a
+ * live write; sending the whole set is right under both (an edit of one row
+ * never drops the others), and the re-read after it settles the ids.
+ */
+function batchRows(input: FlushInput, config: SectionConfig, rows: Row[]): Row[] {
+  const gone = deletedIds(input.doc.erp?.pendingDeletes, config.remove);
+  return rows.filter((row) => isLocalId(row.entryid) || !gone.has(Number(row.entryid)));
+}
+
+/** The section's list as the ERP has it now (its source kept in `out.sources`); null on failure. */
+async function readSection(ctx: Ctx, config: SectionConfig): Promise<Row[] | null> {
+  try {
+    const source = await erpGet<unknown>(config.source, ctx.input.token);
+    const list = sectionList(config, source);
+    if (!list) throw new Error(`${config.source}: no ${config.listKey ?? "list"}`);
+    ctx.out.sources[config.source] = source;
+    return list;
+  } catch (error) {
+    ctx.failed("erp_repull_failed", error);
+    return null;
+  }
+}
+
+/**
+ * The rows to save from. Rows the ERP took in an earlier save whose re-read
+ * failed (`unadopted`) still carry local ids: sent as they are they would go
+ * as `entryid: 0` — a second copy in the ERP. So the list is read first and
+ * they are adopted by content (`planAdoption`); the rest of the section then
+ * reads as a pull would. Null = the read failed: nothing sent this run.
+ */
+async function workingRows(ctx: Ctx, config: SectionConfig): Promise<Row[] | null> {
+  const { doc } = ctx.input;
+  if (!doc.erp?.unadopted?.[config.key]?.length) return doc[config.key];
+  const list = await readSection(ctx, config);
+  if (!list) return null;
+  const adoption = planAdoption(doc, config, list)!;
+  ctx.out.adopted[config.key] = adoption;
+  return mergeSection(config, adoptRows(doc[config.key], adoption), list, doc.erp?.pendingDeletes);
+}
+
+/**
+ * One array save of the whole set. "Мөр олдсонгүй." means a row went with an
+ * ERP id the ERP no longer has (deleted there since the last pull): the list is
+ * read, what it no longer has is left out — an edit of such a row included,
+ * it is gone there — and the save is tried once more.
+ */
+async function saveBatch(ctx: Ctx, config: SectionConfig, rows: Row[], done: Set<string>): Promise<boolean> {
+  const send = (set: Row[]) => erpPost(config.save!, ctx.input.token, set.map(saveBody));
+  let set = batchRows(ctx.input, config, rows);
+  try {
+    await send(set);
+  } catch (error) {
+    if (!(error instanceof ErpError && NOT_FOUND.test(error.message))) {
+      ctx.failed("erp_save_failed", error);
+      return false;
+    }
+    const list = await readSection(ctx, config);
+    if (!list) return false;
+    const have = new Set(list.map((row) => Number(row.entryid)));
+    const merged = mergeSection(config, rows, list, ctx.input.doc.erp?.pendingDeletes);
+    const vanished = merged.filter((row) => !isLocalId(row.entryid) && !have.has(Number(row.entryid)));
+    for (const row of vanished) done.add(snapshotOf(row)); // gone in the ERP, so gone here
+    set = batchRows(ctx.input, config, merged.filter((row) => !vanished.includes(row)));
     try {
-      const body = config.batch ? group.map(saveBody) : saveBody(group[0]);
-      await erpPost(config.save, ctx.input.token, body);
-      for (const row of group) done.add(snapshotOf(row));
+      await send(set);
+    } catch (retryError) {
+      ctx.failed("erp_save_failed", retryError);
+      return false;
+    }
+  }
+  for (const row of set) done.add(snapshotOf(row));
+  return true;
+}
+
+/**
+ * Saves one section's pending rows (an array section: its whole set, once any
+ * row is pending); returns true when any went through.
+ */
+async function flushSection(ctx: Ctx, config: SectionConfig): Promise<boolean> {
+  if (!config.save || !ctx.input.doc[config.key].some((row) => row.erp === "pending")) return false;
+  const rows = await workingRows(ctx, config);
+  if (!rows) return false;
+  const done = (ctx.out.pushed[config.key] ??= new Set());
+  if (config.batch) return saveBatch(ctx, config, rows, done);
+  let any = false;
+  for (const row of rows.filter((r) => r.erp === "pending")) {
+    try {
+      await erpPost(config.save, ctx.input.token, saveBody(row));
+      done.add(snapshotOf(row));
       any = true;
     } catch (error) {
       ctx.failed("erp_save_failed", error);
@@ -219,11 +285,13 @@ async function flushSections(ctx: Ctx) {
     try {
       ctx.out.sources[source] = await erpGet<unknown>(source, ctx.input.token);
     } catch (error) {
+      // A read from before the save would lack what was just saved.
+      delete ctx.out.sources[source];
       ctx.failed("erp_repull_failed", error);
     }
   }
   // Those rows carry ids only; the list shows names (as a pull labels them).
-  if (touched.size) await labelSources(ctx.out.sources, referenceDeps().label);
+  if (Object.keys(ctx.out.sources).length) await labelSources(ctx.out.sources, referenceDeps().label);
 }
 
 async function flushApplications({ input, out }: Ctx) {
@@ -254,7 +322,7 @@ async function flushApplications({ input, out }: Ctx) {
 }
 
 export async function flush(input: FlushInput): Promise<FlushOutcome> {
-  const out: FlushOutcome = { deletesDone: [], pushed: {}, sources: {}, appResults: new Map() };
+  const out: FlushOutcome = { deletesDone: [], pushed: {}, adopted: {}, sources: {}, appResults: new Map() };
   const ctx: Ctx = {
     input,
     out,

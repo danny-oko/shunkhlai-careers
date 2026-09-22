@@ -14,7 +14,7 @@
 
 import { RETRY_LINK_FLAG, isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 import type { MaritalOption } from "@/lib/api/profile";
-import { CLEARABLE_KEYS, labelRow, linkRefused, linkedRegno } from "./erp-model";
+import { CLEARABLE_KEYS, type Unadopted, labelRow, linkRefused, linkedRegno } from "./erp-model";
 
 export type Row = Record<string, unknown>;
 
@@ -97,6 +97,13 @@ export type DocErp = {
   profileCleared?: string[];
   /** The ERP's `maritalstatus[]` option list, from the last pull of `/get`. */
   maritalOptions?: MaritalOption[];
+  /**
+   * Rows (per section) the ERP accepted in a save whose re-read then failed:
+   * the ERP holds them under ids not known here yet. Each keeps the body it
+   * was saved with, so the next pull or flush can find its ERP row by content
+   * and adopt that id before anything is sent again (`planAdoption`).
+   */
+  unadopted?: Partial<Record<string, Unadopted[]>>;
 };
 
 export type Envelope = {
@@ -181,6 +188,8 @@ export const SCHOOL_REQUIRED_MESSAGE = "Сургуулиа жагсаалтаа�
 
 export const LANGUAGE_REQUIRED_MESSAGE = "«Гадаад хэл» талбарыг бөглөнө үү.";
 
+export const SKILL_REQUIRED_MESSAGE = "Программаа жагсаалтаас сонгох эсвэл нэрийг нь бичнэ үү.";
+
 const ok = (retdata: unknown, mutated = false): HandlerResult => ({
   envelope: envelopeOk(retdata),
   status: 200,
@@ -200,17 +209,26 @@ function num(value: string | null, fallback = 0): number {
 
 /* --- row helpers ------------------------------------------------------- */
 
-/** `entryid: 0` inserts, anything else updates in place. */
+/**
+ * `entryid: 0` inserts, anything else updates in place. An update REPLACES the
+ * stored row with the body: the form leaves an emptied optional field out
+ * (never `null`, see `section-payload.ts`), so a key the body lacks is a
+ * cleared one — merged, the old value would stay in D1 and go back to the ERP.
+ * Only what the body cannot speak for is kept: the row's id and its sync
+ * marker (`erp`, ours — the list echoes it, and a body never sets it).
+ */
 export function upsertRow(rows: Row[], entry: Row, nextId: () => number): Row {
+  const { erp: _echoed, ...fields } = entry;
   const entryid = Number(entry.entryid ?? 0);
   if (entryid > 0) {
     const index = rows.findIndex((row) => Number(row.entryid) === entryid);
     if (index >= 0) {
-      rows[index] = { ...rows[index], ...entry };
+      const stored = rows[index];
+      rows[index] = { ...fields, entryid: stored.entryid, ...("erp" in stored ? { erp: stored.erp } : {}) };
       return rows[index];
     }
   }
-  const created = { ...entry, entryid: nextId() };
+  const created = { ...fields, entryid: nextId() };
   rows.push(created);
   return created;
 }
@@ -475,18 +493,15 @@ async function handlePost(
     }
 
     case "SaveAppSkillComp": {
-      const saved: Row[] = [];
-      for (const row of asRows(rawBody)) {
-        saved.push(
-          upsert(doc.skills, {
-            ...row,
-            skillcompname: await label("GetSkillCompDropDown", row.skillcompid),
-            levelname: await label("GetSkillCompLevelDropDown", row.levelid, {
-              skillcompid: row.skillcompid,
-            }),
-          }),
-        );
+      const rows = asRows(rawBody);
+      // Each row names its program: one from the list, or — not listed —
+      // `skillcompid: 0` with the name typed into `compnametext`. One row
+      // without either refuses the whole array (nothing half-saved).
+      if (rows.length === 0 || rows.some((row) => !(Number(row.skillcompid) > 0) && blank(row.compnametext))) {
+        return fail(SKILL_REQUIRED_MESSAGE);
       }
+      const saved: Row[] = [];
+      for (const row of rows) saved.push(upsert(doc.skills, await labelRow("skills", row, label)));
       return ok(saved, true);
     }
 
