@@ -16,6 +16,12 @@ export const ACCEPTED_CV_TYPES = [
 
 export const ACCEPTED_CV_EXTENSIONS = [".pdf", ".doc", ".docx"];
 
+const MAX_CV_MB = MAX_CV_BYTES / (1024 * 1024);
+
+/** The limits as the CV pickers show them. */
+export const CV_LIMITS_TEXT = `PDF, DOC эсвэл DOCX · ${MAX_CV_MB} MB хүртэл`;
+
+/** Why this file cannot be the CV (shown to the applicant), or null. */
 export function describeCvFileError(file: File): string | null {
   const hasAcceptedType = ACCEPTED_CV_TYPES.includes(file.type);
   const hasAcceptedExtension = ACCEPTED_CV_EXTENSIONS.some((ext) =>
@@ -23,10 +29,10 @@ export function describeCvFileError(file: File): string | null {
   );
 
   if (!hasAcceptedType && !hasAcceptedExtension) {
-    return "Upload a PDF, DOC or DOCX file.";
+    return "PDF, DOC эсвэл DOCX файл оруулна уу.";
   }
   if (file.size > MAX_CV_BYTES) {
-    return "That file is larger than 5 MB.";
+    return `Файл ${MAX_CV_MB} MB-аас том байна. Жижиг файл сонгоно уу.`;
   }
   return null;
 }

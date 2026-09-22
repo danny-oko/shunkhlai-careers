@@ -93,6 +93,12 @@ async function post(endpoint: string, body?: unknown, query = "") {
   return { status: res.status, body: (await res.json()) as Env };
 }
 
+/** GET /api/me/cv → the downloaded bytes as base64 (null: no CV). */
+async function cvBytes() {
+  const res = await GET(new Request("http://x/api/me/cv"), ctx("cv") as never);
+  return res.ok ? Buffer.from(await res.arrayBuffer()).toString("base64") : null;
+}
+
 async function flushAfter() {
   for (let guard = 0; state.after.length && guard < 20; guard += 1) await state.after.shift()!();
 }
@@ -222,7 +228,8 @@ describe("first load (pull)", () => {
     // The very first response already carries the ERP profile and files (inline pull).
     expect(p).toMatchObject({ lastname: "Дорж", firstname: "Бат", addr2: "ERP хаяг", custom1: "ERP custom", regno: erp.regno });
     expect(p.filename).toBe("erp-cv.pdf");
-    expect(p.filedata).toBe(erp.record.filedata);
+    expect(p).not.toHaveProperty("filedata");
+    expect(await cvBytes()).toBe(erp.record.filedata);
     expect(String(p.picturedata)).toContain(String(erp.record.picturedata));
 
     const l = await lists();
@@ -489,7 +496,11 @@ describe("write-through", () => {
     await flushAfter();
     const call = erp.calls.find((c) => c.endpoint === "SaveAppPicture")!;
     expect(call.method).toBe("POST");
-    expect(call.body).toMatchObject({ field: "file", bytes: Buffer.from([0xff, 0xd8, 0xff, 0x02]).toString("base64") });
+    expect(call.body).toMatchObject({
+      field: "file",
+      type: "image/jpeg",
+      bytes: Buffer.from([0xff, 0xd8, 0xff, 0x02]).toString("base64"),
+    });
     expect(erp.record.picturedata).toBe(Buffer.from([0xff, 0xd8, 0xff, 0x02]).toString("base64"));
   });
 
@@ -653,6 +664,9 @@ describe("delete: CV (deleteAppCV)", () => {
     expect(call).toBeDefined();
     expect([...call!.params.keys()]).toEqual([]);
     expect(erp.record.filedata ?? null).toBeNull();
+    // Gone from D1 as well: no file rows, nothing to download.
+    expect(q("select * from applicant_file where kind = 'cv'")).toEqual([]);
+    expect(await cvBytes()).toBeNull();
     advance(11 * 60_000);
     await get("get");
     await flushAfter();
@@ -693,6 +707,82 @@ describe("delete: CV (deleteAppCV)", () => {
     await flushAfter();
     expect(erp.endpoints()).not.toContain("deleteAppCV");
     expect(erp.endpoints()).not.toContain("SaveAppCV");
+  });
+});
+
+describe("CV upload and pull (SaveAppCV)", () => {
+  const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const upload = (name: string, bytes: number[]) => {
+    const fd = new FormData();
+    // No type, as some browsers report a .docx: the ERP part is typed from the name.
+    fd.set("file", new File([new Uint8Array(bytes)], name));
+    return post("SaveAppCV", fd);
+  };
+
+  it("reaches the ERP as multipart `file` with its name and the MIME type from the extension", async () => {
+    await firstLoad();
+    expect((await upload("Бат CV.docx", [5, 6, 7])).body.rettype).toBe(0);
+    await flushAfter();
+    const call = erp.calls.find((c) => c.endpoint === "SaveAppCV")!;
+    expect(call.method).toBe("POST");
+    expect(call.body).toEqual({
+      field: "file",
+      filename: "Бат CV.docx",
+      type: DOCX,
+      bytes: Buffer.from([5, 6, 7]).toString("base64"),
+    });
+    expect(erp.record.filename).toBe("Бат CV.docx");
+    expect(storedDoc().erp?.cvDirty).toBeUndefined();
+  });
+
+  it("a refused file type marks nothing for the ERP and sends nothing", async () => {
+    await firstLoad();
+    erp.calls = [];
+    const r = await upload("cv.exe", [1]);
+    expect(r.body.rettype).not.toBe(0);
+    const photo = new FormData();
+    photo.set("file", new File([new TextEncoder().encode("GIF89a")], "me.jpg"));
+    expect((await post("SaveAppPicture", photo)).body.rettype).not.toBe(0);
+    await flushAfter();
+    expect(storedDoc().erp?.cvDirty).toBeUndefined();
+    expect(storedDoc().erp?.pictureDirty).toBeUndefined();
+    expect(erp.endpoints()).not.toContain("SaveAppCV");
+    expect(erp.endpoints()).not.toContain("SaveAppPicture");
+    expect(await cvBytes()).toBe(erp.record.filedata); // the ERP's CV is still the one here
+  });
+
+  it("a pull never clobbers a newer local upload that has not reached the ERP yet", async () => {
+    await firstLoad(); // the ERP holds erp-cv.pdf
+    erp.refuse.set("SaveAppCV", "түр алдаа");
+    await upload("new.pdf", [9, 9]);
+    await flushAfter();
+    // Meanwhile the ERP's own copy changes too (another client) — ours is newer.
+    erp.record.filename = "erp-other.pdf";
+    erp.record.filedata = Buffer.from("OTHER").toString("base64");
+    advance(11 * 60_000); // stale: this get pulls again while the upload is still unsent
+    await get("get");
+    await flushAfter();
+    expect(erp.endpoints().filter((e) => e === "get").length).toBeGreaterThan(1);
+    expect(((await get("get")).body.retdata as Row).filename).toBe("new.pdf");
+    expect(await cvBytes()).toBe(Buffer.from([9, 9]).toString("base64"));
+
+    erp.refuse.delete("SaveAppCV");
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.record).toMatchObject({ filename: "new.pdf", filedata: Buffer.from([9, 9]).toString("base64") });
+  });
+
+  it("a CV replaced in the ERP while in sync here is pulled into D1", async () => {
+    await firstLoad();
+    erp.record.filename = "erp-new.pdf";
+    erp.record.filedata = Buffer.from("NEWER").toString("base64");
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(((await get("get")).body.retdata as Row).filename).toBe("erp-new.pdf");
+    expect(await cvBytes()).toBe(erp.record.filedata);
+    expect(erp.endpoints()).not.toContain("SaveAppCV"); // nothing pushed back
   });
 });
 

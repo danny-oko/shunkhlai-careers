@@ -293,7 +293,8 @@ async function readBody(init?: RequestInit): Promise<unknown> {
     for (const [field, value] of b.entries()) {
       if (value instanceof Blob) {
         const name = value instanceof File ? value.name : "blob";
-        return { field, filename: name, bytes: Buffer.from(await value.arrayBuffer()).toString("base64") };
+        const bytes = Buffer.from(await value.arrayBuffer()).toString("base64");
+        return { field, filename: name, type: value.type, bytes };
       }
     }
     return null;
