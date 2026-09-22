@@ -1,4 +1,5 @@
 import type { ApplicantProfile, MaritalOption, ProfileInput } from "@/lib/api/profile";
+import { identityProblem, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 
 /** Form values are strings (what inputs hold); licence flags are booleans. */
 const TEXT_KEYS = [
@@ -68,8 +69,8 @@ export function toInput(values: State): ProfileInput {
     ...values,
     lastname: values.lastname.trim(),
     firstname: values.firstname.trim(),
-    regno: values.regno.trim().toUpperCase(),
-    mobilephone: values.mobilephone.trim(),
+    regno: normalizeRegno(values.regno),
+    mobilephone: normalizePhone(values.mobilephone),
     maritalstatus: values.maritalstatus || undefined,
     email2: values.email2.trim(),
     addr2: values.addr2.trim(),
@@ -85,9 +86,12 @@ export function toInput(values: State): ProfileInput {
   };
 }
 
-/** Marked * on the old site's form; the label is what the error names. */
+/**
+ * Marked * on the old site's form; the label is what the error names.
+ * регистр, овог, нэр, утас come first and are checked by `identityProblem`
+ * (shared with the /api/me gate), formats included.
+ */
 const REQUIRED: Array<[TextKey, string]> = [
-  ["mobilephone", "Утас"],
   ["email2", "Имэйл"],
   ["countryid", "Улс"],
   ["divisionid", "Аймаг, хот"],
@@ -98,8 +102,13 @@ const REQUIRED: Array<[TextKey, string]> = [
   ["contactphone", "Холбоо барих хүний утас"],
 ];
 
-/** The first required field left empty, as a Mongolian message, else null. */
-export function missingRequired(values: State): string | null {
+/**
+ * The first problem with the form as a Mongolian message, else null. `saved`
+ * is the loaded profile: an unchanged регистр/утас is not format-checked.
+ */
+export function missingRequired(values: State, saved?: ApplicantProfile | null): string | null {
+  const identity = identityProblem(values, saved);
+  if (identity) return identity;
   const missing = REQUIRED.find(([key]) => !values[key].trim());
   return missing ? `«${missing[1]}» талбарыг бөглөнө үү.` : null;
 }

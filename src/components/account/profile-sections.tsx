@@ -20,6 +20,8 @@ import type { ApplicantProfile } from "@/lib/api/profile";
 
 type Dropdown = { options: Choice[]; isLoading: boolean };
 
+export const PHONE_HINT = "Энэ дугаар ERP системд нэвтрэх нууц үг тань болно.";
+
 type SectionProps = { values: State; set: Setter };
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -29,7 +31,13 @@ const Section = ({ title, children }: { title: string; children: React.ReactNode
   </fieldset>
 );
 
-/** Name and register number are read-only, as on the previous site. */
+/**
+ * регистр, овог, нэр, утас are what the ERP account is created with, so all
+ * four are required (see `lib/applicant-identity.ts`). The регистр locks once
+ * the account is linked to an ERP record: a different one would point the
+ * sync at another person. The phone stays editable — it is the ERP password,
+ * and the only way to repair a login the ERP refuses.
+ */
 export const PersonalSection = ({
   values,
   set,
@@ -37,10 +45,18 @@ export const PersonalSection = ({
 }: SectionProps & { profile: ApplicantProfile | null }) => (
   <Section title="Хувийн мэдээлэл">
     <div className="grid gap-5 sm:grid-cols-2">
-      <TextField name="lastname" label="Эцэг/эх-ийн нэр" values={values} set={set} required readOnly />
-      <TextField name="firstname" label="Нэр" values={values} set={set} required readOnly />
-      <TextField name="regno" label="Регистрийн дугаар" values={values} set={set} required readOnly />
-      <TextField name="mobilephone" label="Утас" values={values} set={set} required readOnly type="tel" hint="Утасны дугаар нэвтрэх мэдээлэлтэй холбоотой тул энд өөрчлөгдөхгүй." />
+      <TextField name="lastname" label="Эцэг/эх-ийн нэр" values={values} set={set} required />
+      <TextField name="firstname" label="Нэр" values={values} set={set} required />
+      <TextField
+        name="regno"
+        label="Регистрийн дугаар"
+        values={values}
+        set={set}
+        required
+        readOnly={profile?.erplinked === true}
+        hint={profile?.erplinked ? "ERP-ийн бүртгэлтэй холбогдсон тул өөрчлөгдөхгүй." : "Жишээ нь УБ99010101"}
+      />
+      <TextField name="mobilephone" label="Утас" values={values} set={set} required type="tel" hint={PHONE_HINT} />
       <TextField name="email2" label="Имэйл" values={values} set={set} required type="email" />
       <SelectField
         name="maritalstatus"

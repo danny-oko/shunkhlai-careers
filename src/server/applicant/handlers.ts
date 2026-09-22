@@ -12,6 +12,9 @@
  * keeps its bundled data and `/api/me` can follow the live ERP.
  */
 
+import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
+import { linkRefused, linkedRegno } from "./erp-model";
+
 export type Row = Record<string, unknown>;
 
 /** Everything one applicant owns. The mock `Account` is a superset of this. */
@@ -63,6 +66,18 @@ export type DocErp = {
   scheduledAt?: string;
   /** Postings the ERP says this applicant already applied to (`/get`). */
   appliedOrderIds?: number[];
+  /**
+   * The ERP's refusal of a регистр + утас (SaveHrAppUser's "…зөрж байна!") and
+   * the `credentialKey` of the pair it refused. While the stored pair still
+   * has that key nothing is sent to the ERP; changing either value lifts it.
+   */
+  linkError?: string;
+  linkKey?: string;
+  /** The регистр the ERP account was linked to at the first token, and when. */
+  linkedRegno?: string;
+  linkedAt?: string;
+  /** A SaveHrAppUser is in flight (ISO): no second one for this applicant. */
+  registeringAt?: string;
 };
 
 export type Envelope = {
@@ -246,6 +261,10 @@ function handleGet({ endpoint, query }: HandlerRequest, doc: ApplicantDoc): Hand
         filename: doc.cv?.filename ?? null,
         filedata: doc.cv?.filedata ?? null,
         ...completion(doc),
+        // Linked to an ERP record: the регистр is fixed.
+        erplinked: linkedRegno(doc) !== "",
+        // The ERP refused the stored регистр + утас (its own message), else null.
+        erplinkerror: linkRefused(doc) ? (doc.erp?.linkError ?? null) : null,
       });
 
     case "GetHrAppEducationData":
@@ -321,7 +340,31 @@ async function handlePost(
   switch (endpoint) {
     case "SaveHrApplicant": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
+      // A new регистр / утас is stored as the ERP stores and compares it; the
+      // same value in another spelling keeps the stored one untouched.
+      const normalise = (key: string, as: (value: unknown) => string) => {
+        if (!(key in body)) return;
+        body[key] = as(body[key]) === as(doc.profile[key]) ? doc.profile[key] : as(body[key]);
+      };
+      normalise("regno", normalizeRegno);
+      normalise("mobilephone", normalizePhone);
+      const wasComplete = isIdentityComplete(doc.profile);
+      const changed = (key: string) => key in body && body[key] !== doc.profile[key];
+      const newCredentials = changed("regno") || changed("mobilephone");
       doc.erp = { ...doc.erp, profileEdited: true };
+      // Newly complete or new credentials: the ERP gets a fresh try on the next
+      // visit — no leftover pull backoff, no stale refusal.
+      if (newCredentials || (!wasComplete && isIdentityComplete({ ...doc.profile, ...body }))) {
+        delete doc.erp.pullFailures;
+        delete doc.erp.pullFailedAt;
+        delete doc.erp.linkError;
+        delete doc.erp.linkKey;
+      } else if ("regno" in body && "mobilephone" in body) {
+        // The applicant saved the same регистр + утас on purpose (they say it
+        // is right): lift the refusal so the next sync asks the ERP once more.
+        delete doc.erp.linkError;
+        delete doc.erp.linkKey;
+      }
       doc.profile = {
         ...doc.profile,
         ...body,

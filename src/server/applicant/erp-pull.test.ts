@@ -122,7 +122,7 @@ describe("applySnapshot", () => {
   });
 
   it("blank ERP regno/phone never erase D1's (the login needs them)", () => {
-    expect(pulledProfile({ regno: "R", mobilephone: "P" }, { regno: "", mobilephone: " ", addr2: "a" })).toMatchObject({
+    expect(pulledProfile({ regno: "R", mobilephone: "P" }, { regno: "", mobilephone: " ", addr2: "a" }).profile).toMatchObject({
       regno: "R",
       mobilephone: "P",
       addr2: "a",

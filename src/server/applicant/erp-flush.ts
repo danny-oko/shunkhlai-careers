@@ -19,8 +19,9 @@ import type { ApplicantDoc, PendingDelete, Row } from "./handlers";
  * holds, with one token. Never throws; reports what went through so
  * `erp-sync.ts` can clear exactly that (and nothing edited meanwhile).
  *
- * Deletes only what the applicant deleted here (`pendingDeletes`); never sends
- * SaveHrAppUser; logs carry codes, endpoints and statuses only.
+ * Deletes only what the applicant deleted here (`pendingDeletes`); gets its
+ * token from `loginFor` (the only place SaveHrAppUser is ever sent, and only
+ * after a 401); logs carry codes, endpoints and statuses only.
  */
 
 export type FlushInput = {

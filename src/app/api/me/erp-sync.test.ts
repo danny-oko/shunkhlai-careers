@@ -4,7 +4,8 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ERP_DELETES, FakeErp, type Row } from "@/server/applicant/fake-erp.fixture";
+import { REGNO_LOCKED_MESSAGE } from "@/lib/applicant-identity";
+import { ERP_DELETES, FakeErp, MISMATCH, type Row } from "@/server/applicant/fake-erp.fixture";
 
 /**
  * Two-way D1 ⇄ ERP sync through /api/me, end to end: real SQLite (node:sqlite)
@@ -195,7 +196,12 @@ beforeEach(() => {
 
 afterEach(() => {
   // Global invariants, checked after EVERY test.
-  expect(erp.endpoints(), "SaveHrAppUser must never be called").not.toContain("SaveHrAppUser");
+  // SaveHrAppUser only ever right after a refused auth/login (login first, so
+  // an applicant the ERP knows is never sent through it; Postman 01/02).
+  const sent = erp.endpoints();
+  sent.forEach((endpoint, i) => {
+    if (endpoint === "SaveHrAppUser") expect(sent[i - 1], "SaveHrAppUser only after auth/login").toBe("auth/login");
+  });
   const all = logs.join("\n");
   expect(all).not.toContain(erp.regno);
   expect(all).not.toContain(erp.phone);
@@ -637,6 +643,215 @@ describe("application entry id", () => {
     if (mine) expect((mine.erp as Row)?.erpEntryId).toBeUndefined();
     const guessed = stored.filter((r) => Number((r.erp as Row)?.erpEntryId) > 0 && Number(r.recruitmentorderid) === 786);
     expect(guessed).toEqual([]);
+  });
+});
+
+/* --- ERP account (SaveHrAppUser) ------------------------------------------ */
+
+describe("ERP account: login first, SaveHrAppUser on a 401", () => {
+  /** A never-pulled D1 account with these identity values (names from Clerk). */
+  async function seedIdentity(profile: Row) {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    await post("SaveHrApplicant", profile);
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://erp.test");
+    state.after = [];
+    erp.calls = [];
+  }
+
+  it("a регистр new to the ERP is registered with the D1 identity, and that token pulls", async () => {
+    erp = new FakeErp((e) => {
+      e.registered = false;
+    });
+    vi.stubGlobal("fetch", erp.fetch);
+    await seedIdentity({ regno: "АА00000000", mobilephone: "88001122" });
+
+    const r = await get("get");
+    expect(r.body.rettype).toBe(0);
+    expect(erp.endpoints().slice(0, 3)).toEqual(["auth/login", "SaveHrAppUser", "get"]);
+    expect(erp.calls[1].body).toEqual({
+      lastname: "User",
+      firstname: "Clerk",
+      regno: "АА00000000",
+      email: "bat@site.mn",
+      mobilephone: "88001122",
+    });
+    expect(erp.calls.slice(2).every((c) => c.auth === `Bearer ${erp.token}`)).toBe(true);
+    expect(erp.registered).toBe(true);
+    expect(storedDoc().erp.pulledAt).toEqual(expect.any(String));
+    expect((r.body.retdata as Row).erplinked).toBe(true);
+
+    // Registered now: the next sync just logs in.
+    await post("SaveAppExperience", { entryid: 0, orgname: "Local" });
+    erp.calls = [];
+    await flushAfter();
+    expect(erp.endpoints()).not.toContain("SaveHrAppUser");
+    expect(erp.lists.hrappexplist.map((row) => row.orgname)).toEqual(["Local"]);
+  });
+
+  it("an existing регистр with another phone: one SaveHrAppUser, message kept on the doc, no loop", async () => {
+    await seedIdentity({ regno: erp.regno, mobilephone: "88000000" });
+
+    await get("get");
+    await flushAfter();
+    expect(erp.endpoints()).toEqual(["auth/login", "SaveHrAppUser"]);
+    expect(erp.record.mobilephone).toBe(erp.phone); // the ERP record is untouched
+    const stored = storedDoc();
+    expect(stored.erp.linkError).toBe(MISMATCH);
+    expect(stored.erp.pullFailures).toBe(1);
+    expect(stored.erp.pulledAt).toBeUndefined();
+
+    // Backing off: an immediate second visit makes no call.
+    erp.calls = [];
+    await get("get");
+    await flushAfter();
+    expect(erp.calls).toEqual([]);
+
+    // Fixing the phone clears the stale message; the next due pull logs in.
+    await post("SaveHrApplicant", { mobilephone: erp.phone });
+    expect(storedDoc().erp.linkError).toBeUndefined();
+  });
+
+  it("refused credentials are never re-sent — not after the backoff either — until утас changes", async () => {
+    await seedIdentity({ regno: erp.regno, mobilephone: "88000000" });
+    await get("get");
+    await flushAfter();
+    const count = (endpoint: string) => erp.endpoints().filter((e) => e === endpoint).length;
+    expect(count("SaveHrAppUser")).toBe(1);
+
+    advance(48 * 60 * 60_000); // far past any backoff
+    await post("SaveAppExperience", { entryid: 0, orgname: "Local" }); // local work waits
+    await get("get");
+    await flushAfter();
+    expect(count("SaveHrAppUser")).toBe(1);
+    expect(count("auth/login")).toBe(1);
+    expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: MISMATCH, erplinked: false });
+
+    // The right phone: refusal and backoff lifted, the next visit logs in and the waiting work goes.
+    await post("SaveHrApplicant", { mobilephone: erp.phone });
+    expect(storedDoc().erp).not.toHaveProperty("linkError");
+    expect(storedDoc().erp).not.toHaveProperty("pullFailures");
+    const r = await get("get");
+    await flushAfter();
+    expect(count("SaveHrAppUser")).toBe(1);
+    expect(r.body.retdata).toMatchObject({ erplinkerror: null, erplinked: true });
+    expect(erp.lists.hrappexplist.map((row) => row.orgname)).toEqual(["Local"]);
+  });
+
+  it("a LINKED account whose утас no longer matches: no SaveHrAppUser, refusal shown, calls stop", async () => {
+    await firstLoad(); // linked by this pull
+    expect(storedDoc().erp.linkedRegno).toBe(erp.regno);
+    erp.calls = [];
+    const count = (endpoint: string) => erp.endpoints().filter((e) => e === endpoint).length;
+
+    await post("SaveHrApplicant", { mobilephone: "88000000" }); // wrong for the ERP
+    await flushAfter();
+    expect(count("auth/login")).toBe(1);
+    expect(count("SaveHrAppUser")).toBe(0);
+    expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: MISMATCH, erplinked: true });
+
+    erp.calls = [];
+    advance(48 * 60 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(erp.calls).toEqual([]);
+
+    await post("SaveHrApplicant", { mobilephone: erp.phone });
+    await flushAfter();
+    expect(count("auth/login")).toBe(1);
+    expect(count("SaveHrAppUser")).toBe(0);
+    expect(erp.record.mobilephone).toBe(erp.phone);
+    expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: null });
+  });
+
+  it("saving the same регистр + утас on purpose asks the ERP once more", async () => {
+    await seedIdentity({ regno: erp.regno, mobilephone: "88000000" });
+    await get("get");
+    await flushAfter();
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
+    await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000" });
+    expect(storedDoc().erp).not.toHaveProperty("linkError");
+    await flushAfter();
+    expect(erp.endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(2);
+    expect(storedDoc().erp.linkError).toBe(MISMATCH); // refused again, stops again
+  });
+
+  it("losing the registration claim hands the work back without spending an attempt", async () => {
+    erp = new FakeErp((e) => {
+      e.registered = false;
+    });
+    vi.stubGlobal("fetch", erp.fetch);
+    await get("get");
+    await post("SaveHrApplicant", { regno: "АА00000000", mobilephone: "88001122" });
+    // Another request holds the claim.
+    const held = storedDoc();
+    held.erp.registeringAt = new Date(clock).toISOString();
+    state.sqlite!.prepare("update applicant_account set data_json = ?").run(JSON.stringify(held));
+
+    await flushAfter();
+    expect(erp.endpoints()).toEqual(["auth/login"]);
+    const after = storedDoc().erp;
+    expect(after.flush).toBeUndefined(); // no attempt counted
+    expect(after.profileDirty).toEqual(expect.any(Number)); // still waiting to go
+    expect(after.pullFailures).toBeUndefined();
+    expect(after.registeringAt).toBe(held.erp.registeringAt); // not ours to clear
+  });
+
+  it("blank get → fill identity (ERP on) → the next get pulls: blank never counted as a failure", async () => {
+    await get("get");
+    await flushAfter();
+    expect(erp.calls).toEqual([]);
+    expect(storedDoc().erp?.pullFailures).toBeUndefined();
+
+    await post("SaveHrApplicant", { regno: erp.regno, mobilephone: `+976 ${erp.phone.slice(0, 4)}-${erp.phone.slice(4)}` });
+    expect(storedDoc().profile.mobilephone).toBe(erp.phone); // stored as its 8 digits
+    const r = await get("get");
+    expect(r.body.rettype).toBe(0);
+    expect(erp.endpoints().slice(0, 2)).toEqual(["auth/login", "get"]);
+    expect(storedDoc().erp.pulledAt).toEqual(expect.any(String));
+    await flushAfter();
+    expect(erp.endpoints()).not.toContain("SaveHrAppUser");
+  });
+
+  it("a регистр registered by the flush is locked right away (before any pull)", async () => {
+    erp = new FakeErp((e) => {
+      e.registered = false;
+    });
+    vi.stubGlobal("fetch", erp.fetch);
+    await get("get"); // blank: nothing sent
+    await post("SaveHrApplicant", { regno: " аа00000000 ", mobilephone: "88001122" });
+    expect(storedDoc().profile.regno).toBe("АА00000000");
+    await flushAfter(); // the mutation sync: 401 → SaveHrAppUser → flush
+    expect(erp.endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(1);
+    const stored = storedDoc();
+    expect(stored.erp.linkedRegno).toBe("АА00000000");
+    expect(stored.erp.pulledAt).toBeUndefined();
+
+    const r = await post("SaveHrApplicant", { regno: "ББ11111111" });
+    expect(r.status).toBe(409);
+    expect(r.body.retmsg).toBe(REGNO_LOCKED_MESSAGE);
+    expect(storedDoc().profile.regno).toBe("АА00000000");
+  });
+
+  it("two requests hitting the 401 at once send ONE SaveHrAppUser", async () => {
+    erp = new FakeErp((e) => {
+      e.registered = false;
+    });
+    erp.delayMs = 20;
+    vi.stubGlobal("fetch", erp.fetch);
+    await get("get");
+    await post("SaveHrApplicant", { regno: "АА00000000", mobilephone: "88001122" });
+    // The scheduled after() sync and a refreshing client's inline pull, together.
+    await Promise.all([flushAfter(), get("get")]);
+    await flushAfter();
+    expect(erp.endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(1);
+    expect(storedDoc().erp.linkedRegno).toBe("АА00000000");
+  });
+
+  it("blank identity → no ERP call at all", async () => {
+    const r = await get("get"); // fresh Clerk account: no регистр or утас
+    await flushAfter();
+    expect(r.body.rettype).toBe(0);
+    expect(erp.calls).toEqual([]);
   });
 });
 

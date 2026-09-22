@@ -2,7 +2,8 @@
  * Test-only: a stateful fake of the live ERP (careers.shunkhlai.mn), served
  * through a `fetch` replacement. It holds the applicant's record, every list,
  * the CV/photo and the request list, assigns entry ids, and enforces the
- * Postman collection's delete query-parameter casing. Nothing here talks to the
+ * Postman collection's delete query-parameter casing. Login and SaveHrAppUser
+ * answer as the live ERP does (see `saveUser`). Nothing here talks to the
  * network.
  */
 
@@ -50,10 +51,15 @@ export const ERP_DELETES: Record<string, { list: ListName; param: string }> = {
   DeleteOrderApp: { list: "requests", param: "entryID" },
 };
 
+/** The live ERP's answer to an unknown регистр or a wrong phone. */
+export const MISMATCH = "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!";
+
 export class FakeErp {
   regno = "УБ99010101";
   phone = "99112233";
   token = "tok-FAKE-ERP-SECRET-9f8e7d";
+  /** The ERP knows `regno` (false: a candidate new to the ERP). */
+  registered = true;
 
   record: Row = {};
   lists: Record<ListName, Row[]> = {
@@ -134,15 +140,34 @@ export class FakeErp {
     return this.answer(endpoint, url.searchParams, body, headers.get("authorization"));
   };
 
+  /**
+   * Postman 01/02: a new регистр is created (from the body) and logged in; an
+   * existing one only logs in when `mobilephone` matches, and is never changed.
+   */
+  private saveUser(b: Row | null): Response {
+    const regno = String(b?.regno ?? "");
+    const phone = String(b?.mobilephone ?? "");
+    if (!regno || !phone || !b?.lastname || !b?.firstname) return env(null, 1, "Мэдээлэл дутуу байна.");
+    if (this.registered && regno === this.regno) {
+      return phone === this.phone ? env({ "access_token": this.token }) : env(null, 1, MISMATCH);
+    }
+    this.registered = true;
+    this.regno = regno;
+    this.phone = phone;
+    this.record = { lastname: b.lastname, firstname: b.firstname, regno, mobilephone: phone, email2: b.email ?? "" };
+    return env({ "access_token": this.token });
+  }
+
   private answer(endpoint: string, params: URLSearchParams, body: unknown, auth: string | null): Response {
     if (endpoint === "auth/login") {
+      // Live: unknown регистр and wrong phone are the same HTTP 401.
       const b = body as { regNo?: string; mobile?: string } | null;
-      if (b?.regNo !== this.regno || b?.mobile !== this.phone) {
-        return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 });
+      if (!this.registered || b?.regNo !== this.regno || b?.mobile !== this.phone) {
+        return new Response(JSON.stringify({ rettype: -1, retmsg: MISMATCH, retdata: null }), { status: 401 });
       }
-      return new Response(JSON.stringify({ access_token: this.token }), { status: 200 });
+      return new Response(JSON.stringify({ "access_token": this.token }), { status: 200 });
     }
-    if (endpoint === "SaveHrAppUser") return env(null, 1, "SaveHrAppUser must never be called");
+    if (endpoint === "SaveHrAppUser") return this.saveUser(body as Row | null);
     if (auth !== `Bearer ${this.token}`) return env(null, 1, "Нэвтрэх шаардлагатай.");
 
     const L = this.lists;

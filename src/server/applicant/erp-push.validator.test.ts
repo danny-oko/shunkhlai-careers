@@ -81,9 +81,16 @@ const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit
       }
       return new Response(JSON.stringify({ access_token: TOKEN }), { status: 200 });
     }
-    case "SaveHrAppUser":
+    case "SaveHrAppUser": {
+      // Live (Postman 01/02): a new регистр is created; an existing one only
+      // logs in on the matching phone, otherwise "…зөрж байна!" and no change.
+      const body = (await readBody(init)) as Row;
+      if (erp.registered && body.regno === REGNO && body.mobilephone !== PHONE) {
+        return envelope(null, 1, "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!");
+      }
       erp.registered = true;
       return envelope({ access_token: TOKEN });
+    }
   }
   if (!authed) return envelope(null, 1, "Нэвтрэх шаардлагатай.");
   switch (endpoint) {
@@ -225,10 +232,26 @@ describe("pushApplication (validator)", () => {
     expect(erp.calls.find((c) => c.endpoint === "SaveAppCV")!.body).toEqual({ filename: "cv.pdf", bytes: CV.data });
   });
 
-  it("login fails → never calls SaveHrAppUser → failed erp_login_failed, nothing else sent", async () => {
+  // Login first; SaveHrAppUser only after a 401, once per batch (Postman 01/02).
+  it("login 401 → one SaveHrAppUser → its token carries the push", async () => {
     erp.loginFailsTimes = 99;
     const r = await pushApplication(doc(), app, deps());
-    expect(r).toMatchObject({ status: "failed", error: "erp_login_failed" });
+    expect(r).toMatchObject({ status: "sent" });
+    expect(endpoints().slice(0, 2)).toEqual(["auth/login", "SaveHrAppUser"]);
+    expect(endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(1);
+  });
+
+  it("existing регистр, other phone → erp_link_mismatch, one SaveHrAppUser per batch, nothing else sent", async () => {
+    const d = deps();
+    const wrong = doc({ mobilephone: "88000000" });
+    expect(await pushApplication(wrong, app, d)).toMatchObject({ status: "failed", error: "erp_link_mismatch" });
+    expect(await pushApplication(wrong, { ...app, recruitmentorderid: 787 }, d)).toMatchObject({ status: "failed" });
+    expect(endpoints()).toEqual(["auth/login", "SaveHrAppUser"]);
+  });
+
+  it("login unreachable (not a 401) → never registers", async () => {
+    erp.down = true;
+    expect(await pushApplication(doc(), app, deps())).toMatchObject({ status: "failed", error: "erp_login_failed" });
     expect(endpoints()).toEqual(["auth/login"]);
   });
 

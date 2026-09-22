@@ -13,6 +13,7 @@ import {
   envelopeFail,
   handleApplicantRequest,
 } from "@/server/applicant/handlers";
+import { identityGate } from "@/server/applicant/identity-gate";
 import { referenceDeps } from "@/server/applicant/reference";
 import { readJson, readUpload } from "@/server/applicant/request-body";
 import {
@@ -148,6 +149,10 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
     const account = await loadAccount(identity!, {
       withFiles: method === "GET" && endpoint === "get",
     });
+
+    // No write before регистр, овог, нэр, утас are stored (see identity-gate.ts).
+    const refusal = identityGate(endpoint, method, account.doc, body);
+    if (refusal) return envelope(refusal, 409);
 
     // A delete: note the row before it goes, to queue its ERP delete.
     const removedList =
