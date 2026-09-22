@@ -216,15 +216,23 @@ export const PROFILE_KEYS = [
 ] as const;
 
 const NOT_PULLED = new Set(["filedata", "picturedata", "filename", "maritalOptions"]);
-const KEEP_WHEN_BLANK = new Set(["regno", "mobilephone"]);
+/**
+ * The ERP login (`auth/login {regNo, mobile}`): регистр + утас, where the утас
+ * is the password (Postman 02 — the phone at first, a new password once
+ * changed). The ERP record's `mobilephone` is the contact number and can differ
+ * from it, so a pull never writes either over a stored D1 value: a pull only
+ * ever runs with a token those D1 values just earned.
+ */
+const CREDENTIALS = new Set(["regno", "mobilephone"]);
 
 const isBlank = (value: unknown) =>
   value === null || value === undefined || String(value).trim() === "";
 
 /**
- * The ERP record over the D1 profile, minus files, percentages and audit.
- * `keepD1` (the first pull): a blank ERP value never replaces a D1 one; the
- * return says whether D1 kept anything the ERP lacks (so it gets sent).
+ * The ERP record over the D1 profile, minus files, percentages and audit, and
+ * never over a stored регистр / утас (`CREDENTIALS`). `keepD1` (the first
+ * pull): a blank ERP value never replaces a D1 one; the return says whether D1
+ * kept anything the ERP lacks (so it gets sent).
  */
 export function pulledProfile(profile: Row, record: Row, keepD1 = false): { profile: Row; d1Only: boolean } {
   const next = { ...profile };
@@ -233,8 +241,12 @@ export function pulledProfile(profile: Row, record: Row, keepD1 = false): { prof
     if (NOT_PULLED.has(key) || key.endsWith("per")) continue;
     if (value === null || value === undefined) continue;
     const blank = isBlank(value);
-    // The login needs these; never let a blank ERP value erase them.
-    if (blank && (KEEP_WHEN_BLANK.has(key) || keepD1)) {
+    // The login needs these: an ERP value (blank, or the contact number) never replaces them.
+    if (CREDENTIALS.has(key) && !isBlank(next[key])) {
+      if (blank) d1Only = true;
+      continue;
+    }
+    if (blank && keepD1) {
       if (!isBlank(next[key])) d1Only = true;
       continue;
     }

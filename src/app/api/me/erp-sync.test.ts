@@ -763,16 +763,62 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: null });
   });
 
-  it("saving the same регистр + утас on purpose asks the ERP once more", async () => {
+  it("a deliberate retry (retrylink) with the same регистр + утас asks the ERP once more", async () => {
     await seedIdentity({ regno: erp.regno, mobilephone: "88000000" });
     await get("get");
     await flushAfter();
     expect(storedDoc().erp.linkError).toBe(MISMATCH);
-    await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000" });
+    await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000", retrylink: true });
     expect(storedDoc().erp).not.toHaveProperty("linkError");
+    // The flag is an instruction, not a profile field: never stored, never sent on.
+    expect(storedDoc().profile).not.toHaveProperty("retrylink");
     await flushAfter();
     expect(erp.endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(2);
+    expect(erp.calls.some((c) => JSON.stringify(c.body ?? "").includes("retrylink"))).toBe(false);
     expect(storedDoc().erp.linkError).toBe(MISMATCH); // refused again, stops again
+  });
+
+  it("an ordinary profile save carrying the same регистр + утас does NOT lift the refusal", async () => {
+    await seedIdentity({ regno: erp.regno, mobilephone: "88000000" });
+    await get("get");
+    await flushAfter();
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
+    erp.calls = [];
+
+    // The profile form echoes regno + mobilephone on every save.
+    const saved = await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000", addr2: "шинэ хаяг" });
+    expect(saved.body.rettype).toBe(0);
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
+    expect(storedDoc().profile.addr2).toBe("шинэ хаяг");
+    await flushAfter();
+    await get("get");
+    await flushAfter();
+    expect(erp.calls).toEqual([]);
+    // Only `true` counts as a retry.
+    await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000", retrylink: "true" });
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
+    expect(storedDoc().profile).not.toHaveProperty("retrylink");
+  });
+
+  it("a pull never replaces the утас that logged in (the ERP record's mobilephone is the contact number)", async () => {
+    // Password (what auth/login compares) ≠ the record's contact number.
+    const fake = richErp();
+    fake.record.mobilephone = "99887766";
+    fake.record.regno = erp.regno.toLowerCase();
+    await firstLoad(fake);
+    expect(storedDoc().erp.linkedRegno).toBe(erp.regno);
+    expect(storedDoc().profile).toMatchObject({ regno: erp.regno, mobilephone: erp.phone });
+    // Other pulled fields still arrive.
+    expect(storedDoc().profile.addr2).toBe("ERP хаяг");
+
+    // The next (background) pull and the logins after it keep working.
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect(storedDoc().profile.mobilephone).toBe(erp.phone);
+    expect(storedDoc().erp.linkError).toBeUndefined();
+    expect(erp.endpoints().filter((e) => e === "auth/login")).toHaveLength(2);
+    expect(erp.endpoints()).not.toContain("SaveHrAppUser");
   });
 
   it("losing the registration claim hands the work back without spending an attempt", async () => {

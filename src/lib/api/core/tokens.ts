@@ -1,9 +1,12 @@
 /**
  * Applicant session storage.
  *
- * The applicant token comes from `SaveHrAppUser` (see `auth.ts`); the admin
- * tier is kept alongside it for the CMS calls in `system.ts`, so the axios
- * interceptor has one place to ask for "the token for this audience".
+ * Nothing in the browser signs in to the ERP any more: applicants sign in with
+ * Clerk, and the ERP token (`auth/login` → `SaveHrAppUser`) is obtained and used
+ * server-side only (`src/server/applicant/erp-push.ts` `loginFor`). The applicant
+ * tier stays for a token an earlier build stored; the admin tier is kept for
+ * the CMS calls in `system.ts`, so the axios interceptor has one place to ask
+ * for "the token for this audience".
  *
  * Nothing refreshes a token — the Postman collection never does. A token past
  * its JWT `exp` reads as absent and its session is cleared, so the app sends

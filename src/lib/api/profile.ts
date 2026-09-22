@@ -1,3 +1,5 @@
+import { RETRY_LINK_FLAG } from "@/lib/applicant-identity";
+
 import { ME_BASE } from "./core/config";
 import { apiGet, apiPost, apiUpload } from "./core/request";
 import { buildProfilePayload } from "./profile-payload";
@@ -125,9 +127,19 @@ export async function getProfile(): Promise<ApplicantProfile> {
   return unwrapProfile(await apiGet<unknown>(`${ME_BASE}/get`));
 }
 
-/** POST /api/me/SaveHrApplicant */
-export function saveProfile(body: ProfileInput, loaded?: ApplicantProfile | null) {
-  return apiPost<unknown>(`${ME_BASE}/SaveHrApplicant`, buildProfilePayload(body, loaded));
+/**
+ * POST /api/me/SaveHrApplicant. `retryLink`: the applicant asked to try the
+ * ERP again with a регистр + утас it refused (the identity form / banner only;
+ * an ordinary profile save never lifts the refusal — see `RETRY_LINK_FLAG`).
+ */
+export function saveProfile(
+  body: ProfileInput,
+  loaded?: ApplicantProfile | null,
+  options: { retryLink?: boolean } = {},
+) {
+  const payload = buildProfilePayload(body, loaded);
+  if (options.retryLink) payload[RETRY_LINK_FLAG] = true;
+  return apiPost<unknown>(`${ME_BASE}/SaveHrApplicant`, payload);
 }
 
 /** POST /api/me/SaveAppPicture */

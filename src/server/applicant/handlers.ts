@@ -12,7 +12,7 @@
  * keeps its bundled data and `/api/me` can follow the live ERP.
  */
 
-import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
+import { RETRY_LINK_FLAG, isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 import { linkRefused, linkedRegno } from "./erp-model";
 
 export type Row = Record<string, unknown>;
@@ -340,6 +340,10 @@ async function handlePost(
   switch (endpoint) {
     case "SaveHrApplicant": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
+      // "Try the ERP again" from the identity form / banner: an instruction,
+      // not a profile field — taken off the body so it is never stored or sent.
+      const retry = body[RETRY_LINK_FLAG] === true;
+      delete body[RETRY_LINK_FLAG];
       // A new регистр / утас is stored as the ERP stores and compares it; the
       // same value in another spelling keeps the stored one untouched.
       const normalise = (key: string, as: (value: unknown) => string) => {
@@ -359,9 +363,10 @@ async function handlePost(
         delete doc.erp.pullFailedAt;
         delete doc.erp.linkError;
         delete doc.erp.linkKey;
-      } else if ("regno" in body && "mobilephone" in body) {
-        // The applicant saved the same регистр + утас on purpose (they say it
-        // is right): lift the refusal so the next sync asks the ERP once more.
+      } else if (retry) {
+        // The applicant asked to retry the same регистр + утас (they say it is
+        // right): lift the refusal so the next sync asks the ERP once more. An
+        // ordinary profile save echoes both too, and must not re-send them.
         delete doc.erp.linkError;
         delete doc.erp.linkKey;
       }
