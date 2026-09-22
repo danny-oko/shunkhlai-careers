@@ -52,19 +52,43 @@ function finiteDays(value: unknown): number | null {
 }
 
 /**
- * Open while the closing day has not passed; the date always wins. Without a
- * usable date the backend's own count is trusted only when it says "already
- * closed" (negative): the live get-one endpoint drops `advenddate` for an
- * expired posting but still sends `remainingdays` -114, whereas the list's
- * positive count next to a past date is the wrong-signed one. No date and no
- * negative count = open-ended.
+ * The one status that means "this advert is taking applications":
+ * 5, "Анкет хүлээн авах".
+ *
+ * The dates cannot answer this. Live `getRecruitmentOrderList` (11 rows,
+ * 2026-09-23) has seven rows with no `advenddate` at all — three of them
+ * already in or past selection (status 7 "Сонгон шалгаруулалт явагдаж байна",
+ * 11 "…дууссан") — and four rows whose `advenddate` is months in the past
+ * while the status still says applications are accepted and `remainingdays`
+ * is positive (923: 2026.05.29 / +117). Deciding from the dates showed the
+ * first three and hid the last four; the status alone reproduces the counts
+ * the owner sees in production (Шунхлай ХХК 6, трейдинг 2).
  */
-export function isPostingOpen(
+export const ACCEPTING_STATUS = 5;
+
+export function isPostingOpen(status: number | null | undefined): boolean {
+  return Number(status) === ACCEPTING_STATUS;
+}
+
+/**
+ * The countdown shown beside an advert, never negative.
+ *
+ * The closing date is preferred while it is still ahead; otherwise the
+ * backend's own `remainingdays` is taken when it is positive (the four rows
+ * above are dated in the past yet still accepting, and the ERP's count is what
+ * their advert claims). When neither is a future number there is nothing
+ * honest to show — an open-ended advert, or one that is no longer taking
+ * applications — and it is `null`.
+ */
+export function remainingDaysFor(
   advenddate: string | null | undefined,
-  fallbackRemainingDays: number | null | undefined,
+  reported: number | null | undefined,
   now?: Date,
-): boolean {
-  return (daysUntilClose(advenddate, now) ?? finiteDays(fallbackRemainingDays) ?? 0) >= 0;
+): number | null {
+  const computed = daysUntilClose(advenddate, now);
+  if (computed != null && computed >= 0) return computed;
+  const backend = finiteDays(reported);
+  return backend != null && backend >= 0 ? backend : null;
 }
 
 function base(row: JobListRow | JobOrder): Job {
@@ -82,6 +106,7 @@ function base(row: JobListRow | JobOrder): Job {
     positionGroupId: row.posgroupid ?? 0,
     workType: (row.worktype ?? "").trim(),
     positionType: (row.postype ?? "").trim(),
+    positionTypeId: row.postypeid ?? 0,
     statusId: row.status ?? 0,
     status: (row.statusname ?? "").trim(),
     // `||`, not `??`: the backend sends "" for a date it does not have, and
@@ -89,10 +114,10 @@ function base(row: JobListRow | JobOrder): Job {
     // or the row sorts to the bottom of the list forever.
     postedAt: row.advbegindate || row.requestdate || "",
     closesAt: row.advenddate ?? "",
-    // `null` means the posting has no closing date, not that it closes
+    // `null` means there is no deadline worth showing, not that it closes
     // today — leave it unset instead of collapsing to 0.
-    remainingDays: daysUntilClose(row.advenddate) ?? row.remainingdays ?? null,
-    isOpen: isPostingOpen(row.advenddate, row.remainingdays),
+    remainingDays: remainingDaysFor(row.advenddate, row.remainingdays),
+    isOpen: isPostingOpen(row.status),
   };
 }
 

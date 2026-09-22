@@ -221,7 +221,11 @@ export function dropdownRows(name: string, params: URLSearchParams): Row[] {
 
 /* --- postings ---------------------------------------------------------- */
 
-export function jobList(query: { jobName?: string; locationid?: number }) {
+export function jobList(query: {
+  jobName?: string;
+  locationid?: number;
+  salaryLevelID?: number | string;
+}) {
   const name = (query.jobName ?? "").trim().toLowerCase();
   const locationName = query.locationid
     ? filterData.location.find(
@@ -229,9 +233,23 @@ export function jobList(query: { jobName?: string; locationid?: number }) {
       )?.name
     : undefined;
 
+  /**
+   * `salaryLevelID` is a `salarylevel.key`; the postings carry the band as the
+   * text that key stands for, so the key is resolved to its text first. A key
+   * that names no band matches nothing — the same empty answer the ERP gives
+   * for a band with no postings, rather than silently dropping the filter.
+   */
+  const salaryKey = Number(query.salaryLevelID);
+  const wantsSalary = Number.isFinite(salaryKey) && salaryKey > 0;
+  const salaryText = wantsSalary
+    ? filterData.salarylevel.find((row) => row.key === salaryKey)?.text
+    : undefined;
+  if (wantsSalary && !salaryText) return [];
+
   return postings
     .filter((posting) => !name || posting.posname.toLowerCase().includes(name))
     .filter((posting) => !locationName || posting.locname === locationName)
+    .filter((posting) => !salaryText || posting.salarylevel === salaryText)
     .map(listRow);
 }
 

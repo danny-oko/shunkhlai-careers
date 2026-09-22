@@ -29,7 +29,9 @@ export const metadata: Metadata = {
 
 export default async function LandingPage() {
   const [jobs, filters] = await Promise.all([listJobsSafe(), getFilterData()]);
-  const roleCount = jobs.length;
+  // Only the adverts taking applications, the same count the careers page
+  // shows: the list also carries postings already in or past selection.
+  const roleCount = jobs.filter((job) => job.isOpen).length;
 
   // Both lists are the recruitment system's own, so anything added there
   // shows up in the opening screen without a code change.

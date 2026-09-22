@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarClock, Clock, Globe, GraduationCap, Users, Wallet } from "lucide-react";
 import type { JobDetail } from "@/lib/jobs/types";
+import { daysUntilClose } from "@/lib/jobs/mapper";
 import { ApplyButton } from "@/components/apply-button";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { Rise } from "@/components/brand/rise";
@@ -50,19 +51,43 @@ function Crosshair({ className }: { className?: string }) {
 function MetaItem({
   icon: Icon,
   children,
+  title,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
+  title?: string;
 }) {
   return (
-    <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+    <span
+      title={title}
+      className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+    >
       <Icon className="size-4 shrink-0 text-muted-foreground/60" />
       {children}
     </span>
   );
 }
 
+/**
+ * The advert's own deadline, when it has one worth stating.
+ *
+ * The date is only quoted while it is still ahead: the ERP leaves stale
+ * `advenddate`s on adverts that are plainly still taking applications (923:
+ * 2026.05.29, `remainingdays` +117), and "2026.05.29 хүртэл" beside a live
+ * advert reads as a mistake. In that case only the ERP's own count is shown,
+ * and an open-ended advert says nothing at all.
+ */
+function deadlineLabel(job: JobDetail): string | null {
+  if (job.remainingDays == null) return null;
+  const days = daysUntilClose(job.closesAt);
+  return days != null && days >= 0
+    ? `${job.closesAt} хүртэл · ${job.remainingDays} хоног`
+    : `Анкет хүлээн авахад ${job.remainingDays} хоног`;
+}
+
 export function JobHeader({ job }: { job: JobDetail }) {
+  const deadline = job.isOpen ? deadlineLabel(job) : null;
+
   return (
     <header className="relative isolate border-b border-border/70 [--grid-cell:5.5rem] [--grid-line:color-mix(in_oklab,var(--foreground)_7%,transparent)] sm:[--grid-cell:7rem]">
       <HeroGrid />
@@ -110,11 +135,14 @@ export function JobHeader({ job }: { job: JobDetail }) {
           <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
             {job.level ? <MetaItem icon={GraduationCap}>{job.level}</MetaItem> : null}
             {job.salaryLevel ? <MetaItem icon={Wallet}>{job.salaryLevel}₮</MetaItem> : null}
-            {job.isOpen && job.remainingDays == null ? null : (
-              <MetaItem icon={CalendarClock}>
-                {job.isOpen
-                  ? `${job.closesAt} хүртэл · ${job.remainingDays} хоног`
-                  : "Хугацаа дууссан"}
+            {job.isOpen ? (
+              deadline && <MetaItem icon={CalendarClock}>{deadline}</MetaItem>
+            ) : (
+              // Closed under the status rule usually means selection is under
+              // way or finished, not that a deadline passed — the ERP's own
+              // wording is the detail.
+              <MetaItem icon={CalendarClock} title={job.status}>
+                Анкет хүлээн авахгүй
               </MetaItem>
             )}
           </div>
@@ -140,7 +168,7 @@ export function JobHeader({ job }: { job: JobDetail }) {
                 "text-muted-foreground",
               )}
             >
-              Энэ зарын хугацаа дууссан байна - {job.status}
+              Энэ зар одоогоор анкет хүлээн авахгүй байна - {job.status}
             </p>
           )}
         </Rise>
