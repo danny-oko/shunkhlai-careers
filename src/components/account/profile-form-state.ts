@@ -50,9 +50,39 @@ export function maritalOptions(list?: MaritalOption[]): MaritalOption[] {
   return list?.length ? list : FALLBACK_MARITAL;
 }
 
+export type Choice = { value: string; label: string };
+
+/**
+ * `options` plus the saved value when the list lacks it, so a saved choice is
+ * shown rather than a blank "- Сонгох -" (a code the ERP list does not carry,
+ * a list still loading or failed). Only the value as loaded — once the
+ * applicant picks another one, or a parent change empties it, the extra goes.
+ */
+export function withSavedChoice(
+  options: Choice[],
+  value: string,
+  saved: { value: unknown; label?: unknown },
+): Choice[] {
+  if (!value || value !== asText(saved.value)) return options;
+  if (options.some((option) => option.value === value)) return options;
+  return [...options, { value, label: asText(saved.label).trim() || value }];
+}
+
+/**
+ * Гэрлэлтийн байдал choices: the ERP's `maritalstatus[]` when the record came
+ * with it, else the fallback list; a stored code in neither still shows (by
+ * the fallback's text when it has one, else as the code itself).
+ */
+export function maritalChoices(profile: ApplicantProfile | null | undefined, value: string): Choice[] {
+  const options = maritalOptions(profile?.maritalOptions).map((m) => ({ value: m.key, label: m.text }));
+  const known = FALLBACK_MARITAL.find((m) => m.key === profile?.maritalstatus)?.text;
+  return withSavedChoice(options, value, { value: profile?.maritalstatus, label: known });
+}
+
+const asText = (value: unknown) => (value === null || value === undefined ? "" : String(value));
+
 function read(source: Record<string, unknown>, key: string): string {
-  const value = source[key];
-  return value === null || value === undefined ? "" : String(value);
+  return asText(source[key]);
 }
 
 export function toState(profile: ApplicantProfile | null): State {

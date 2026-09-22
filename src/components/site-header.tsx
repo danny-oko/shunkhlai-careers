@@ -89,6 +89,7 @@ export function SiteHeader() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={isActive ? "page" : undefined}
                 className={cn(
                   "relative rounded-full px-3.5 py-2 text-sm whitespace-nowrap transition-opacity",
                   isActive ? "opacity-100" : "opacity-65 hover:opacity-100",

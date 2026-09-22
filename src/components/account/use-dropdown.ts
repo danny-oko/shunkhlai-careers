@@ -51,6 +51,22 @@ export function useDropdown(
   };
 }
 
+/**
+ * One loader several fields read the same list through (the four language
+ * levels): calls made while a request is in flight share it, so the fields
+ * mounting together cost one GET. Nothing is kept once it settles — a later
+ * form asks again, and a failure is not remembered.
+ */
+export function sharedLoader(loader: () => Promise<DropdownOption[]>) {
+  let pending: Promise<DropdownOption[]> | null = null;
+  return () => {
+    pending ??= loader().finally(() => {
+      pending = null;
+    });
+    return pending;
+  };
+}
+
 /** Wraps a fixed list in the dropdown option shape, for fields with no endpoint. */
 export function staticOptions(items: Array<{ value: string; label: string }>) {
   return async () =>

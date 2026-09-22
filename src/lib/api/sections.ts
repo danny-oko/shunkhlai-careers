@@ -48,14 +48,25 @@ export type EducationEntry = SectionEntry & {
   note?: string;
 };
 
+/**
+ * The ERP's `hrapplanglist` carries ids only; the `*name` labels are added by
+ * `/api/me` (on save and on pull) for the list to show, and never sent back.
+ */
 export type LanguageEntry = SectionEntry & {
   entryid: number;
   forlanguageid?: number;
   forlanguagename?: string;
+  /** Судалсан хугацаа, in years. */
+  studytime?: number;
   listeninglevelid?: number;
+  listeninglevelname?: string;
   speakinglevelid?: number;
+  speakinglevelname?: string;
   readinglevelid?: number;
+  readinglevelname?: string;
   writinglevelid?: number;
+  writinglevelname?: string;
+  /** Free text, e.g. "IELTS 6.5". */
   score?: string;
 };
 

@@ -14,6 +14,7 @@ import { Field, FormMessage } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toApiError } from "@/lib/api";
 import type { DropdownOption, DropdownQuery, SectionEntry, SectionResource } from "@/lib/api";
@@ -50,10 +51,28 @@ export type FieldDef = {
    * (default) or `0`. Never `null` — the backend 400s on it for some columns.
    */
   emptyAs?: EmptyAs;
+  /**
+   * A `combobox` whose list may not have the answer: a switch under it trades
+   * the list for a text input writing `name` (the id is then left empty — so
+   * `emptyAs` decides what it is sent as). `required` is met by either.
+   */
+  freeText?: { name: string; toggle: string; placeholder?: string };
   wide?: boolean;
 };
 
 export type Values = Record<string, unknown>;
+
+const isBlank = (value: unknown) => String(value ?? "").trim() === "";
+
+/** Free-text fields that open typed: a saved row with the name and no id. */
+function initialManual(fields: FieldDef[], initial: Values): Record<string, boolean> {
+  const manual: Record<string, boolean> = {};
+  for (const field of fields) {
+    if (!field.freeText) continue;
+    manual[field.name] = isBlank(initial[field.name]) && !isBlank(initial[field.freeText.name]);
+  }
+  return manual;
+}
 
 /** The parent values this field's list was, or would be, read under. */
 function depKeyOf(field: FieldDef, values: Values): string {
@@ -165,6 +184,7 @@ function EntryForm({
   onSubmit: (values: Values) => Promise<void>;
 }) {
   const [values, setValues] = React.useState<Values>(initial);
+  const [manual, setManual] = React.useState(() => initialManual(fields, initial));
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -178,21 +198,36 @@ function EntryForm({
     setValues((current) => clearDependents({ ...current, [name]: value }, name, edges));
   }
 
+  /** List ⇄ typed: the side switched away from is emptied, so only one is sent. */
+  function setTyped(field: FieldDef, typed: boolean) {
+    setManual((current) => ({ ...current, [field.name]: typed }));
+    if (typed) set(field.name, "");
+    else set(field.freeText!.name, "");
+  }
+
+  /** What the field holds: the typed name in typed mode, else its value. */
+  const answerOf = (field: FieldDef) =>
+    field.freeText && manual[field.name] ? values[field.freeText.name] : values[field.name];
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const missing = fields.find(
-      (field) => field.required && String(values[field.name] ?? "").trim() === "",
-    );
+    const missing = fields.find((field) => field.required && isBlank(answerOf(field)));
     if (missing) {
       setError(`«${missing.label}» талбарыг бөглөнө үү.`);
       return;
     }
 
+    // A typed name only counts in typed mode; a picked id drops it.
+    const sent = { ...values };
+    for (const field of fields) {
+      if (field.freeText && !manual[field.name]) sent[field.freeText.name] = "";
+    }
+
     setError(null);
     setIsSaving(true);
     try {
-      await onSubmit(values);
+      await onSubmit(sent);
     } catch (submitError) {
       setError(toApiError(submitError).message);
     } finally {
@@ -211,17 +246,26 @@ function EntryForm({
           const id = `field-${field.name}`;
           const raw = values[field.name];
           const value = raw === null || raw === undefined ? "" : String(raw);
+          const typed = field.freeText && manual[field.name] ? field.freeText : null;
 
           return (
             <Field
               key={field.name}
               label={field.label}
-              htmlFor={id}
+              htmlFor={typed ? `field-${typed.name}` : id}
               required={field.required}
-              hint={field.hint}
+              hint={typed ? undefined : field.hint}
               className={field.wide ? "sm:col-span-2" : undefined}
             >
-              {field.type === "select" ? (
+              {typed ? (
+                <Input
+                  id={`field-${typed.name}`}
+                  type="text"
+                  placeholder={typed.placeholder}
+                  value={String(values[typed.name] ?? "")}
+                  onChange={(event) => set(typed.name, event.target.value)}
+                />
+              ) : field.type === "select" ? (
                 <SelectField
                   id={id}
                   field={field}
@@ -267,6 +311,17 @@ function EntryForm({
                   onChange={(event) => set(field.name, event.target.value)}
                 />
               )}
+              {field.freeText ? (
+                <label className="text-muted-foreground flex w-fit cursor-pointer items-center gap-2 text-xs">
+                  <Switch
+                    id={`${id}-manual`}
+                    size="sm"
+                    checked={!!manual[field.name]}
+                    onCheckedChange={(checked) => setTyped(field, checked)}
+                  />
+                  {field.freeText.toggle}
+                </label>
+              ) : null}
             </Field>
           );
         })}
@@ -298,6 +353,7 @@ export function SectionManager<TEntry extends SectionEntry>({
   resource,
   fields,
   defaults,
+  payload: toPayload,
   primary,
   secondary,
   emptyText = "Одоогоор бичлэг алга.",
@@ -308,6 +364,8 @@ export function SectionManager<TEntry extends SectionEntry>({
   resource: SectionResource<TEntry>;
   fields: FieldDef[];
   defaults: Values;
+  /** Last word on the save body — for a column derived from the others. */
+  payload?: (values: Values) => Values;
   primary: (row: TEntry) => string;
   secondary: (row: TEntry) => string;
   emptyText?: string;
@@ -348,7 +406,8 @@ export function SectionManager<TEntry extends SectionEntry>({
   }, []);
 
   async function save(values: Values) {
-    const payload = encodeSectionValues(fields, values);
+    const encoded = encodeSectionValues(fields, values);
+    const payload = toPayload ? toPayload(encoded) : encoded;
 
     await resource.save(payload as TEntry);
     setEditing(null);

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,7 +44,30 @@ export function useIdentityReady() {
 }
 
 const LINK_ERROR_TEXT =
-  "Таны регистрийн дугаар болон утасны дугаар ERP системд бүртгэлтэй мэдээлэлтэй зөрж байна. ERP-д бүртгүүлсэн утасны дугаараа (эсвэл регистрээ) зөв оруулж хадгална уу. Зөв гэдэгт итгэлтэй бол «Хадгалах» дарж дахин оролдоно уу.";
+  "ERP системд утасны дугаар тань нууц үг болдог. Тэнд бүртгүүлсэн утасны дугаараа (нууц үгээ сольсон бол шинэ нууц үгээ) «Утас» талбарт оруулж хадгална уу. Засах хүртэл анкет, хүсэлт тань ERP системд очихгүй. Зөв гэдэгт итгэлтэй бол «Дахин оролдох» дарна уу.";
+
+/** The same stored profile sent back with the retry flag (`RETRY_LINK_FLAG`). */
+function useRetryLink() {
+  const { profile, refresh } = useSession();
+  const [isRetrying, setIsRetrying] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function retry() {
+    setError(null);
+    setIsRetrying(true);
+    try {
+      await profileApi.saveProfile(toInput(toState(profile)), profile, { retryLink: true });
+      toast.success("Хадгаллаа. ERP системд удахгүй дахин шалгана.");
+      await refresh();
+    } catch (retryError) {
+      setError(toApiError(retryError).message);
+    } finally {
+      setIsRetrying(false);
+    }
+  }
+
+  return { retry, isRetrying, error };
+}
 
 const pick = (source: Record<string, unknown> | null): Identity => {
   const read = (key: keyof Identity) => String(source?.[key] ?? "");
@@ -58,6 +82,7 @@ const pick = (source: Record<string, unknown> | null): Identity => {
 /** The four fields and a save; every other profile field is sent back as loaded. */
 export const IdentityForm = ({ className }: { className?: string }) => {
   const { profile, refresh } = useSession();
+  const { linkError } = useIdentityReady();
   const [values, setValues] = React.useState<Identity>(() => pick(profile));
   const [error, setError] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
@@ -75,7 +100,10 @@ export const IdentityForm = ({ className }: { className?: string }) => {
     setIsSaving(true);
     try {
       // The same full-replace body the profile form sends, with the four overlaid.
-      await profileApi.saveProfile(toInput({ ...toState(profile), ...values }), profile);
+      // Saving here while the ERP refuses them is the deliberate retry.
+      await profileApi.saveProfile(toInput({ ...toState(profile), ...values }), profile, {
+        retryLink: !!linkError,
+      });
       toast.success("Мэдээлэл хадгалагдлаа");
       await refresh();
     } catch (saveError) {
@@ -111,13 +139,67 @@ export const IdentityForm = ({ className }: { className?: string }) => {
 };
 
 /**
+ * The ERP refused the stored регистр + утас: its own message, what to do, and
+ * the ways out — fix утас (`fixHref`, or the form right here with `withForm`)
+ * or deliberately retry the same pair. One component for /account and the
+ * apply sheet, so the refusal shows wherever the applicant acts.
+ */
+export const LinkErrorNotice = ({
+  withForm = false,
+  fixHref,
+  className,
+}: {
+  withForm?: boolean;
+  fixHref?: string;
+  className?: string;
+}) => {
+  const { linkError } = useIdentityReady();
+  const { retry, isRetrying, error } = useRetryLink();
+  if (!linkError) return null;
+  return (
+    <section
+      aria-labelledby="link-error-title"
+      className={cn("border-destructive/30 bg-destructive/5 space-y-4 rounded-xl border p-5", className)}
+    >
+      <div className="space-y-1">
+        <h2 id="link-error-title" className="text-base font-semibold tracking-[-0.02em]">
+          ERP-ийн бүртгэлтэй зөрж байна
+        </h2>
+        <p className="text-sm font-medium text-pretty">{linkError}</p>
+        <p className="text-muted-foreground text-sm text-pretty">{LINK_ERROR_TEXT}</p>
+      </div>
+      {withForm ? <IdentityForm /> : null}
+      <div className="flex flex-wrap gap-3">
+        {fixHref ? (
+          <Button asChild className="h-9 rounded-full px-5">
+            <Link href={fixHref}>Утасны дугаараа засах</Link>
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isRetrying}
+          onClick={retry}
+          className="h-9 rounded-full px-5"
+        >
+          {isRetrying ? <Loader2 className="animate-spin" /> : null}
+          Дахин оролдох
+        </Button>
+      </div>
+      <FormMessage message={error} />
+    </section>
+  );
+};
+
+/**
  * The /account banner: while one of the four is blank, or the ERP refused
  * them. `withForm` false (the profile page, whose form has the same fields):
  * the notice only, so a save here never races unsaved edits there.
  */
 export const IdentityPanel = ({ withForm = true }: { withForm?: boolean }) => {
   const { blocked, linkError } = useIdentityReady();
-  if (!blocked && !linkError) return null;
+  if (!blocked && linkError) return <LinkErrorNotice withForm={withForm} className="mb-8" />;
+  if (!blocked) return null;
   return (
     <section
       aria-labelledby="identity-title"
@@ -125,12 +207,10 @@ export const IdentityPanel = ({ withForm = true }: { withForm?: boolean }) => {
     >
       <div className="space-y-1">
         <h2 id="identity-title" className="text-base font-semibold tracking-[-0.02em]">
-          {blocked ? "Эхлээд үндсэн мэдээллээ бөглөнө үү" : "ERP-ийн бүртгэлтэй зөрж байна"}
+          Эхлээд үндсэн мэдээллээ бөглөнө үү
         </h2>
         <p className="text-muted-foreground text-sm text-pretty">
-          {blocked
-            ? `${IDENTITY_REQUIRED_MESSAGE} Эдгээрээр таны бүртгэлийг ERP системд үүсгэдэг тул бөглөхөөс өмнө анкет хадгалах, файл хавсаргах, ажлын байранд хүсэлт илгээх боломжгүй.`
-            : LINK_ERROR_TEXT}
+          {`${IDENTITY_REQUIRED_MESSAGE} Эдгээрээр таны бүртгэлийг ERP системд үүсгэдэг тул бөглөхөөс өмнө анкет хадгалах, файл хавсаргах, ажлын байранд хүсэлт илгээх боломжгүй.`}
         </p>
       </div>
       {withForm ? <IdentityForm /> : null}

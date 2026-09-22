@@ -1,6 +1,7 @@
 "use client";
 
 import { SectionManager, type FieldDef } from "@/components/account/section-manager";
+import { sharedLoader } from "@/components/account/use-dropdown";
 import { useHomeCountry } from "@/components/account/use-home-country";
 import { Separator } from "@/components/ui/separator";
 import { reference, sections } from "@/lib/api";
@@ -41,11 +42,15 @@ const educationFields: FieldDef[] = [
     // usable before a country is chosen rather than empty.
     load: (values, query) =>
       reference.universities({ ...query, countryid: Number(values.countryid) || 0 }),
-  },
-  {
-    name: "universitynametext",
-    label: "Сургууль (жагсаалтад байхгүй бол)",
-    type: "text",
+    // An academy or training centre the list does not have: its name goes in
+    // `universitynametext` with `universityid: 0` — the pair the ERP team was
+    // asked to accept (the list has no «Бусад» row to pick instead).
+    freeText: {
+      name: "universitynametext",
+      toggle: "Жагсаалтад байхгүй",
+      placeholder: "Сургуулийн нэр",
+    },
+    emptyAs: "zero",
   },
   {
     name: "professionid",
@@ -62,7 +67,7 @@ const educationFields: FieldDef[] = [
   },
   { name: "fromdate", label: "Элссэн огноо", type: "date" },
   {
-    // The backend derives "graduated" from this date and ignores `isgraduated`.
+    // Also decides `isgraduated` (see `educationPayload`).
     name: "todate",
     label: "Төгссөн огноо",
     type: "date",
@@ -76,6 +81,16 @@ const educationFields: FieldDef[] = [
   { name: "note", label: "Тэмдэглэл", type: "textarea", wide: true },
 ];
 
+/** Сонсох / Ярих / Унших / Бичих all read the one level list. */
+const LANGUAGE_SKILLS = [
+  { skill: "listening", label: "Сонсох" },
+  { skill: "speaking", label: "Ярих" },
+  { skill: "reading", label: "Унших" },
+  { skill: "writing", label: "Бичих" },
+] as const;
+
+const languageLevels = sharedLoader(() => reference.languageLevels());
+
 const languageFields: FieldDef[] = [
   {
     name: "forlanguageid",
@@ -84,32 +99,39 @@ const languageFields: FieldDef[] = [
     required: true,
     load: () => reference.foreignLanguages(),
   },
-  {
-    name: "listeninglevelid",
-    label: "Сонсох",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
-  {
-    name: "speakinglevelid",
-    label: "Ярих",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
-  {
-    name: "readinglevelid",
-    label: "Унших",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
-  {
-    name: "writinglevelid",
-    label: "Бичих",
-    type: "select",
-    load: () => reference.languageLevels(),
-  },
+  { name: "studytime", label: "Судалсан хугацаа (жил)", type: "number" },
+  ...LANGUAGE_SKILLS.map(
+    ({ skill, label }): FieldDef => ({
+      name: `${skill}levelid`,
+      label,
+      type: "select",
+      load: languageLevels,
+      // An edit that empties a level must reach the row: omitted, the saved
+      // id would stay (`0` is the ERP's own "none", and reads back as blank).
+      emptyAs: "zero",
+    }),
+  ),
   { name: "score", label: "Шалгалтын оноо", type: "text", placeholder: "IELTS 6.5" },
 ];
+
+/** `score` is text on the ERP ("IELTS 6.5"), even when it was typed as a bare number. */
+const languagePayload = (values: Record<string, unknown>) =>
+  values.score === undefined || values.score === null
+    ? values
+    : { ...values, score: String(values.score).trim() };
+
+/** "Ярих: Дунд · Унших: Дээд түвшин · 3 жил · IELTS 6.5" */
+const languageSummary = (row: LanguageEntry) =>
+  [
+    ...LANGUAGE_SKILLS.map(({ skill, label }) => {
+      const level = row[`${skill}levelname`];
+      return level ? `${label}: ${level}` : "";
+    }),
+    Number(row.studytime) > 0 ? `${row.studytime} жил` : "",
+    row.score,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 const skillFields: FieldDef[] = [
   {
@@ -135,6 +157,30 @@ const skillFields: FieldDef[] = [
   { name: "note", label: "Тэмдэглэл", type: "textarea", wide: true },
 ];
 
+/**
+ * `isgraduated` is in the collection's save body; it follows Төгссөн огноо
+ * rather than asking twice (the backend has been seen deriving its own
+ * `graduated` from `todate` and ignoring this — sent anyway, as documented).
+ * A date still ahead is an expected graduation, so not yet "Y".
+ */
+function isGraduated(todate: unknown, today = new Date()): "Y" | "N" {
+  const value = String(todate ?? "").trim().slice(0, 10);
+  if (!value) return "N";
+  return value <= today.toISOString().slice(0, 10) ? "Y" : "N";
+}
+
+const educationPayload = (values: Record<string, unknown>) => ({
+  ...values,
+  isgraduated: isGraduated(values.todate),
+});
+
+/** A typed school has no id, so its name is the one to show. */
+const schoolOf = (row: EducationEntry) =>
+  (Number(row.universityid) > 0 ? row.universityname : row.universitynametext) ||
+  row.universityname ||
+  row.universitynametext ||
+  "Сургууль";
+
 export default function EducationPage() {
   const homeCountry = useHomeCountry();
 
@@ -146,9 +192,8 @@ export default function EducationPage() {
         resource={sections.education}
         fields={educationFields}
         defaults={{ ...(homeCountry ? { countryid: homeCountry } : {}) }}
-        primary={(row) =>
-          row.universityname || row.universitynametext || "Сургууль"
-        }
+        payload={educationPayload}
+        primary={schoolOf}
         secondary={(row) =>
           [
             row.educationlevelname,
@@ -170,10 +215,9 @@ export default function EducationPage() {
         resource={sections.language}
         fields={languageFields}
         defaults={{}}
+        payload={languagePayload}
         primary={(row) => row.forlanguagename || "Гадаад хэл"}
-        secondary={(row) =>
-          row.score ?? ""
-        }
+        secondary={languageSummary}
         emptyText="Гадаад хэлний мэдээлэл алга."
       />
 
