@@ -118,3 +118,44 @@ describe("SaveHrAppUser", () => {
     expect(r.body).toMatchObject({ rettype: 1, retmsg: MISMATCH, retdata: null });
   });
 });
+
+describe("CV (Postman 04)", () => {
+  async function upload(endpoint: string, form: FormData, token: string) {
+    const res = await route.POST(
+      new Request(`http://x/api/applicant/${endpoint}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+        body: form,
+      }),
+      ctx(endpoint) as never,
+    );
+    return (await res.json()) as Env;
+  }
+  const signUp = async () => tokenOf((await post("SaveHrAppUser", USER)).body)!;
+
+  it("SaveAppCV without a file answers the collection's \"file not selected\"", async () => {
+    const token = await signUp();
+    const r = await upload("SaveAppCV", new FormData(), token);
+    expect(r.rettype).not.toBe(0);
+    expect(r.retmsg).toBe("file not selected");
+    expect(((await get("get", token)).body.retdata as Record<string, unknown>).filename).toBeNull();
+  });
+
+  it("get reads the CV back as the ERP does: filename + base64 filedata; re-upload replaces; deleteAppCV clears both", async () => {
+    const token = await signUp();
+    const first = new FormData();
+    first.set("file", new File([new Uint8Array([1, 2])], "old.pdf"));
+    await upload("SaveAppCV", first, token);
+    const second = new FormData();
+    second.set("file", new File([new Uint8Array([3, 4, 5])], "cv.docx"));
+    expect((await upload("SaveAppCV", second, token)).rettype).toBe(0);
+
+    const record = (await get("get", token)).body.retdata as Record<string, unknown>;
+    expect(record.filename).toBe("cv.docx");
+    expect(record.filedata).toBe(Buffer.from([3, 4, 5]).toString("base64"));
+
+    expect((await post("deleteAppCV", undefined, token)).body.rettype).toBe(0);
+    const after = (await get("get", token)).body.retdata as Record<string, unknown>;
+    expect(after).toMatchObject({ filename: null, filedata: null });
+  });
+});

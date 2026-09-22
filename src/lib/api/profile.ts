@@ -1,6 +1,7 @@
 import { RETRY_LINK_FLAG } from "@/lib/applicant-identity";
 
 import { ME_BASE } from "./core/config";
+import { ApiError } from "./core/errors";
 import { apiGet, apiPost, apiUpload } from "./core/request";
 import { buildProfilePayload } from "./profile-payload";
 
@@ -8,8 +9,9 @@ export { buildProfilePayload };
 
 /**
  * The applicant's core record. One call returns the personal details, the
- * profile photo, the CV *and* the per-section completion percentages — there
- * is no separate endpoint for downloading a CV.
+ * profile photo, the CV *and* the per-section completion percentages — the
+ * ERP has no separate endpoint for downloading a CV. `/api/me/get` sends only
+ * the CV's `filename`; its bytes come from `downloadCv` (`/api/me/cv`).
  */
 
 export type MaritalOption = { key: string; text: string };
@@ -52,7 +54,7 @@ export type ApplicantProfile = {
   maritalOptions?: MaritalOption[];
   /** Base64 profile photo. */
   picturedata?: string | null;
-  /** CV file name and Base64 contents. */
+  /** CV file name (null: none) and, from the ERP only, its Base64 contents. */
   filename?: string | null;
   filedata?: string | null;
   /** Completion percentages, 0-100. */
@@ -164,6 +166,25 @@ export function uploadCv(file: File) {
 /** POST /api/me/deleteAppCV — no parameters; the Clerk session identifies the applicant. */
 export function deleteCv() {
   return apiPost<unknown>(`${ME_BASE}/deleteAppCV`);
+}
+
+/**
+ * GET /api/me/cv — the stored CV's bytes, typed from its name, for the
+ * applicant to save again. Throws `ApiError` with the server's Mongolian
+ * message (none stored → 404 "CV хавсаргаагүй байна.").
+ */
+export async function downloadCv(): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(`${ME_BASE}/cv`, { credentials: "same-origin", cache: "no-store" });
+  } catch {
+    throw new ApiError("Серверт холбогдож чадсангүй. Холболтоо шалгаад дахин оролдоно уу.");
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { retmsg?: string } | null;
+    throw new ApiError(body?.retmsg || "Алдаа гарлаа. Дахин оролдоно уу.", { status: response.status });
+  }
+  return response.blob();
 }
 
 /** Turns the Base64 photo from `getProfile` into something `<img src>` accepts. */

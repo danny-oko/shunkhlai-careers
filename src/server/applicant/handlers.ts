@@ -32,6 +32,10 @@ export type ApplicantDoc = {
   relatives: Row[];
   interests: Row[];
   applications: Row[];
+  /**
+   * The mock holds the bytes here; `/api/me` loads only the name (`filedata`
+   * is "" unless this request uploaded it — the file is read by `readCv`).
+   */
   cv: { filename: string; filedata: string } | null;
   picture: string | null;
   /** ERP sync state (`/api/me` only; see `erp-sync.ts`). */

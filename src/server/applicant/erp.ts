@@ -1,5 +1,7 @@
 import "server-only";
 
+import { mimeFromName } from "@/lib/file-type";
+
 /**
  * Server-side calls to the live ERP (careers.shunkhlai.mn), used only to push
  * an application (see `erp-push.ts`). Restored and trimmed from the retired
@@ -124,13 +126,17 @@ export function erpPost<T>(
   );
 }
 
-/** Multipart upload under the field name the browser client uses (`file`). */
+/**
+ * Multipart upload under the field name the browser client uses (`file`),
+ * typed from the file name so the ERP does not keep the CV as octet-stream.
+ */
 export function erpUpload<T>(
   endpoint: string,
   token: string,
   file: { filename: string; base64: string },
 ): Promise<T> {
   const form = new FormData();
-  form.append("file", new Blob([Buffer.from(file.base64, "base64")]), file.filename);
+  const blob = new Blob([Buffer.from(file.base64, "base64")], { type: mimeFromName(file.filename) });
+  form.append("file", blob, file.filename);
   return call<T>(endpoint, { method: "POST", headers: headers(token, false), body: form });
 }

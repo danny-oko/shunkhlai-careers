@@ -25,9 +25,8 @@ export default function ProfilePage() {
       <Separator />
 
       <section className="border-border/70 rounded-xl border p-6">
-        <IdentityLock>
-          <CvManager />
-        </IdentityLock>
+        {/* Locks its own upload / delete; downloading the stored CV stays open. */}
+        <CvManager />
       </section>
     </div>
   );

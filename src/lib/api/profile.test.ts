@@ -1,9 +1,10 @@
 import type { AxiosAdapter } from "axios";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { http } from "./core/client";
 import {
   buildProfilePayload,
+  downloadCv,
   saveProfile,
   unwrapProfile,
   type ApplicantProfile,
@@ -150,5 +151,31 @@ describe("saveProfile", () => {
     expect(bodies[0].relativeid).toBe(3);
     // The shared ERP payload builder is unchanged: blank ids are omitted there.
     expect(buildProfilePayload({ ...input, relativeid2: null }, loaded)).not.toHaveProperty("relativeid2");
+  });
+});
+
+describe("downloadCv", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("GETs /api/me/cv same-origin with the session cookie and returns the file", async () => {
+    const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2]), { headers: { "content-type": "application/pdf" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const blob = await downloadCv();
+    expect(fetchMock).toHaveBeenCalledWith("/api/me/cv", { credentials: "same-origin", cache: "no-store" });
+    expect(blob.type).toBe("application/pdf");
+    expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([1, 2]);
+  });
+
+  it("throws the server's Mongolian message on a failure envelope", async () => {
+    const body = JSON.stringify({ rettype: 1, retmsg: "CV хавсаргаагүй байна.", retdata: null });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 404 })));
+    await expect(downloadCv()).rejects.toMatchObject({ name: "ApiError", message: "CV хавсаргаагүй байна.", status: 404 });
+  });
+
+  it("a network failure is the usual Mongolian connection message", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("fetch failed"))));
+    await expect(downloadCv()).rejects.toMatchObject({ message: expect.stringContaining("Серверт холбогдож чадсангүй") });
   });
 });
