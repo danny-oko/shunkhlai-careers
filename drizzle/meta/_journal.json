@@ -1,26 +1,12 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "6",
-      "when": 1789720848068,
-      "tag": "0000_curly_deadpool",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1789969649744,
-      "tag": "0001_applicant_account",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1789974753962,
-      "tag": "0002_news",
+      "version": "7",
+      "when": 1790168875692,
+      "tag": "0000_magical_guardsmen",
       "breakpoints": true
     }
   ]
