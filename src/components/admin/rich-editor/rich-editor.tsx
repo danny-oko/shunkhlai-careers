@@ -56,6 +56,7 @@ const SURFACE = cn(
 );
 
 export function RichEditor({
+  id,
   name,
   labelId,
   describedBy,
@@ -64,6 +65,8 @@ export function RichEditor({
   onChange,
   className,
 }: {
+  /** Id of the editable surface, so the field's `<label htmlFor>` lands on it. */
+  id?: string;
   /** Name of the hidden input that carries the document to the server. */
   name: string;
   /** Id of the field's visible label, for `aria-labelledby`. */
@@ -187,6 +190,7 @@ export function RichEditor({
 
         <div
           ref={surfaceRef}
+          id={id}
           role="textbox"
           aria-multiline="true"
           aria-labelledby={labelId}

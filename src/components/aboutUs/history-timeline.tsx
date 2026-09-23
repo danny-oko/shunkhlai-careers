@@ -17,8 +17,8 @@ const NARROW_STEP_SVH = 45;
 const WIDE = "(min-width: 64rem)";
 
 /**
- * Screens with the room to hold the pinned stage: the longest of the twelve
- * records, the spans, the index and a photograph worth looking at, all inside
+ * Screens with the room to hold the pinned stage: the longest record, the
+ * spans, the index and a photograph worth looking at, all inside
  * one screen. Measured, not guessed - at 375x667 that leaves the photograph
  * 210px and 24px to spare, and a screen narrower or shorter than the floor
  * below runs the record past the fold. Those fall back to the plain stacked
@@ -41,6 +41,26 @@ const SCATTER_MS = 170;
 /** The whole change, to the last tile settling. */
 const REVEAL_MS = SWEEP_MS + SCATTER_MS / 2 + TILE_MS;
 
+/**
+ * And how long the photograph being replaced takes to clear, where the one
+ * arriving will not cover it.
+ *
+ * A tile carries the arriving photograph and nothing else, so where that
+ * photograph is not - the band an archive picture leaves at the top and
+ * bottom of the frame, or down its sides - an opened tile is transparent and
+ * what shows through it is the photograph underneath. Against a span
+ * photograph, which fills the frame, that left the old picture standing
+ * around the new one for the length of the sweep: two photographs in one
+ * frame, which is the one thing this change is supposed to avoid.
+ *
+ * So it is faded out under the sweep rather than dropped at the end of it,
+ * and it is gone before the last tiles open. Only against an arriving picture
+ * that does not cover the frame: where the next one does, the tiles wipe it
+ * themselves, and holding it intact underneath is what makes the change read
+ * as one photograph being drawn over another.
+ */
+const CLEAR_MS = SWEEP_MS + TILE_MS / 2;
+
 /** Turns the index's travel from a jump into a slide. */
 const MARK_MIN = 5;
 const MARK_MAX = 40;
@@ -57,6 +77,51 @@ const slides = eras.flatMap((era, eraIndex) =>
 const eraStart = eras.map((_, eraIndex) =>
   slides.findIndex((slide) => slide.eraIndex === eraIndex),
 );
+
+type Photo = {
+  src: string;
+  alt: string;
+  /**
+   * How it sits in the frame.
+   *
+   * The span photographs were cropped to the frame's shape when they were put
+   * in `public`, so they fill it. A record's own archive photograph came off
+   * the history poster at the size and shape the poster held it - 245 to
+   * 400px across, portrait or landscape - so it is shown whole on the frame's
+   * plate instead. Cropping one to a tall frame would throw away most of the
+   * picture and then enlarge what was left.
+   */
+  fit: "cover" | "contain";
+};
+
+/**
+ * Every photograph the stage can show, and which one each record asks for.
+ *
+ * A record with its own picture shows that; the rest show their span's. The
+ * list is deduplicated because the four span photographs are each asked for
+ * by several records, and the frame holds one <img> per photograph.
+ */
+const { photos, photoOf } = (() => {
+  const photos: Photo[] = [];
+  const seen = new Map<string, number>();
+
+  const photoOf = slides.map(({ era, entry }) => {
+    const src = entry.image ?? era.image;
+    const known = seen.get(src);
+    if (known !== undefined) return known;
+
+    const index = photos.length;
+    photos.push({
+      src,
+      alt: entry.image ? (entry.imageAlt ?? "") : era.alt,
+      fit: entry.image ? "contain" : "cover",
+    });
+    seen.set(src, index);
+    return index;
+  });
+
+  return { photos, photoOf };
+})();
 
 /**
  * Each tile's own offset into the sweep, fixed for the life of the page.
@@ -118,8 +183,7 @@ function useMedia(query: string) {
  * Түүхэн замнал, as a screen held while the scroll reads through it.
  *
  * The section is a tall runway with one screen pinned inside it. Nothing in
- * that screen moves as you scroll - the scroll only says which of the twelve
- * records is open, and the photograph and the text change to it together, as
+ * that screen moves as you scroll - the scroll only says which record is open, and the photograph and the text change to it together, as
  * one step. Pinning is also what keeps the section to itself: unpinned, the
  * dark statement screen below sat in the bottom of every view of it.
  *
@@ -145,9 +209,9 @@ function useMedia(query: string) {
  * scrolled through to be read.
  *
  * Every record is in the markup at all times, stacked in one grid cell and
- * faded between. The box is then as tall as the longest of the twelve however
+ * faded between. The box is then as tall as the longest of them however
  * short the open one is, so nothing under it moves as the run advances - and
- * the eleven that are not open are `inert`, so they are neither tabbed into
+ * the ones that are not open are `inert`, so they are neither tabbed into
  * nor read out.
  */
 export function HistoryTimeline() {
@@ -178,7 +242,12 @@ export function HistoryTimeline() {
   // thumb over to the first mark of the next one.
   const lead = current.entryIndex + (isPinned ? within : 0);
 
-  const { shown, incoming } = usePhotographChange(current.eraIndex, isReduced);
+  const { shown, incoming } = usePhotographChange(photoOf[active], isReduced);
+
+  // Whether the arriving photograph leaves a band of the frame uncovered, and
+  // therefore whether the one it replaces has to clear rather than be wiped.
+  // See CLEAR_MS.
+  const clearing = incoming !== null && photos[incoming].fit !== "cover";
 
   /**
    * Take the reader to a record. While the stage is pinned the scroll owns
@@ -305,7 +374,12 @@ export function HistoryTimeline() {
             >
               <div
                 className={cn(
-                  "relative aspect-[900/1114] w-[min(var(--photo),52svh)] overflow-hidden rounded-[4px] bg-muted [--photo:15.5rem] sm:[--photo:19rem] lg:[--photo:21rem] xl:[--photo:24rem]",
+                  "relative aspect-[900/1114] w-[min(var(--photo),52svh)] overflow-hidden rounded-[4px] [--photo:15.5rem] sm:[--photo:19rem] lg:[--photo:21rem] xl:[--photo:24rem]",
+                  // The loading plate is for a photograph that fills the
+                  // frame. An archive one is shown whole, and the rings
+                  // behind the stage should carry on through the band it
+                  // leaves rather than stopping at a grey rectangle.
+                  photos[shown].fit === "cover" && "bg-muted",
                   // Height first and width off the shape, which is the other
                   // way round from the laptop: there the width is what is
                   // scarce, here it is the height.
@@ -313,30 +387,38 @@ export function HistoryTimeline() {
                     "h-full w-auto lg:h-auto lg:w-[min(var(--photo),52svh)]",
                 )}
               >
-                {/* The settled photograph. All four are in the frame rather
-                    than only the open one, so that by the time a tile asks
-                    for the next one it is already in the cache - a tile whose
-                    background is still downloading opens onto nothing, and
-                    the change is over in under a second.
+                {/* The settled photograph. All of them are in the frame
+                    rather than only the open one, so that by the time a tile
+                    asks for the next one it is already in the cache - a tile
+                    whose background is still downloading opens onto nothing,
+                    and the change is over in under a second.
 
-                    Cropped to this frame's shape when they were put in
-                    `public`, so they need no object-position and the tiles
-                    over them line up with them exactly. */}
-                {eras.map((era, index) => (
+                    The span photographs were cropped to this frame's shape
+                    when they were put in `public`, so they need no
+                    object-position and the tiles over them line up with them
+                    exactly. The archive ones are shown whole; see `fit`. */}
+                {photos.map((photo, index) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    key={era.image}
-                    src={era.image}
-                    alt={index === shown ? era.alt : ""}
+                    key={photo.src}
+                    src={photo.src}
+                    alt={index === shown ? photo.alt : ""}
                     aria-hidden={index !== shown}
-                    width={900}
-                    height={1114}
                     decoding="async"
                     fetchPriority={index === 0 ? "high" : "low"}
                     className={cn(
-                      "absolute inset-0 size-full object-cover",
+                      "absolute inset-0 size-full",
+                      photo.fit === "cover" ? "object-cover" : "object-contain",
                       index === shown ? "opacity-100" : "opacity-0",
                     )}
+                    style={
+                      clearing && index === shown
+                        ? {
+                            opacity: 0,
+                            transition: `opacity ${CLEAR_MS}ms cubic-bezier(0.33, 1, 0.68, 1)`,
+                          }
+                        : undefined
+                    }
                   />
                 ))}
 
@@ -349,9 +431,14 @@ export function HistoryTimeline() {
                     {tiles.map((tile) => (
                       <div
                         key={tile.index}
-                        className="history-tile absolute inset-0 bg-cover bg-center"
+                        className={cn(
+                          "history-tile absolute inset-0 bg-center bg-no-repeat",
+                          photos[incoming].fit === "cover"
+                            ? "bg-cover"
+                            : "bg-contain",
+                        )}
                         style={{
-                          backgroundImage: `url(${eras[incoming].image})`,
+                          backgroundImage: `url(${photos[incoming].src})`,
                           clipPath: tile.clip,
                           animationDelay: `${tile.delay}ms`,
                           animationDuration: `${TILE_MS}ms`,
@@ -399,7 +486,7 @@ export function HistoryTimeline() {
               </ol>
             </div>
 
-            {/* The record. All twelve are here; one is shown. */}
+            {/* The record. All of them are here; one is shown. */}
             <div
               className={cn(
                 "grid w-full max-w-[28rem] lg:shrink",
@@ -422,7 +509,7 @@ export function HistoryTimeline() {
                       Inside the heading rather than over it, so a reader who
                       cannot see the colour still gets "Жи Эс Би Капитал ББСБ
                       2010" as one line and not a stray number beside it.
-                      `tabular-nums` because the twelve of these change on the
+                      `tabular-nums` because these change on the
                       same spot as the panel cross-fades, and lining figures
                       keep that spot still. */}
                   <h3 className="text-lg leading-snug font-medium tracking-[-0.02em] text-balance sm:text-[1.375rem]">
@@ -447,21 +534,22 @@ export function HistoryTimeline() {
 /**
  * Which photograph is settled in the frame, and which one is opening over it.
  *
- * The photograph belongs to the span rather than to the record, so it holds
- * still for the three records of a span and changes on the seam between two.
- * A change that is interrupted part-way - the reader scrolls on into a third
- * span, or back into the one it came from - is replaced rather than queued,
- * so the frame is never more than one change behind the scroll.
+ * A record with an archive photograph of its own brings it into the frame;
+ * the records without one leave their span's photograph standing, so it holds
+ * still across them and changes on the seam where the picture does. A change
+ * interrupted part-way - the reader scrolls on to a third picture, or back to
+ * the one it came from - is replaced rather than queued, so the frame is
+ * never more than one change behind the scroll.
  */
-function usePhotographChange(eraIndex: number, isReduced: boolean) {
-  const [settled, setSettled] = React.useState(eraIndex);
+function usePhotographChange(photoIndex: number, isReduced: boolean) {
+  const [settled, setSettled] = React.useState(photoIndex);
 
   // Only the settled photograph is state. Which one is opening over it is
-  // read off the two - the frame is changing exactly while the span the
+  // read off the two - the frame is changing exactly while the picture the
   // scroll is on is not the one settled in it - so there is no second value
   // that can be left behind when a change is interrupted.
-  const shown = isReduced ? eraIndex : settled;
-  const incoming = shown === eraIndex ? null : eraIndex;
+  const shown = isReduced ? photoIndex : settled;
+  const incoming = shown === photoIndex ? null : photoIndex;
 
   React.useEffect(() => {
     if (incoming === null) return;
@@ -475,8 +563,9 @@ function usePhotographChange(eraIndex: number, isReduced: boolean) {
 
 /**
  * The rings the stage stands on: broken concentric bands centred on the
- * stage's left edge, so only their right sides are in the page. They carry no
- * meaning; they give the wide empty left of the composition something to be,
+ * stage's left edge, so only their right sides are in the page. Drawn in the
+ * brand orange, well under strength. They carry no meaning; they give the
+ * wide empty left of the composition something to be,
  * and turning them is what keeps that side of the screen part of the run
  * rather than a still backdrop the records happen to pass in front of.
  *
@@ -489,12 +578,16 @@ function Rings({ turn }: { turn: number }) {
       aria-hidden
       className="pointer-events-none absolute top-1/2 left-0 z-0 hidden size-[140svh] -translate-x-1/2 -translate-y-1/2 lg:block"
     >
-      <svg viewBox="-700 -700 1400 1400" className="size-full text-foreground">
+      <svg viewBox="-700 -700 1400 1400" className="size-full text-brand">
         <g
           fill="none"
           stroke="currentColor"
           strokeWidth={46}
-          opacity={0.055}
+          // Brand orange is a far lighter colour than the near-black this
+          // used to be drawn in, so at the old 0.055 it washed out to almost
+          // nothing. Raised until the bands carry the same weight on the page
+          // as the grey did, and read as orange rather than as a warm white.
+          opacity={0.12}
           transform={`rotate(${turn})`}
         >
           {[

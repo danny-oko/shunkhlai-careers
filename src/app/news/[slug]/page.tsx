@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { Rise } from "@/components/brand/rise";
 import { ArticleBody } from "@/components/news/article-body";
 import { Dateline } from "@/components/news/dateline";
 import { Kicker } from "@/components/news/kicker";
@@ -57,7 +58,10 @@ export default async function ArticlePage({ params }: PageProps<"/news/[slug]">)
   ]);
 
   return (
-    <main data-newsroom className="flex-1 bg-background pt-16 text-foreground">
+    <main
+      data-newsroom
+      className="flex-1 bg-background pt-16 text-foreground"
+    >
       <ReadingProgress />
 
       <div className="mx-auto max-w-6xl px-6 lg:px-10">
@@ -77,24 +81,33 @@ export default async function ArticlePage({ params }: PageProps<"/news/[slug]">)
               so a long Mongolian headline breaks into two or three balanced
               lines instead of one that runs the full width of the page. */}
           <header className="mx-auto max-w-3xl pt-10 pb-8 text-center sm:pt-14">
-            <Kicker category={article.category} />
+            {/* The front page's stagger, on the piece it leads to. */}
+            <Rise>
+              <Kicker category={article.category} />
+            </Rise>
 
-            <h1 className="news-headline mt-4 text-[clamp(1.875rem,5.5vw,3.25rem)]">
-              {article.title}
-            </h1>
+            <Rise delay={90}>
+              <h1 className="news-headline mt-4 text-[clamp(1.875rem,5.5vw,3.25rem)]">
+                {article.title}
+              </h1>
+            </Rise>
 
             {article.lede && (
-              <p className="news-body mx-auto mt-5 max-w-2xl text-muted-foreground">
-                {article.lede}
-              </p>
+              <Rise delay={180}>
+                <p className="news-body mx-auto mt-5 max-w-2xl text-muted-foreground">
+                  {article.lede}
+                </p>
+              </Rise>
             )}
 
-            <Dateline
-              article={article}
-              long
-              showReading
-              className="mt-6 justify-center"
-            />
+            <Rise delay={260}>
+              <Dateline
+                article={article}
+                long
+                showReading
+                className="mt-6 justify-center"
+              />
+            </Rise>
           </header>
 
           {article.coverKey && (

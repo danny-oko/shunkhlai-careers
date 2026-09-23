@@ -52,7 +52,7 @@ function SavedNotice({ article }: { article: NewsArticle }) {
         rel="noreferrer"
         className="underline underline-offset-4"
       >
-        Нийтлэг харах
+        Нийтлэл харах
       </Link>
     </NoticeShell>
   );
