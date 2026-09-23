@@ -16,7 +16,7 @@ both are meant to be replaced:
 
 | Today | When the backend grows one |
 |---|---|
-| `src/server/news/store.ts` — two tables in Cloudflare D1 (`news_article`, `news_media`) | a CMS, if one is ever wanted |
+| `src/server/news/store.ts` — two tables in PostgreSQL (`news_article`, `news_media`) | a CMS, if one is ever wanted |
 | `src/server/admin/session.ts` — one password, one signed cookie | `/auth/adminUserLogin` and the admin JWT tier already described in `src/lib/api/core/tokens.ts` |
 
 Each is behind one seam. Pages never touch the store — they go through
@@ -79,30 +79,38 @@ Three checks, and they are not redundant:
 
 ## Storage
 
-Cloudflare D1, through the same Drizzle client (`getDb()` in `src/lib/db`) as
-the applicant account. **The database is shared: localhost and production
-read and write the same rows**, so saving from `bun run dev` is a production
-edit.
+PostgreSQL, through the same Drizzle client (`getDb()` in `src/lib/db`) as the
+applicant account — see `docs/postgres.md`. **Every host pointed at the same
+`DATABASE_URL` shares the rows**, so what a `bun run dev` against the
+production connection string saves is a production edit; a local
+`docker compose up` gives you a database of your own instead.
 
-- `news_article` — one row per story. `body_json` is a `RichDoc`; rows written
-  before rich text hold a `NewsBlock[]`, which `coerceBody` reads on the way
-  out, so no migration is needed.
-- `news_media` — uploaded covers as base64, chunked at 500k characters per row
-  because D1 caps a value at 2 MB.
+- `news_article` — one row per story. `body_json` is a `RichDoc` in a `jsonb`
+  column; rows written before rich text hold a `NewsBlock[]`, which
+  `coerceBody` reads on the way out, so no migration is needed. `featured` is
+  a real boolean and `created_at` / `updated_at` are `timestamptz`, which
+  `store.ts` converts to the ISO strings `NewsArticle` promises.
+  `published_at` stays TEXT: it is an editorial `YYYY-MM-DD` and a lexical
+  sort of it is the chronological one.
+- `news_media` — uploaded covers as base64, chunked at 500k characters per
+  row. The chunking came from D1's 2 MB value cap and is kept so the rows
+  carried over still read back.
 
-The DDL is `drizzle/0002_news.sql` (`CREATE … IF NOT EXISTS`); the tables
-already exist in D1 and `schema.ts` mirrors them exactly.
+The DDL is the one initial migration in `drizzle/`; `schema.ts` is what
+generated it.
 
 Nothing in the store caches or seeds. The public pages and the desk are
-`force-dynamic` and query D1 on every request, which is the only way an edit
-made from another host (localhost) shows up on production; the admin actions
-also call `revalidatePath` for `/news`, the story's old and new URL, and
-`/admin/news`, which clears the editor's own client router cache.
+`force-dynamic` and query the database on every request, which is the only way
+an edit made from another host shows up here; the admin actions also call
+`revalidatePath` for `/news`, the story's old and new URL, and `/admin/news`,
+which clears the editor's own client router cache.
 
-**Content:** `bun scripts/news/sync.ts [--dry-run] [--force]` writes the
-owner's articles (`scripts/news/articles.source.json`, pictures mapped in
-`scripts/news/images.json`) and sets the seven placeholder rows to draft.
-It never deletes; existing rows are only overwritten with `--force`.
+**Content:** `bun scripts/news/sync.ts [--dry-run] [--force]` wrote the owner's
+articles (`scripts/news/articles.source.json`, pictures mapped in
+`scripts/news/images.json`) into the old D1 database and set the seven
+placeholder rows to draft. It is kept as the record of how those rows were
+laid down and **still speaks SQLite to D1** — it has not been ported. The rows
+themselves come across with `bun scripts/db/d1-to-postgres.ts`.
 
 ## Covers
 

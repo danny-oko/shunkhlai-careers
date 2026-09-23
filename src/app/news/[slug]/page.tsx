@@ -20,8 +20,8 @@ import {
 import { bodyExcerpt, categoryLabel, coverUrl } from "@/lib/news/types";
 
 /**
- * Read from D1 on every request. The row can change from any host — an edit
- * saved on localhost writes the same database production reads — and only a
+ * Read from the database on every request. The row can change from any host —
+ * an edit saved on one writes the rows the others read — and only a
  * per-request read is guaranteed to see it; the admin actions' revalidatePath
  * cannot reach another host's cache.
  */
