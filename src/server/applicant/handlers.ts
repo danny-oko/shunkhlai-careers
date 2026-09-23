@@ -19,7 +19,7 @@ import {
   INTEREST_GROUP_REQUIRED_MESSAGE,
   sameInterest,
 } from "@/lib/interested-job";
-import { CLEARABLE_KEYS, type Unadopted, labelRow, linkRefused, linkedRegno } from "./erp-model";
+import { CLEARABLE_KEYS, type Unadopted, erpIdOfApplication, labelRow, linkRefused, linkedRegno, withdrawingOrderIds } from "./erp-model";
 
 export type Row = Record<string, unknown>;
 
@@ -48,7 +48,26 @@ export type ApplicantDoc = {
 };
 
 /** A queued ERP delete: the endpoint and the ERP's own entry id. */
-export type PendingDelete = { endpoint: string; entryid: number };
+export type PendingDelete = {
+  endpoint: string;
+  entryid: number;
+  /** DeleteOrderApp: the posting, when the row knew it (see `withdrawingOrderIds`). */
+  recruitmentorderid?: number;
+};
+
+/**
+ * An application withdrawn here before its ERP id was known, while the push
+ * may have created it in the ERP (on the wire, or sent without the id read
+ * back). `entryid` is the D1 row's; `claimedAt` the claim of the push that was
+ * running, if any. See `settleWithdrawnPush` / `settleWithdrawnOnPull`.
+ */
+export type WithdrawnApplication = {
+  entryid: number;
+  recruitmentorderid: number;
+  /** When it was withdrawn (ISO). */
+  at: string;
+  claimedAt?: string;
+};
 
 /**
  * Two-way ERP sync bookkeeping, kept inside the document (`data_json`).
@@ -109,6 +128,14 @@ export type DocErp = {
    * and adopt that id before anything is sent again (`planAdoption`).
    */
   unadopted?: Partial<Record<string, Unadopted[]>>;
+  /** Withdrawn applications whose ERP copy is still to be found and cancelled. */
+  withdrawn?: WithdrawnApplication[];
+  /**
+   * The ERP's refusal to cancel an application (its retmsg), by ERP entry id.
+   * Shown on the row (`withdrawerror`) until it is withdrawn again or leaves
+   * the ERP list.
+   */
+  withdrawRefused?: Record<string, string>;
 };
 
 export type Envelope = {
@@ -353,8 +380,16 @@ function handleGet({ endpoint, query }: HandlerRequest, doc: ApplicantDoc): Hand
     case "getInterestedJobsList":
       return ok(doc.interests);
 
-    case "getRecruitmenRequestList":
-      return ok(doc.applications);
+    case "getRecruitmenRequestList": {
+      // The ERP's refusal of an earlier «Цуцлах», on the row it refused.
+      const refused = doc.erp?.withdrawRefused ?? {};
+      return ok(
+        doc.applications.map((row) => {
+          const message = refused[String(erpIdOfApplication(row) ?? "")];
+          return message ? { ...row, withdrawerror: message } : row;
+        }),
+      );
+    }
 
     default:
       return null;
@@ -556,7 +591,8 @@ async function handlePost(
 
       if (
         doc.applications.some((row) => Number(row.recruitmentorderid) === orderId) ||
-        (doc.erp?.appliedOrderIds ?? []).includes(orderId)
+        // The ERP's word — unless that application is being cancelled here.
+        ((doc.erp?.appliedOrderIds ?? []).includes(orderId) && !withdrawingOrderIds(doc).has(orderId))
       ) {
         return fail("Та энэ ажлын байранд аль хэдийн анкет илгээсэн байна.");
       }

@@ -69,3 +69,67 @@ export function salaryText(salaryname: unknown): { text: string; chosen: boolean
   }
   return { text: NO_SALARY_LABEL, chosen: false };
 }
+
+/** Ids at or above this were minted on this site, not by the ERP (`erp-model.ts`). */
+const LOCAL_ID_BASE = 1_000_000_000;
+
+/** The `erp` marker `/api/me` keeps on each application row (absent in the mock). */
+type RowErp = { status?: unknown; erpEntryId?: unknown; attempts?: unknown; error?: unknown };
+
+/** Pushes before the sync stops retrying — `MAX_ATTEMPTS` in `server/applicant/erp-model.ts`. */
+export const PUSH_ATTEMPTS = 5;
+
+const rowErp = (row: { erp?: unknown }): RowErp | null =>
+  row.erp && typeof row.erp === "object" ? (row.erp as RowErp) : null;
+
+/**
+ * The request number the ERP (and HR) know it by: the id the push learnt, or
+ * the row's own id when it came from the ERP. Null while only this site has it.
+ */
+export function erpRequestNumber(row: { entryid?: unknown; erp?: unknown }): number | null {
+  const known = Number(rowErp(row)?.erpEntryId);
+  if (known > 0) return known;
+  const own = Number(row.entryid);
+  return own > 0 && own < LOCAL_ID_BASE ? own : null;
+}
+
+/** `hint`: what the applicant can do about it, when anything. */
+export type SyncState = { tone: StatusTone; label: string; hint?: string };
+
+/**
+ * Where the copy to the ERP stands, in plain words. Null when there is no ERP
+ * (mock mode: `skipped`, or no marker at all).
+ */
+export function syncState(row: { erp?: unknown }): SyncState | null {
+  const erp = rowErp(row);
+  switch (erp?.status) {
+    case "pending":
+      return { tone: "pending", label: "ERP-д илгээгдэж байна" };
+    case "sent":
+      return { tone: "positive", label: "Илгээгдсэн" };
+    case "failed":
+      // Waiting on something, not failing: it goes by itself once that is done.
+      if (erp.error === "profile_incomplete") {
+        return { tone: "pending", label: "Хувийн мэдээллээ бөглөсний дараа илгээгдэнэ" };
+      }
+      if (erp.error === "erp_withdraw_pending") {
+        return { tone: "pending", label: "Өмнөх хүсэлт цуцлагдсаны дараа илгээгдэнэ" };
+      }
+      if (Number(erp.attempts) >= PUSH_ATTEMPTS) {
+        return {
+          tone: "negative",
+          label: "Илгээж чадсангүй",
+          hint: "Хүсэлтээ цуцлаад дахин илгээнэ үү, эсвэл хүний нөөцтэй холбогдоно уу.",
+        };
+      }
+      return { tone: "negative", label: "Илгээж чадсангүй — дахин оролдоно" };
+    default:
+      return null;
+  }
+}
+
+/** The posting's page, when the row knows which posting it is for. */
+export function postingHref(row: { recruitmentorderid?: unknown }): string | null {
+  const id = Number(row.recruitmentorderid);
+  return Number.isInteger(id) && id > 0 ? `/careers/${id}` : null;
+}

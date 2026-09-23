@@ -28,8 +28,6 @@ export type ApplicationInput = {
 export type ApplicationRow = {
   /** The request's own id — this is what `withdraw` deletes. */
   entryid: number;
-  // No link back to the posting: the real list carries none, so a row can
-  // only be matched to a posting by name and location (see `jobs/apply.ts`).
   posname: string;
   companyname: string;
   locname: string;
@@ -37,6 +35,17 @@ export type ApplicationRow = {
   availabledate?: string;
   statusid?: number;
   statusname?: string;
+  /**
+   * The posting — only on rows submitted on this site: the ERP's list carries
+   * none, so an ERP row can only be matched by name and location (`jobs/apply.ts`).
+   */
+  recruitmentorderid?: number;
+  /** `yyyy.mm.dd`, on rows submitted on this site. */
+  senddate?: string;
+  /** Push state kept by `/api/me` (`pending` | `sent` | `failed` | `skipped`). */
+  erp?: { status?: string; erpEntryId?: number };
+  /** The ERP's own refusal of the last «Цуцлах» (its retmsg), from `/api/me`. */
+  withdrawerror?: string;
   [extra: string]: unknown;
 };
 

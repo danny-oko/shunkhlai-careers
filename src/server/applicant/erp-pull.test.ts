@@ -14,6 +14,9 @@ import {
   pullDue,
   recordLocalChange,
   SECTIONS,
+  WITHDRAWN_TTL_MS,
+  settleWithdrawnOnPull,
+  settleWithdrawnPush,
 } from "./erp-model";
 import type { ApplicantDoc } from "./handlers";
 
@@ -238,6 +241,96 @@ describe("recordLocalChange", () => {
     local.erp = { cvDirty: 1 };
     recordLocalChange(local, "deleteAppCV", true, undefined);
     expect(local.erp?.cvDirty).toBeUndefined();
+  });
+});
+
+describe("withdrawn before the ERP id was known (tombstones)", () => {
+  const now = Date.parse("2026-09-21T12:00:00Z");
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const app = (erp: Row): Row => ({ entryid: LOCAL_ID_BASE + 7, recruitmentorderid: 786, erp });
+
+  it("a row whose push is on the wire leaves a tombstone carrying the claim", () => {
+    const doc = emptyDoc();
+    doc.erp = { pulledAt: iso(now - 60 * 60_000) };
+    const claimedAt = iso(now - 30_000);
+    recordLocalChange(doc, "DeleteOrderApp", true, app({ status: "pending", attempts: 1, lastAttemptAt: claimedAt, claimedAt }), now);
+    expect(doc.erp.withdrawn).toEqual([{ entryid: LOCAL_ID_BASE + 7, recruitmentorderid: 786, at: iso(now), claimedAt }]);
+    expect(doc.erp.pendingDeletes).toBeUndefined();
+  });
+
+  it("no tombstone when a pull already ran after the last attempt (any ERP copy is its own row), or in mock mode", () => {
+    const doc = emptyDoc();
+    doc.erp = { pulledAt: iso(now - 60_000) };
+    recordLocalChange(doc, "DeleteOrderApp", true, app({ status: "failed", attempts: 2, lastAttemptAt: iso(now - 20 * 60_000) }), now);
+    recordLocalChange(doc, "DeleteOrderApp", true, app({ status: "skipped", attempts: 1, lastAttemptAt: iso(now) }), now);
+    expect(doc.erp.withdrawn).toBeUndefined();
+  });
+
+  it("the push reports the ERP id → DeleteOrderApp is queued; without one the tombstone waits, no longer in flight", () => {
+    const doc = emptyDoc();
+    doc.erp = { withdrawn: [{ entryid: 1, recruitmentorderid: 786, at: iso(now), claimedAt: iso(now) }] };
+    expect(settleWithdrawnPush(doc, 1, { status: "sent" })).toBe(false);
+    expect(doc.erp.withdrawn).toEqual([{ entryid: 1, recruitmentorderid: 786, at: iso(now) }]);
+    expect(settleWithdrawnPush(doc, 1, { status: "sent", erpEntryId: 900 })).toBe(true);
+    expect(doc.erp.pendingDeletes).toEqual([{ endpoint: "DeleteOrderApp", entryid: 900, recruitmentorderid: 786 }]);
+    expect(doc.erp.withdrawn).toBeUndefined();
+  });
+
+  it("pull: one withdrawn posting in the ERP and one unknown row → that row is cancelled", () => {
+    const doc = emptyDoc();
+    doc.applications = [{ entryid: 800, erp: { status: "sent", erpEntryId: 800 } }];
+    doc.erp = { withdrawn: [{ entryid: 1, recruitmentorderid: 786, at: iso(now) }] };
+    const queued = settleWithdrawnOnPull(doc, [{ entryid: 800 }, { entryid: 901 }], [{ recruitmentorderid: 707 }, { recruitmentorderid: 786 }], now);
+    expect(queued).toBe(true);
+    expect(doc.erp.pendingDeletes).toEqual([{ endpoint: "DeleteOrderApp", entryid: 901, recruitmentorderid: 786 }]);
+    expect(doc.erp.withdrawn).toBeUndefined();
+  });
+
+  it("pull: never matched while the push is on the wire (the unknown row could be someone else's)", () => {
+    const doc = emptyDoc();
+    doc.erp = { withdrawn: [{ entryid: 1, recruitmentorderid: 786, at: iso(now), claimedAt: iso(now - 10_000) }] };
+    expect(settleWithdrawnOnPull(doc, [{ entryid: 901 }], [{ recruitmentorderid: 786 }], now)).toBe(false);
+    expect(doc.erp.pendingDeletes).toBeUndefined();
+    expect(doc.erp.withdrawn).toHaveLength(1);
+  });
+
+  it("pull: not in the ERP and no push on the wire → dropped; still on the wire → kept", () => {
+    const doc = emptyDoc();
+    doc.erp = {
+      withdrawn: [
+        { entryid: 1, recruitmentorderid: 786, at: iso(now) },
+        { entryid: 2, recruitmentorderid: 787, at: iso(now), claimedAt: iso(now - 10_000) },
+      ],
+    };
+    expect(settleWithdrawnOnPull(doc, [], [], now)).toBe(false);
+    expect(doc.erp.withdrawn?.map((t) => t.entryid)).toEqual([2]);
+  });
+
+  it("pull: ambiguous (two unknown rows) → nothing cancelled, the tombstone is given up", () => {
+    const doc = emptyDoc();
+    doc.erp = { withdrawn: [{ entryid: 1, recruitmentorderid: 786, at: iso(now) }] };
+    expect(settleWithdrawnOnPull(doc, [{ entryid: 901 }, { entryid: 902 }], [{ recruitmentorderid: 786 }, { recruitmentorderid: 999 }], now)).toBe(false);
+    expect(doc.erp.pendingDeletes).toBeUndefined();
+    expect(doc.erp.withdrawn).toBeUndefined();
+  });
+
+  it("pull: a failed read changes nothing but the expiry", () => {
+    const doc = emptyDoc();
+    doc.erp = {
+      withdrawn: [
+        { entryid: 1, recruitmentorderid: 786, at: iso(now) },
+        { entryid: 2, recruitmentorderid: 787, at: iso(now - WITHDRAWN_TTL_MS) },
+      ],
+    };
+    expect(settleWithdrawnOnPull(doc, null, [{ recruitmentorderid: 786 }], now)).toBe(false);
+    expect(doc.erp.withdrawn?.map((t) => t.entryid)).toEqual([1]);
+  });
+
+  it("applying to the posting again lifts its tombstone", () => {
+    const doc = emptyDoc();
+    doc.erp = { withdrawn: [{ entryid: 1, recruitmentorderid: 786, at: iso(now) }] };
+    recordLocalChange(doc, "SaveHrRecruitmentOrderApp", { entryid: 2, recruitmentorderid: 786 }, undefined, now);
+    expect(doc.erp.withdrawn).toBeUndefined();
   });
 });
 

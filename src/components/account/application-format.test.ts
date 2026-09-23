@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   displayApplicationDate,
+  erpRequestNumber,
   formatApplicationDate,
+  postingHref,
   salaryText,
   statusLabel,
   statusTone,
+  syncState,
+  PUSH_ATTEMPTS,
 } from "./application-format";
+import { MAX_ATTEMPTS } from "@/server/applicant/erp-model";
 
 describe("formatApplicationDate", () => {
   it("normalises ISO, dotted and timestamp input", () => {
@@ -81,5 +86,50 @@ describe("statusTone ordering", () => {
   it("still recognises final outcomes", () => {
     expect(statusTone("Цуцлагдсан")).toBe("negative");
     expect(statusTone("Батлагдсан")).toBe("positive");
+  });
+});
+
+describe("erpRequestNumber", () => {
+  it("is the ERP's id: learnt by the push, or the row's own when it came from the ERP", () => {
+    expect(erpRequestNumber({ entryid: 1_000_000_004, erp: { status: "sent", erpEntryId: 512 } })).toBe(512);
+    expect(erpRequestNumber({ entryid: 511, erp: { status: "sent" } })).toBe(511);
+  });
+  it("is null while only this site has the row", () => {
+    expect(erpRequestNumber({ entryid: 1_000_000_004, erp: { status: "pending" } })).toBeNull();
+    expect(erpRequestNumber({})).toBeNull();
+  });
+});
+
+describe("syncState", () => {
+  it("names each push state in Mongolian", () => {
+    expect(syncState({ erp: { status: "pending" } })).toEqual({ tone: "pending", label: "ERP-д илгээгдэж байна" });
+    expect(syncState({ erp: { status: "sent" } })).toEqual({ tone: "positive", label: "Илгээгдсэн" });
+    expect(syncState({ erp: { status: "failed" } })).toEqual({ tone: "negative", label: "Илгээж чадсангүй — дахин оролдоно" });
+  });
+  it("at the retry cap: no promise of another try, a hint instead", () => {
+    const state = syncState({ erp: { status: "failed", attempts: PUSH_ATTEMPTS, error: "erp_apply_failed" } });
+    expect(state?.label).toBe("Илгээж чадсангүй");
+    expect(state?.hint).toBeTruthy();
+    expect(PUSH_ATTEMPTS).toBe(MAX_ATTEMPTS);
+  });
+  it("waiting on the profile or on a cancel is not a failure", () => {
+    expect(syncState({ erp: { status: "failed", attempts: 5, error: "profile_incomplete" } })).toEqual({
+      tone: "pending",
+      label: "Хувийн мэдээллээ бөглөсний дараа илгээгдэнэ",
+    });
+    expect(syncState({ erp: { status: "failed", attempts: 1, error: "erp_withdraw_pending" } })?.tone).toBe("pending");
+  });
+  it("shows nothing without an ERP (mock mode)", () => {
+    expect(syncState({ erp: { status: "skipped" } })).toBeNull();
+    expect(syncState({})).toBeNull();
+  });
+});
+
+describe("postingHref", () => {
+  it("links the posting when its id is known", () => {
+    expect(postingHref({ recruitmentorderid: 786 })).toBe("/careers/786");
+    expect(postingHref({ recruitmentorderid: "786" })).toBe("/careers/786");
+    expect(postingHref({})).toBeNull();
+    expect(postingHref({ recruitmentorderid: 0 })).toBeNull();
   });
 });

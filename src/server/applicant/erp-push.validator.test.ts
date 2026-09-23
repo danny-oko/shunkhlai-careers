@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { MAX_ATTEMPTS, createPushBatch, isDue, pushApplication, withdrawFromErp } from "./erp-push";
+import { MAX_ATTEMPTS, createPushBatch, isDue, pushApplication } from "./erp-push";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
@@ -341,25 +341,6 @@ describe("pushApplication (validator)", () => {
     erp.registered = false;
     await pushApplication(doc({}, { cv: { filename: "cv.pdf", filedata: "" } }), app, deps(CV));
     expect(endpoints().filter((e) => /delete/i.test(e))).toEqual([]);
-  });
-});
-
-describe("withdrawFromErp (validator)", () => {
-  it("logs in and calls DeleteOrderApp with the ERP entry id", async () => {
-    await withdrawFromErp(doc(), 900, identity);
-    expect(endpoints()).toEqual(["auth/login", "DeleteOrderApp"]);
-    expect(erp.calls[1].method).toBe("POST");
-    expect(new URLSearchParams(erp.calls[1].query).get("entryID")).toBe("900");
-    expect(erp.calls[1].auth).toBe(`Bearer ${TOKEN}`);
-  });
-
-  it("never throws when the ERP is down; skipped without an API URL", async () => {
-    erp.down = true;
-    await expect(withdrawFromErp(doc(), 900, identity)).resolves.toBeUndefined();
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
-    fetchMock.mockClear();
-    await withdrawFromErp(doc(), 900, identity);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

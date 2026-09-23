@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
+  AlertTriangle,
   Banknote,
   Building2,
   CalendarCheck,
@@ -25,9 +27,12 @@ import {
 import type { ApplicationRow } from "@/lib/api/applications";
 import {
   displayApplicationDate,
+  erpRequestNumber,
+  postingHref,
   salaryText,
   statusLabel,
   statusTone,
+  syncState,
   type StatusTone,
 } from "./application-format";
 
@@ -86,6 +91,9 @@ export function ApplicationCard({
   const available = displayApplicationDate(row.availabledate);
   const sent = displayApplicationDate(row.senddate);
   const place = [row.companyname, row.locname].filter(Boolean);
+  const requestNumber = erpRequestNumber(row);
+  const sync = syncState(row);
+  const href = postingHref(row);
   const titleId = `application-${String(row.entryid)}-title`;
 
   async function confirm() {
@@ -112,7 +120,16 @@ export function ApplicationCard({
         <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0 flex-1 basis-56">
             <h3 id={titleId} className="text-base font-semibold tracking-[-0.01em] break-words">
-              {row.posname}
+              {href ? (
+                <Link
+                  href={href}
+                  className="hover:text-primary focus-visible:text-primary underline-offset-4 hover:underline"
+                >
+                  {row.posname}
+                </Link>
+              ) : (
+                row.posname
+              )}
             </h3>
             {place.length > 0 ? (
               <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm">
@@ -131,17 +148,39 @@ export function ApplicationCard({
               </p>
             ) : null}
           </div>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-              TONE_PILL[tone],
-            )}
-          >
-            <span className={cn("size-1.5 rounded-full", TONE_DOT[tone])} aria-hidden />
-            <span className="sr-only">Төлөв: </span>
-            {statusLabel(row.statusname)}
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                TONE_PILL[tone],
+              )}
+            >
+              <span className={cn("size-1.5 rounded-full", TONE_DOT[tone])} aria-hidden />
+              <span className="sr-only">Төлөв: </span>
+              {statusLabel(row.statusname)}
+            </span>
+            {sync ? (
+              <span className="text-muted-foreground inline-flex items-center gap-1.5 text-[11px]">
+                <span className={cn("size-1.5 rounded-full", TONE_DOT[sync.tone])} aria-hidden />
+                <span className="sr-only">ERP: </span>
+                {sync.label}
+              </span>
+            ) : null}
+            {sync?.hint ? (
+              <span className="text-muted-foreground max-w-56 text-right text-[11px]">{sync.hint}</span>
+            ) : null}
+          </div>
         </header>
+
+        {row.withdrawerror ? (
+          <p
+            role="status"
+            className="border-destructive/30 bg-destructive/5 text-destructive mt-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
+          >
+            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+            <span>Хүсэлтийг цуцалж чадсангүй: {row.withdrawerror}</span>
+          </p>
+        ) : null}
 
         <div
           className={cn(
@@ -173,8 +212,8 @@ export function ApplicationCard({
             <Detail icon={CalendarCheck} label="Ажилд орох боломжтой огноо" value={available} />
           ) : null}
           {sent ? <Detail icon={CalendarClock} label="Илгээсэн огноо" value={sent} /> : null}
-          {row.entryid != null ? (
-            <Detail icon={Hash} label="Хүсэлтийн дугаар" value={`#${String(row.entryid)}`} />
+          {requestNumber !== null ? (
+            <Detail icon={Hash} label="Хүсэлтийн дугаар" value={`#${requestNumber}`} />
           ) : null}
         </dl>
 

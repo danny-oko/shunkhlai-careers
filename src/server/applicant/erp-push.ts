@@ -65,6 +65,12 @@ export type PushDeps = {
   batch?: PushBatch;
   /** Postings the ERP already has an application for (`/get` recruitmentorders). */
   appliedOrderIds?: number[];
+  /**
+   * Postings whose earlier application still waits for its DeleteOrderApp
+   * (`withdrawingOrderIds`): a new one for them waits too — the ERP would take
+   * it for the old one ("already applied") and the cancel would then remove it.
+   */
+  withdrawingOrderIds?: Set<number>;
 };
 
 /**
@@ -396,6 +402,10 @@ export async function pushApplication(
   if (!synced.ok) return { status: "failed", error: synced.error };
   const cvHash = synced.value;
 
+  if (deps.withdrawingOrderIds?.has(Number(app.recruitmentorderid))) {
+    return { status: "failed", error: "erp_withdraw_pending", cvHash };
+  }
+
   // Already applied (per the ERP's own record): never submit it twice.
   if ((deps.appliedOrderIds ?? []).includes(Number(app.recruitmentorderid))) {
     return { status: "sent", cvHash };
@@ -438,22 +448,6 @@ export async function pushApplication(
   }
 
   return { status: "sent", erpEntryId, cvHash, erpList };
-}
-
-/** Withdraws the ERP copy of an application. Best-effort; never throws. */
-export async function withdrawFromErp(
-  doc: ApplicantDoc,
-  erpEntryId: number,
-  // Accepted for call-site symmetry with `pushApplication`; login needs only the profile.
-  _identity?: PushIdentity,
-): Promise<void> {
-  if (!hasErp() || !str(doc.profile.regno) || !str(doc.profile.mobilephone)) return;
-  try {
-    const token = await erpLogin(str(doc.profile.regno), str(doc.profile.mobilephone));
-    await erpPost("DeleteOrderApp", token, undefined, `?entryID=${erpEntryId}`);
-  } catch (error) {
-    logFailure("erp_withdraw_failed", error);
-  }
 }
 
 /* --- retry policy ------------------------------------------------------- */

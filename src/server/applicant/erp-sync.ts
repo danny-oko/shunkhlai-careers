@@ -29,10 +29,12 @@ import {
   mergeSection,
   migrateForFirstPull,
   applyAdoption,
+  deletedIds,
   pullDue,
   registering,
   unadoptedOf,
   sectionList,
+  settleWithdrawnPush,
   snapshotOf,
 } from "./erp-model";
 import { fetchSnapshot } from "./erp-pull";
@@ -338,8 +340,14 @@ function applyOutcome(
       delete erp.pictureDirty;
       if (outcome.picture.hash) erp.pictureHash = outcome.picture.hash;
     }
-    if (outcome.deletesDone.length && erp.pendingDeletes) {
-      const done = new Set(outcome.deletesDone.map((d) => `${d.endpoint}:${d.entryid}`));
+    // The ERP said no to a cancel: it still holds the application, so the
+    // delete is not retried and the row comes back with the ERP's message.
+    for (const refusal of outcome.deletesRefused) {
+      (erp.withdrawRefused ??= {})[String(refusal.entryid)] = refusal.message;
+    }
+    const settled = [...outcome.deletesDone, ...outcome.deletesRefused];
+    if (settled.length && erp.pendingDeletes) {
+      const done = new Set(settled.map((d) => `${d.endpoint}:${d.entryid}`));
       erp.pendingDeletes = erp.pendingDeletes.filter((d) => !done.has(`${d.endpoint}:${d.entryid}`));
       if (erp.pendingDeletes.length === 0) delete erp.pendingDeletes;
     }
@@ -358,10 +366,12 @@ function applyOutcome(
       }
     }
 
-    // Applications: per-row results, then fold into the re-read list.
+    // Applications: per-row results, then fold into the re-read list. A row
+    // withdrawn while its push ran: its ERP copy is cancelled, not re-imported.
     for (const [entryid, result] of outcome.appResults) {
       const row = doc.applications.find((r) => Number(r.entryid) === entryid);
       if (row) row.erp = nextAppErp(appErp(row), result);
+      else settleWithdrawnPush(doc, entryid, result);
     }
     if (outcome.appList) {
       doc.applications = mergeApplications(doc.applications, outcome.appList, erp.pendingDeletes, now);
@@ -381,6 +391,9 @@ function applyOutcome(
   }
 }
 
+/** ERP ids of the applications queued for DeleteOrderApp. */
+const queuedCancels = (doc: ApplicantDoc) => deletedIds(doc.erp?.pendingDeletes, "DeleteOrderApp");
+
 function nextAppErp(previous: ApplicationErp | undefined, result: PushResult): ApplicationErp {
   const erp: ApplicationErp = {
     status: result.status,
@@ -399,7 +412,7 @@ function nextAppErp(previous: ApplicationErp | undefined, result: PushResult): A
  */
 export async function syncTask(
   identity: ClerkIdentity,
-  options: { mode: "mutation" | "retry"; pull?: boolean; token?: string },
+  options: { mode: "mutation" | "retry"; pull?: boolean; token?: string; followUp?: boolean },
 ): Promise<void> {
   try {
     const claimed = await claim(identity, options.mode);
@@ -457,13 +470,21 @@ export async function syncTask(
         : null;
     const snapshot = pull ? await fetchSnapshot(token) : null;
 
+    let cancelQueued = false;
     await update(identity, (account) => {
       const now = new Date();
+      const before = queuedCancels(account.doc);
       if (outcome) applyOutcome(account.doc, work, outcome, undefined, now);
-      if (!snapshot) return true;
       // Files written to D1 only when the pull brought new content.
-      return persistSnapshot(account, snapshot);
+      const files = snapshot ? persistSnapshot(account, snapshot) : true;
+      cancelQueued = [...queuedCancels(account.doc)].some((id) => !before.has(id));
+      return files;
     });
+    // A withdrawn application's ERP copy was found in this run: cancel it now
+    // (same token), not on some later visit.
+    if (cancelQueued && !options.followUp) {
+      await syncTask(identity, { mode: "retry", token, followUp: true });
+    }
   } catch (error) {
     console.error("[erp-sync]", "sync_crashed", "-", String(error));
   }
