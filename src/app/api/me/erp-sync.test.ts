@@ -1,23 +1,36 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { REGNO_LOCKED_MESSAGE } from "@/lib/applicant-identity";
-import type { TestDatabase } from "@/lib/db/testing";
 import { ERP_DELETES, FakeErp, MISMATCH, type Row } from "@/server/applicant/fake-erp.fixture";
 import { labelFor } from "@/server/mock/store";
 
 /**
- * Two-way database ⇄ ERP sync through /api/me, end to end: a real PostgreSQL
- * (PGlite, built from the committed migration) behind drizzle, a stateful fake
- * ERP behind fetch, and `after()` queued so the test decides when background
- * work runs. Nothing reaches the network.
+ * Two-way D1 ⇄ ERP sync through /api/me, end to end: real SQLite (node:sqlite)
+ * behind drizzle, a stateful fake ERP behind fetch, and `after()` queued so the
+ * test decides when background work runs. Nothing reaches the network.
  */
+
+type SqliteDb = {
+  exec(sql: string): void;
+  prepare(sql: string): { all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown };
+};
+const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
+  DatabaseSync: new (path: string) => SqliteDb;
+};
 
 const state = vi.hoisted(() => {
   // Reference lookups (labels, postings) stay on the bundled mock data; only
   // the ERP client reads NEXT_PUBLIC_API_URL at call time (stubbed per test).
   delete process.env.NEXT_PUBLIC_API_URL;
   return {
-    pg: null as TestDatabase | null,
+    sqlite: null as null | {
+      exec(sql: string): void;
+      prepare(sql: string): { all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown };
+    },
     userId: null as string | null,
     after: [] as Array<() => unknown>,
   };
@@ -45,9 +58,17 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 vi.mock("@/lib/db", async () => {
   const schema = await vi.importActual<typeof import("@/lib/db/schema")>("@/lib/db/schema");
-  const { createTestDatabase } = await import("@/lib/db/testing");
-  state.pg = await createTestDatabase();
-  return { ...schema, schema, getDb: () => state.pg!.db };
+  const { drizzle } = await import("drizzle-orm/sqlite-proxy");
+  const db = drizzle(
+    async (sql, params, method) => {
+      const rows = (state.sqlite!.prepare(sql).all(...params) as Record<string, unknown>[]).map((r) =>
+        Object.values(r),
+      );
+      return { rows: method === "get" ? (rows[0] ?? []) : rows };
+    },
+    { schema },
+  );
+  return { ...schema, schema, getDb: () => db };
 });
 
 import { GET, POST } from "./[...path]/route";
@@ -83,10 +104,8 @@ async function flushAfter() {
   for (let guard = 0; state.after.length && guard < 20; guard += 1) await state.after.shift()!();
 }
 
-const q = async (sql: string, p: unknown[] = []) =>
-  (await state.pg!.client.query<Record<string, unknown>>(sql, p)).rows;
-const storedDoc = async () =>
-  JSON.parse(String((await (await q("select data_json from applicant_account")))[0].data_json));
+const q = (sql: string, ...p: unknown[]) => state.sqlite!.prepare(sql).all(...p) as Record<string, unknown>[];
+const storedDoc = () => JSON.parse(String(q("select data_json from applicant_account")[0].data_json));
 
 let erp: FakeErp;
 let logs: string[];
@@ -98,12 +117,11 @@ function advance(ms: number) {
   vi.setSystemTime(clock);
 }
 
-/** A legacy snapshot for this Clerk user with the ERP credentials, never pulled. */
-async function seedCredentials() {
-  await q(
-    "insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values ($1, $2, $3, $4)",
-    ["p1", "u1", JSON.stringify({ regno: erp.regno, mobilephone: erp.phone }), new Date()],
-  );
+/** D1 account for this Clerk user with the ERP credentials, never pulled. */
+function seedCredentials() {
+  state.sqlite!
+    .prepare("insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values (?, ?, ?, ?)")
+    .run("p1", "u1", JSON.stringify({ regno: erp.regno, mobilephone: erp.phone }), Date.now());
 }
 
 /** A fake ERP holding one row in every section, a CV, a photo and an application. */
@@ -149,19 +167,24 @@ const lists = async () => {
 async function firstLoad(fake: FakeErp = richErp()) {
   erp = fake;
   vi.stubGlobal("fetch", erp.fetch);
-  (await seedCredentials());
+  seedCredentials();
   const r = await get("get");
   await flushAfter();
   return r;
 }
 
-/** Empty tables per case: building Postgres once and truncating is far cheaper. */
-async function freshDb() {
-  await state.pg!.reset();
+function freshDb() {
+  state.sqlite = new DatabaseSync(":memory:");
+  const dir = join(process.cwd(), "drizzle");
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    for (const stmt of readFileSync(join(dir, file), "utf8").split("--> statement-breakpoint")) {
+      if (stmt.trim()) state.sqlite!.exec(stmt);
+    }
+  }
 }
 
-beforeEach(async () => {
-  await freshDb();
+beforeEach(() => {
+  freshDb();
   state.userId = "u1";
   state.after = [];
   clock = Date.parse("2026-09-21T09:00:00Z");
@@ -313,7 +336,7 @@ describe("first load (pull)", () => {
     erp = richErp();
     erp.delayMs = 9_000; // login alone takes 9s: well past the 8s budget, under the 10s call timeout
     vi.stubGlobal("fetch", erp.fetch);
-    (await seedCredentials());
+    seedCredentials();
 
     let answered = false;
     const pending = get("get").then((r) => {
@@ -363,7 +386,7 @@ describe("write-through", () => {
     const erpId = row.entryid;
     const r = await post("SaveAppExperience", { ...row, orgname: "Шунхлай ХХК" });
     expect(r.body.rettype).toBe(0);
-    expect((await storedDoc()).experience[0].erp).toBe("pending");
+    expect(storedDoc().experience[0].erp).toBe("pending");
     await flushAfter();
 
     const save = erp.calls.find((c) => c.endpoint === "SaveAppExperience")!;
@@ -371,7 +394,7 @@ describe("write-through", () => {
     expect(save.body as Row).not.toHaveProperty("erp");
     expect(erp.lists.hrappexplist).toHaveLength(1);
     expect(erp.lists.hrappexplist[0]).toMatchObject({ entryid: erpId, orgname: "Шунхлай ХХК" });
-    const stored = (await storedDoc()).experience;
+    const stored = storedDoc().experience;
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ entryid: erpId, erp: "synced", orgname: "Шунхлай ХХК" });
   });
@@ -425,8 +448,8 @@ describe("write-through", () => {
     const { basewage: _b, ...experience } = before.experience[0];
     await post("SaveHrAppEducation", education);
     await post("SaveAppExperience", experience);
-    expect((await storedDoc()).education[0]).not.toHaveProperty("divisionid");
-    expect((await storedDoc()).experience[0]).not.toHaveProperty("basewage");
+    expect(storedDoc().education[0]).not.toHaveProperty("divisionid");
+    expect(storedDoc().experience[0]).not.toHaveProperty("basewage");
     await flushAfter();
 
     const sent = (endpoint: string) => erp.calls.find((c) => c.endpoint === endpoint)!.body as Row;
@@ -476,7 +499,7 @@ describe("write-through", () => {
     await flushAfter();
     expect(erp.record.addr2).toBe("Шинэ хаяг");
     expect(erp.record).toMatchObject({ custom1: "ERP custom", contactname: "ERP холбоо", isa: true, regno: erp.regno, mobilephone: erp.phone });
-    expect((await storedDoc()).erp?.profileDirty).toBeUndefined();
+    expect(storedDoc().erp?.profileDirty).toBeUndefined();
   });
 
   it("a field emptied here is emptied in the ERP too, and the next pull does not bring it back", async () => {
@@ -488,7 +511,7 @@ describe("write-through", () => {
 
     // What the profile form sends when the second contact and the address are cleared.
     await post("SaveHrApplicant", { ...loaded, addr2: "", contactname2: "", relativeid2: null, contactphone2: "" });
-    expect((await storedDoc()).erp.profileCleared).toEqual(expect.arrayContaining(["addr2", "contactname2", "relativeid2", "contactphone2"]));
+    expect(storedDoc().erp.profileCleared).toEqual(expect.arrayContaining(["addr2", "contactname2", "relativeid2", "contactphone2"]));
     await flushAfter();
 
     const save = erp.calls.find((c) => c.endpoint === "SaveHrApplicant")!.body as Row;
@@ -498,7 +521,7 @@ describe("write-through", () => {
     expect(erp.record.relativeid2).toBeUndefined();
     // The rest of the record, and the login, are untouched.
     expect(erp.record).toMatchObject({ lastname: "Дорж", firstname: "Бат", regno: erp.regno, mobilephone: erp.phone, custom1: "ERP custom" });
-    expect((await storedDoc()).erp.profileCleared).toBeUndefined();
+    expect(storedDoc().erp.profileCleared).toBeUndefined();
 
     advance(11 * 60_000);
     await get("get");
@@ -512,15 +535,15 @@ describe("write-through", () => {
     erp.down = true;
     await post("SaveHrApplicant", { addr2: "", contactname: "" });
     await flushAfter();
-    expect((await storedDoc()).erp.profileCleared).toEqual(["addr2", "contactname"]);
+    expect(storedDoc().erp.profileCleared).toEqual(["addr2", "contactname"]);
     await post("SaveHrApplicant", { addr2: "Шинэ хаяг" });
-    expect((await storedDoc()).erp.profileCleared).toEqual(["contactname"]);
+    expect(storedDoc().erp.profileCleared).toEqual(["contactname"]);
     erp.down = false;
     advance(11 * 60_000);
     await get("get");
     await flushAfter();
     expect(erp.record).toMatchObject({ addr2: "Шинэ хаяг", contactname: "" });
-    expect((await storedDoc()).erp.profileCleared).toBeUndefined();
+    expect(storedDoc().erp.profileCleared).toBeUndefined();
   });
 
   it("a field that was blank here all along is not a clearing: the ERP keeps its value", async () => {
@@ -529,7 +552,7 @@ describe("write-through", () => {
     await post("SaveHrApplicant", { regno: erp.regno, mobilephone: erp.phone, addr2: "", custom1: "" });
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://erp.test");
     state.after = [];
-    expect((await storedDoc()).erp.profileCleared).toBeUndefined();
+    expect(storedDoc().erp.profileCleared).toBeUndefined();
     await get("get");
     await flushAfter();
     expect(erp.record).toMatchObject({ addr2: "ERP хаяг", custom1: "ERP custom" });
@@ -549,7 +572,7 @@ describe("write-through", () => {
       { key: "M", text: "Гэрлэсэн" },
     ]);
     expect(p.maritalstatus).toBe("X");
-    expect((await storedDoc()).profile).not.toHaveProperty("maritalOptions");
+    expect(storedDoc().profile).not.toHaveProperty("maritalOptions");
 
     // Never echoed back to the ERP.
     await post("SaveHrApplicant", { ...p, maritalstatus: "S" });
@@ -583,7 +606,7 @@ describe("write-through", () => {
     erp.down = true;
     await post("SaveInterestedJobItem", { entryid: 0, posgroupid: 142, positionid: 3720, note: "Retry me" });
     await flushAfter();
-    expect((await storedDoc()).interests.find((r: Row) => r.note === "Retry me").erp).toBe("pending");
+    expect(storedDoc().interests.find((r: Row) => r.note === "Retry me").erp).toBe("pending");
 
     erp.down = false;
     advance(60_000); // not due yet (backoff)
@@ -595,7 +618,7 @@ describe("write-through", () => {
     await get("get");
     await flushAfter();
     expect(erp.lists.interests.filter((r) => r.note === "Retry me")).toHaveLength(1);
-    expect((await storedDoc()).interests.find((r: Row) => r.note === "Retry me").erp).toBe("synced");
+    expect(storedDoc().interests.find((r: Row) => r.note === "Retry me").erp).toBe("synced");
   });
 
   it("flush retries are capped (no unbounded attempts)", async () => {
@@ -611,7 +634,7 @@ describe("write-through", () => {
     const saves = erp.calls.filter((c) => c.endpoint === "SaveInterestedJobItem").length;
     const logins = erp.calls.filter((c) => c.endpoint === "auth/login").length;
     // Login fails while down, so saves never even go out; attempts must stop at 5.
-    expect((await storedDoc()).erp.flush.attempts).toBeLessThanOrEqual(5);
+    expect(storedDoc().erp.flush.attempts).toBeLessThanOrEqual(5);
     expect(saves + logins).toBeLessThan(40);
   });
 });
@@ -715,7 +738,7 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
     await flushAfter();
     const [body] = skillsSent();
     expect(body.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
-    expect((await storedDoc()).erp.pendingDeletes).toEqual([{ endpoint: "DeleteAppSkillComp", entryid: ids[0] }]);
+    expect(storedDoc().erp.pendingDeletes).toEqual([{ endpoint: "DeleteAppSkillComp", entryid: ids[0] }]);
     expect((await lists()).skills.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
   });
 
@@ -746,7 +769,7 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
     expect(erp.lists.hrappcomplist).toHaveLength(5);
     const skills = (await lists()).skills;
     expect(skills.map((r) => Number(r.entryid))).toEqual(erpIds());
-    expect((await storedDoc()).erp.unadopted).toBeUndefined();
+    expect(storedDoc().erp.unadopted).toBeUndefined();
   });
 
   it("…and an edit of that row lands on its ERP row", async () => {
@@ -785,7 +808,7 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
     await flushAfter();
     const skills = (await lists()).skills;
     expect(skills.map((r) => Number(r.entryid))).toEqual(erpIds());
-    expect((await storedDoc()).erp.unadopted).toBeUndefined();
+    expect(storedDoc().erp.unadopted).toBeUndefined();
 
     await post("SaveAppSkillComp", [{ ...local, entryid: autocadId, note: "3D" }]);
     await flushAfter();
@@ -795,8 +818,8 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
   const sortedIds = (rows: Row[]) => rows.map((r) => Number(r.entryid)).sort((a, b) => a - b);
   const settled = async () => {
     expect(sortedIds((await lists()).skills)).toEqual(sortedIds(erp.lists.hrappcomplist));
-    expect((await storedDoc()).erp.unadopted).toBeUndefined();
-    expect((await storedDoc()).erp.flush).toBeUndefined(); // nothing held or left to retry
+    expect(storedDoc().erp.unadopted).toBeUndefined();
+    expect(storedDoc().erp.flush).toBeUndefined(); // nothing held or left to retry
   };
 
   it("adoption is by content: the ERP listing the rows in another order changes nothing", async () => {
@@ -806,7 +829,7 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
     await post("SaveAppSkillComp", [{ entryid: 0, skillcompid: 10, levelid: 4 }]);
     await flushAfter();
     erp.refuse.delete("GetHrAppEducationData");
-    expect((await storedDoc()).erp.unadopted.skills).toHaveLength(2);
+    expect(storedDoc().erp.unadopted.skills).toHaveLength(2);
     erp.lists.hrappcomplist.reverse();
     const [autocadErp, powerpointErp] = [11, 10].map(
       (id) => erp.lists.hrappcomplist.find((r) => r.skillcompid === id)!.entryid,
@@ -868,7 +891,7 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
     expect((await lists()).skills.filter((r) => r.skillcompid === 3)).toEqual([
       expect.objectContaining({ entryid: oursErp, note: "mine" }),
     ]);
-    expect((await storedDoc()).erp.pendingDeletes).toEqual([{ endpoint: "DeleteAppSkillComp", entryid: wordId }]);
+    expect(storedDoc().erp.pendingDeletes).toEqual([{ endpoint: "DeleteAppSkillComp", entryid: wordId }]);
   });
 
   it("an edited row whose ERP copy no longer matches goes as new: one extra row at worst, the edit kept, nothing stuck", async () => {
@@ -894,7 +917,7 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
     expect(sent.map((b) => b.map((r) => r.entryid))).toEqual([ids, [ids[1], ids[2]]]);
     expect(erp.lists.hrappcomplist[0]).toMatchObject({ entryid: ids[1], note: "VBA" });
     expect((await lists()).skills.map((r) => r.entryid)).toEqual([ids[1], ids[2]]);
-    expect((await storedDoc()).erp.flush).toBeUndefined(); // done, nothing left to retry
+    expect(storedDoc().erp.flush).toBeUndefined(); // done, nothing left to retry
   });
 
   it("an edit of the row the ERP no longer has is dropped with it; the rest still saves", async () => {
@@ -1126,7 +1149,7 @@ describe.each(DELETE_CASES)("delete: $name", (c) => {
     await post(c.del, undefined, `?${c.clientParam}=${row.entryid}`);
     await flushAfter();
     expect(erp.calls.filter((x) => x.endpoint === c.del)).toHaveLength(1);
-    expect((await storedDoc()).erp?.pendingDeletes ?? []).toEqual([]);
+    expect(storedDoc().erp?.pendingDeletes ?? []).toEqual([]);
     advance(11 * 60_000);
     await get("get");
     await flushAfter();
@@ -1139,13 +1162,13 @@ describe.each(DELETE_CASES)("delete: $name", (c) => {
     erp.down = true;
     await post(c.del, undefined, `?${c.clientParam}=${row.entryid}`);
     await flushAfter();
-    expect((await storedDoc()).erp.pendingDeletes).toEqual([{ endpoint: c.del, entryid: Number(row.entryid) }]);
+    expect(storedDoc().erp.pendingDeletes).toEqual([{ endpoint: c.del, entryid: Number(row.entryid) }]);
     erp.down = false;
     advance(11 * 60_000);
     await get("get");
     await flushAfter();
     expect(erp.lists[c.list]).toEqual([]);
-    expect((await storedDoc()).erp?.pendingDeletes ?? []).toEqual([]);
+    expect(storedDoc().erp?.pendingDeletes ?? []).toEqual([]);
   });
 });
 
@@ -1160,7 +1183,7 @@ describe("delete: CV (deleteAppCV)", () => {
     expect([...call!.params.keys()]).toEqual([]);
     expect(erp.record.filedata ?? null).toBeNull();
     // Gone from D1 as well: no file rows, nothing to download.
-    expect((await q("select * from applicant_file where kind = 'cv'"))).toEqual([]);
+    expect(q("select * from applicant_file where kind = 'cv'")).toEqual([]);
     expect(await cvBytes()).toBeNull();
     advance(11 * 60_000);
     await get("get");
@@ -1227,7 +1250,7 @@ describe("CV upload and pull (SaveAppCV)", () => {
       bytes: Buffer.from([5, 6, 7]).toString("base64"),
     });
     expect(erp.record.filename).toBe("Бат CV.docx");
-    expect((await storedDoc()).erp?.cvDirty).toBeUndefined();
+    expect(storedDoc().erp?.cvDirty).toBeUndefined();
   });
 
   it("a refused file type marks nothing for the ERP and sends nothing", async () => {
@@ -1239,8 +1262,8 @@ describe("CV upload and pull (SaveAppCV)", () => {
     photo.set("file", new File([new TextEncoder().encode("GIF89a")], "me.jpg"));
     expect((await post("SaveAppPicture", photo)).body.rettype).not.toBe(0);
     await flushAfter();
-    expect((await storedDoc()).erp?.cvDirty).toBeUndefined();
-    expect((await storedDoc()).erp?.pictureDirty).toBeUndefined();
+    expect(storedDoc().erp?.cvDirty).toBeUndefined();
+    expect(storedDoc().erp?.pictureDirty).toBeUndefined();
     expect(erp.endpoints()).not.toContain("SaveAppCV");
     expect(erp.endpoints()).not.toContain("SaveAppPicture");
     expect(await cvBytes()).toBe(erp.record.filedata); // the ERP's CV is still the one here
@@ -1317,7 +1340,7 @@ describe("application entry id", () => {
     });
     await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
     await flushAfter();
-    const stored = (await storedDoc()).applications as Row[];
+    const stored = storedDoc().applications as Row[];
     const mine = stored.find((r) => Number(r.recruitmentorderid) === 786);
     // Either still our local row without an ERP id, or not folded into a guessed one.
     if (mine) expect((mine.erp as Row)?.erpEntryId).toBeUndefined();
@@ -1380,7 +1403,7 @@ describe("withdraw while the application's push is in flight", () => {
     await get("get");
     await flushAfter();
     expect((await lists()).applications.filter((r) => r.posname === "ERP pos" || Number(r.recruitmentorderid) === 786)).toEqual([]);
-    expect((await storedDoc()).erp?.withdrawn ?? []).toEqual([]);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
   });
 
   it("the push could not read its id back: the next pull finds the ERP copy and cancels it", async () => {
@@ -1399,7 +1422,7 @@ describe("withdraw while the application's push is in flight", () => {
     await flushAfter();
     expect(erpCopy()).toBeUndefined();
     expect((await lists()).applications.filter((r) => r.posname === "ERP pos")).toEqual([]);
-    expect((await storedDoc()).erp?.withdrawn ?? []).toEqual([]);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
 
     advance(11 * 60_000);
     await get("get");
@@ -1433,12 +1456,12 @@ describe("withdraw while the application's push is in flight", () => {
     const local = (await localRow())!;
     expect((local.erp as Row).status).toBe("failed");
     await post("DeleteOrderApp", undefined, `?entryID=${local.entryid}`);
-    expect((await storedDoc()).erp.withdrawn).toHaveLength(1);
+    expect(storedDoc().erp.withdrawn).toHaveLength(1);
     advance(11 * 60_000);
     await get("get");
     await flushAfter();
     expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toEqual([]);
-    expect((await storedDoc()).erp?.withdrawn ?? []).toEqual([]);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
   });
 
   it("an application HR or the applicant made on the ERP site meanwhile is never taken for the withdrawn one", async () => {
@@ -1458,7 +1481,7 @@ describe("withdraw while the application's push is in flight", () => {
     // Two unknown ERP rows: which one is ours cannot be told, so nothing is cancelled.
     expect(erp.calls.filter((c) => c.endpoint === "DeleteOrderApp")).toEqual([]);
     expect(erp.lists.requests.some((r) => r.posname === "Other")).toBe(true);
-    expect((await storedDoc()).erp?.withdrawn ?? []).toEqual([]);
+    expect(storedDoc().erp?.withdrawn ?? []).toEqual([]);
   });
 
   it("applying again to the same posting after the withdrawal keeps the new application", async () => {
@@ -1500,8 +1523,8 @@ describe("apply again after a cancel", () => {
     advance(11 * 60_000); // a visit: the pull sees /get still listing 786, the cancel fails again
     await get("get");
     await flushAfter();
-    expect((await storedDoc()).erp.pendingDeletes).toEqual([{ endpoint: "DeleteOrderApp", entryid: first.entryid, recruitmentorderid: 786 }]);
-    expect((await storedDoc()).erp.appliedOrderIds).toContain(786);
+    expect(storedDoc().erp.pendingDeletes).toEqual([{ endpoint: "DeleteOrderApp", entryid: first.entryid, recruitmentorderid: 786 }]);
+    expect(storedDoc().erp.appliedOrderIds).toContain(786);
 
     // Applying again is not refused as "already applied"…
     const again = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
@@ -1547,7 +1570,7 @@ describe("withdraw refused by the ERP", () => {
     expect(back).toHaveLength(1); // …back once the ERP said no
     expect(back[0].entryid).toBe(row.entryid);
     expect(back[0].withdrawerror).toBe(REFUSAL);
-    expect((await storedDoc()).erp?.pendingDeletes ?? []).toEqual([]);
+    expect(storedDoc().erp?.pendingDeletes ?? []).toEqual([]);
 
     advance(11 * 60_000);
     await get("get");
@@ -1564,7 +1587,7 @@ describe("withdraw refused by the ERP", () => {
     await flushAfter();
     erp.refuse.delete("DeleteOrderApp");
     await post("DeleteOrderApp", undefined, `?entryID=${row.entryid}`);
-    expect((await storedDoc()).erp.withdrawRefused ?? {}).toEqual({});
+    expect(storedDoc().erp.withdrawRefused ?? {}).toEqual({});
     await flushAfter();
     expect(erp.lists.requests).toEqual([]);
     expect((await lists()).applications).toEqual([]);
@@ -1602,7 +1625,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     });
     expect(erp.calls.slice(2).every((c) => c.auth === `Bearer ${erp.token}`)).toBe(true);
     expect(erp.registered).toBe(true);
-    expect((await storedDoc()).erp.pulledAt).toEqual(expect.any(String));
+    expect(storedDoc().erp.pulledAt).toEqual(expect.any(String));
     expect((r.body.retdata as Row).erplinked).toBe(true);
 
     // Registered now: the next sync just logs in.
@@ -1620,7 +1643,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await flushAfter();
     expect(erp.endpoints()).toEqual(["auth/login", "SaveHrAppUser"]);
     expect(erp.record.mobilephone).toBe(erp.phone); // the ERP record is untouched
-    const stored = (await storedDoc());
+    const stored = storedDoc();
     expect(stored.erp.linkError).toBe(MISMATCH);
     expect(stored.erp.pullFailures).toBe(1);
     expect(stored.erp.pulledAt).toBeUndefined();
@@ -1633,7 +1656,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
 
     // Fixing the phone clears the stale message; the next due pull logs in.
     await post("SaveHrApplicant", { mobilephone: erp.phone });
-    expect((await storedDoc()).erp.linkError).toBeUndefined();
+    expect(storedDoc().erp.linkError).toBeUndefined();
   });
 
   it("refused credentials are never re-sent — not after the backoff either — until утас changes", async () => {
@@ -1653,8 +1676,8 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
 
     // The right phone: refusal and backoff lifted, the next visit logs in and the waiting work goes.
     await post("SaveHrApplicant", { mobilephone: erp.phone });
-    expect((await storedDoc()).erp).not.toHaveProperty("linkError");
-    expect((await storedDoc()).erp).not.toHaveProperty("pullFailures");
+    expect(storedDoc().erp).not.toHaveProperty("linkError");
+    expect(storedDoc().erp).not.toHaveProperty("pullFailures");
     const r = await get("get");
     await flushAfter();
     expect(count("SaveHrAppUser")).toBe(1);
@@ -1665,7 +1688,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
   it("a LINKED account whose утас changes here: the ERP password follows (changeUserInfo), then the new pair", async () => {
     await firstLoad(); // linked by this pull, with the утас that logged in
     const oldPhone = erp.phone;
-    expect((await storedDoc()).erp).toMatchObject({ linkedRegno: erp.regno, loginPhone: oldPhone });
+    expect(storedDoc().erp).toMatchObject({ linkedRegno: erp.regno, loginPhone: oldPhone });
     erp.calls = [];
 
     await post("SaveHrApplicant", { mobilephone: "88000000" });
@@ -1690,8 +1713,8 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     const save = erp.calls.find((c) => c.endpoint === "SaveHrApplicant")!;
     expect((save.body as Row).mobilephone).toBe("88000000");
     expect(erp.record.mobilephone).toBe("88000000");
-    expect((await storedDoc()).erp.loginPhone).toBe("88000000");
-    expect((await storedDoc()).erp.linkError).toBeUndefined();
+    expect(storedDoc().erp.loginPhone).toBe("88000000");
+    expect(storedDoc().erp.linkError).toBeUndefined();
 
     // From now on a plain login with the new pair.
     erp.calls = [];
@@ -1715,9 +1738,9 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     // Old pair → refused change → the new pair once (not the password yet) → stop.
     expect(erp.endpoints()).toEqual(["auth/login", "changeUserInfo", "auth/login"]);
     expect(erp.phone).toBe(oldPhone);
-    expect((await storedDoc()).erp.linkError).toBe("Нууц үг солих боломжгүй байна.");
+    expect(storedDoc().erp.linkError).toBe("Нууц үг солих боломжгүй байна.");
     expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: "Нууц үг солих боломжгүй байна." });
-    expect((await storedDoc()).profile.mobilephone).toBe("88000000"); // D1 keeps what was typed
+    expect(storedDoc().profile.mobilephone).toBe("88000000"); // D1 keeps what was typed
 
     erp.calls = [];
     advance(48 * 60 * 60_000);
@@ -1730,7 +1753,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await post("SaveHrApplicant", { mobilephone: oldPhone });
     await flushAfter();
     expect(erp.endpoints()).toEqual(["auth/login", "get", "SaveHrApplicant"]);
-    expect((await storedDoc()).erp.linkError).toBeUndefined();
+    expect(storedDoc().erp.linkError).toBeUndefined();
   });
 
   it("the ERP password already is the new утас (an earlier change not recorded): no second change", async () => {
@@ -1741,8 +1764,8 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await flushAfter();
     expect(erp.endpoints().slice(0, 2)).toEqual(["auth/login", "auth/login"]);
     expect(erp.endpoints()).not.toContain("changeUserInfo");
-    expect((await storedDoc()).erp).toMatchObject({ loginPhone: "88000000" });
-    expect((await storedDoc()).erp.linkError).toBeUndefined();
+    expect(storedDoc().erp).toMatchObject({ loginPhone: "88000000" });
+    expect(storedDoc().erp.linkError).toBeUndefined();
   });
 
   it("neither the old nor the new утас logs in: the refusal is shown and calls stop", async () => {
@@ -1765,16 +1788,16 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await post("SaveHrApplicant", { mobilephone: "77000000" });
     await flushAfter();
     expect(erp.endpoints().slice(0, 2)).toEqual(["auth/login", "auth/login"]);
-    expect((await storedDoc()).erp).toMatchObject({ loginPhone: "77000000" });
+    expect(storedDoc().erp).toMatchObject({ loginPhone: "77000000" });
     expect((await get("get")).body.retdata).toMatchObject({ erplinkerror: null });
   });
 
   it("an account linked before the last-good утас was recorded: the stored утас is taken as it", async () => {
     await firstLoad();
     const oldPhone = erp.phone;
-    const legacy = (await storedDoc());
+    const legacy = storedDoc();
     delete legacy.erp.loginPhone;
-    await q("update applicant_account set data_json = $1", [JSON.stringify(legacy)]);
+    state.sqlite!.prepare("update applicant_account set data_json = ?").run(JSON.stringify(legacy));
     erp.calls = [];
 
     await post("SaveHrApplicant", { mobilephone: "88000000" });
@@ -1788,37 +1811,37 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await seedIdentity({ regno: erp.regno, mobilephone: "88000000" });
     await get("get");
     await flushAfter();
-    expect((await storedDoc()).erp.linkError).toBe(MISMATCH);
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
     await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000", retrylink: true });
-    expect((await storedDoc()).erp).not.toHaveProperty("linkError");
+    expect(storedDoc().erp).not.toHaveProperty("linkError");
     // The flag is an instruction, not a profile field: never stored, never sent on.
-    expect((await storedDoc()).profile).not.toHaveProperty("retrylink");
+    expect(storedDoc().profile).not.toHaveProperty("retrylink");
     await flushAfter();
     expect(erp.endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(2);
     expect(erp.calls.some((c) => JSON.stringify(c.body ?? "").includes("retrylink"))).toBe(false);
-    expect((await storedDoc()).erp.linkError).toBe(MISMATCH); // refused again, stops again
+    expect(storedDoc().erp.linkError).toBe(MISMATCH); // refused again, stops again
   });
 
   it("an ordinary profile save carrying the same регистр + утас does NOT lift the refusal", async () => {
     await seedIdentity({ regno: erp.regno, mobilephone: "88000000" });
     await get("get");
     await flushAfter();
-    expect((await storedDoc()).erp.linkError).toBe(MISMATCH);
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
     erp.calls = [];
 
     // The profile form echoes regno + mobilephone on every save.
     const saved = await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000", addr2: "шинэ хаяг" });
     expect(saved.body.rettype).toBe(0);
-    expect((await storedDoc()).erp.linkError).toBe(MISMATCH);
-    expect((await storedDoc()).profile.addr2).toBe("шинэ хаяг");
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
+    expect(storedDoc().profile.addr2).toBe("шинэ хаяг");
     await flushAfter();
     await get("get");
     await flushAfter();
     expect(erp.calls).toEqual([]);
     // Only `true` counts as a retry.
     await post("SaveHrApplicant", { regno: erp.regno, mobilephone: "88000000", retrylink: "true" });
-    expect((await storedDoc()).erp.linkError).toBe(MISMATCH);
-    expect((await storedDoc()).profile).not.toHaveProperty("retrylink");
+    expect(storedDoc().erp.linkError).toBe(MISMATCH);
+    expect(storedDoc().profile).not.toHaveProperty("retrylink");
   });
 
   it("a pull never replaces the утас that logged in (the ERP record's mobilephone is the contact number)", async () => {
@@ -1827,17 +1850,17 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     fake.record.mobilephone = "99887766";
     fake.record.regno = erp.regno.toLowerCase();
     await firstLoad(fake);
-    expect((await storedDoc()).erp.linkedRegno).toBe(erp.regno);
-    expect((await storedDoc()).profile).toMatchObject({ regno: erp.regno, mobilephone: erp.phone });
+    expect(storedDoc().erp.linkedRegno).toBe(erp.regno);
+    expect(storedDoc().profile).toMatchObject({ regno: erp.regno, mobilephone: erp.phone });
     // Other pulled fields still arrive.
-    expect((await storedDoc()).profile.addr2).toBe("ERP хаяг");
+    expect(storedDoc().profile.addr2).toBe("ERP хаяг");
 
     // The next (background) pull and the logins after it keep working.
     advance(11 * 60_000);
     await get("get");
     await flushAfter();
-    expect((await storedDoc()).profile.mobilephone).toBe(erp.phone);
-    expect((await storedDoc()).erp.linkError).toBeUndefined();
+    expect(storedDoc().profile.mobilephone).toBe(erp.phone);
+    expect(storedDoc().erp.linkError).toBeUndefined();
     expect(erp.endpoints().filter((e) => e === "auth/login")).toHaveLength(2);
     expect(erp.endpoints()).not.toContain("SaveHrAppUser");
   });
@@ -1850,13 +1873,13 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await get("get");
     await post("SaveHrApplicant", { regno: "АА00000000", mobilephone: "88001122" });
     // Another request holds the claim.
-    const held = (await storedDoc());
+    const held = storedDoc();
     held.erp.registeringAt = new Date(clock).toISOString();
-    await q("update applicant_account set data_json = $1", [JSON.stringify(held)]);
+    state.sqlite!.prepare("update applicant_account set data_json = ?").run(JSON.stringify(held));
 
     await flushAfter();
     expect(erp.endpoints()).toEqual(["auth/login"]);
-    const after = (await storedDoc()).erp;
+    const after = storedDoc().erp;
     expect(after.flush).toBeUndefined(); // no attempt counted
     expect(after.profileDirty).toEqual(expect.any(Number)); // still waiting to go
     expect(after.pullFailures).toBeUndefined();
@@ -1867,14 +1890,14 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await get("get");
     await flushAfter();
     expect(erp.calls).toEqual([]);
-    expect((await storedDoc()).erp?.pullFailures).toBeUndefined();
+    expect(storedDoc().erp?.pullFailures).toBeUndefined();
 
     await post("SaveHrApplicant", { regno: erp.regno, mobilephone: `+976 ${erp.phone.slice(0, 4)}-${erp.phone.slice(4)}` });
-    expect((await storedDoc()).profile.mobilephone).toBe(erp.phone); // stored as its 8 digits
+    expect(storedDoc().profile.mobilephone).toBe(erp.phone); // stored as its 8 digits
     const r = await get("get");
     expect(r.body.rettype).toBe(0);
     expect(erp.endpoints().slice(0, 2)).toEqual(["auth/login", "get"]);
-    expect((await storedDoc()).erp.pulledAt).toEqual(expect.any(String));
+    expect(storedDoc().erp.pulledAt).toEqual(expect.any(String));
     await flushAfter();
     expect(erp.endpoints()).not.toContain("SaveHrAppUser");
   });
@@ -1886,17 +1909,17 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     vi.stubGlobal("fetch", erp.fetch);
     await get("get"); // blank: nothing sent
     await post("SaveHrApplicant", { regno: " аа00000000 ", mobilephone: "88001122" });
-    expect((await storedDoc()).profile.regno).toBe("АА00000000");
+    expect(storedDoc().profile.regno).toBe("АА00000000");
     await flushAfter(); // the mutation sync: 401 → SaveHrAppUser → flush
     expect(erp.endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(1);
-    const stored = (await storedDoc());
+    const stored = storedDoc();
     expect(stored.erp.linkedRegno).toBe("АА00000000");
     expect(stored.erp.pulledAt).toBeUndefined();
 
     const r = await post("SaveHrApplicant", { regno: "ББ11111111" });
     expect(r.status).toBe(409);
     expect(r.body.retmsg).toBe(REGNO_LOCKED_MESSAGE);
-    expect((await storedDoc()).profile.regno).toBe("АА00000000");
+    expect(storedDoc().profile.regno).toBe("АА00000000");
   });
 
   it("two requests hitting the 401 at once send ONE SaveHrAppUser", async () => {
@@ -1911,7 +1934,7 @@ describe("ERP account: login first, SaveHrAppUser on a 401", () => {
     await Promise.all([flushAfter(), get("get")]);
     await flushAfter();
     expect(erp.endpoints().filter((e) => e === "SaveHrAppUser")).toHaveLength(1);
-    expect((await storedDoc()).erp.linkedRegno).toBe("АА00000000");
+    expect(storedDoc().erp.linkedRegno).toBe("АА00000000");
   });
 
   it("blank identity → no ERP call at all", async () => {
@@ -1929,7 +1952,7 @@ describe("mock mode (NEXT_PUBLIC_API_URL unset)", () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "");
     const spy = vi.fn(erp.fetch);
     vi.stubGlobal("fetch", spy);
-    (await seedCredentials());
+    seedCredentials();
     await get("get");
     await post("SaveHrApplicant", { addr2: "x" });
     const created = await post("SaveHrAppEducation", { entryid: 0, universitynametext: "S" });

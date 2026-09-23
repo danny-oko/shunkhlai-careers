@@ -34,7 +34,7 @@ async function loadDesk(
     return { articles, everything };
   } catch (error) {
     console.error(
-      "[admin/news] database read failed:",
+      "[admin/news] D1 read failed:",
       error instanceof Error ? error.message : error,
     );
     return null;

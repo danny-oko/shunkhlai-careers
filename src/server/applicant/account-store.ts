@@ -6,10 +6,9 @@ import { LOCAL_ID_BASE } from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
- * PostgreSQL persistence for `/api/me`: one `applicant_account` row per
- * lowercased Clerk email, holding the applicant document as JSON. The CV and
- * photo are kept out of that JSON, in chunked `applicant_file` rows (see
- * schema.ts — the chunking is inherited from D1 and kept on purpose).
+ * D1 persistence for `/api/me`: one `applicant_account` row per lowercased
+ * Clerk email, holding the applicant document as JSON. The CV and photo are
+ * kept out of that JSON, in chunked `applicant_file` rows (see schema.ts).
  */
 
 /** What `data_json` holds: the document minus file contents. */
@@ -37,7 +36,7 @@ export class AccountConflictError extends Error {
 
 type FileKind = "cv" | "picture";
 
-/** Chunk size inherited from D1's 2 MB value cap; see `src/lib/db/schema.ts`. */
+/** D1 caps a row at 2 MB; stay well under it per chunk. */
 const CHUNK_CHARS = 500_000;
 /**
  * Rows created on this site get ids from `LOCAL_ID_BASE` up, so they can never

@@ -21,10 +21,9 @@ export const metadata: Metadata = {
 /**
  * The front page is always current.
  *
- * Two reasons it cannot be cached: the stories live in the shared Postgres,
- * which every host writes to — an edit made from another host cannot
- * revalidate this one's cache, so only a per-request read is guaranteed to
- * show it; and the masthead
+ * Two reasons it cannot be cached: the stories live in D1, which every host
+ * writes to — an edit made from another host cannot revalidate this one's
+ * cache, so only a per-request read is guaranteed to show it; and the masthead
  * prints today's date, which a cached page would freeze on the day it was
  * built.
  */

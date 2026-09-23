@@ -17,13 +17,8 @@ import {
 } from "@/lib/news/types";
 
 /**
- * Storage for the newsroom: two tables in PostgreSQL (`news_article`,
+ * Storage for the newsroom: two tables in Cloudflare D1 (`news_article`,
  * `news_media`), through the same Drizzle client as the applicant account.
- *
- * This is also the boundary where the database's types become the app's. The
- * row now has a real `jsonb` body, a real `boolean` and real timestamps;
- * `NewsArticle` still promises a `RichDoc`, a `boolean` and ISO strings, and
- * `toArticle` / `toRow` below are the only two places that convert.
  *
  * The recruitment backend has no news endpoints, so this *is* the newsroom's
  * database. `service.ts` and the admin actions are the only callers; the
@@ -46,10 +41,7 @@ export type ListQuery = {
   limit?: number;
 };
 
-/**
- * Covers stay chunked after the move off D1 (which capped a value at 2 MB),
- * exactly as `applicant_file` does — see the note in `src/lib/db/schema.ts`.
- */
+/** D1 caps a value at 2 MB; stay well under it per chunk, as `applicant_file` does. */
 const MEDIA_CHUNK_CHARS = 500_000;
 
 /* --- ids ---------------------------------------------------------------- */
@@ -70,15 +62,10 @@ function nowIso(): string {
  * Rows written before rich text store a `NewsBlock[]`; `coerceBody` reads
  * either shape (and sanitises the new one), so an old row renders without a
  * migration and is rewritten in the new shape the next time it is saved.
- *
- * The column is `jsonb`, so the driver hands back a parsed value — but a row
- * carried over from D1 may still hold JSON *as a string* (D1's column was
- * TEXT, and a migration that loaded it verbatim would produce a JSON string),
- * so a string is parsed once more before it is coerced.
  */
-function parseBody(value: unknown): RichDoc {
+function parseBody(json: string): RichDoc {
   try {
-    return coerceBody(typeof value === "string" ? JSON.parse(value) : value);
+    return coerceBody(JSON.parse(json));
   } catch {
     // One corrupt row must not take the whole front page down with it.
     return coerceBody(null);
@@ -98,20 +85,15 @@ function toArticle(row: NewsArticleRow): NewsArticle {
     coverAlt: row.coverAlt,
     body: parseBody(row.bodyJson),
     status: row.status as NewsStatus,
-    featured: row.featured,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    featured: Boolean(row.featured),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
 function toRow(article: NewsArticle): NewsArticleRow {
-  const { body, createdAt, updatedAt, ...rest } = article;
-  return {
-    ...rest,
-    bodyJson: body,
-    createdAt: new Date(createdAt),
-    updatedAt: new Date(updatedAt),
-  };
+  const { body, ...rest } = article;
+  return { ...rest, bodyJson: JSON.stringify(body) };
 }
 
 /* --- reads -------------------------------------------------------------- */
@@ -132,10 +114,8 @@ function compare(a: NewsArticle, b: NewsArticle): number {
 }
 
 /**
- * Case-folded in JS, not with SQL `ILIKE`: this began as a D1 table, where
- * SQLite folds ASCII only and every headline here is Cyrillic. Postgres would
- * fold it correctly, but the table is a few dozen rows and keeping the match
- * in one place keeps the result independent of the server's collation.
+ * Case-folded in JS, not with SQL `LIKE`: SQLite only folds ASCII, and every
+ * headline here is Cyrillic.
  */
 function haystack(article: NewsArticle): string {
   return `${article.title} ${article.lede} ${article.author}`.toLowerCase();
@@ -341,10 +321,7 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 export async function putMedia(bytes: Uint8Array, contentType: string): Promise<string> {
   const key = newId("med_", 6);
   const data = Buffer.from(bytes).toString("base64");
-  // `news_media.created_at` is a real timestamp now, and nothing outside the
-  // store reads it — unlike the article's, which `NewsArticle` hands out as an
-  // ISO string — so it stays a Date the whole way down.
-  const createdAt = new Date();
+  const createdAt = nowIso();
 
   // At least one row, so even an empty file reads back rather than 404ing.
   const count = Math.max(1, Math.ceil(data.length / MEDIA_CHUNK_CHARS));
