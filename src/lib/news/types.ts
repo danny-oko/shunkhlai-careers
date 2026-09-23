@@ -7,7 +7,12 @@
  * data they format, so a component never reaches for `Intl` and guesses.
  */
 
-import { type RichDoc, docText, excerpt, readingMinutes as readingMinutesOf } from "./shared/rich-text";
+import {
+  type RichDoc,
+  docText,
+  excerpt,
+  readingMinutes as readingMinutesOf,
+} from "./shared/rich-text";
 
 export type NewsCategory = "company" | "industry" | "society" | "people";
 
@@ -84,7 +89,9 @@ export const NEWS_CATEGORIES: ReadonlyArray<{
 ];
 
 export function categoryLabel(value: NewsCategory): string {
-  return NEWS_CATEGORIES.find((category) => category.value === value)?.label ?? "";
+  return (
+    NEWS_CATEGORIES.find((category) => category.value === value)?.label ?? ""
+  );
 }
 
 export function isNewsCategory(value: unknown): value is NewsCategory {
@@ -114,7 +121,9 @@ const MONTH_SUFFIX = [
 ] as const;
 
 /** Splits `YYYY-MM-DD` without going through `Date`, which shifts by timezone. */
-function parts(isoDate: string): { year: string; month: number; day: number } | null {
+function parts(
+  isoDate: string,
+): { year: string; month: number; day: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate ?? "");
   if (!match) return null;
 
