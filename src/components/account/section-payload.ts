@@ -13,12 +13,15 @@
  *
  * So an empty numeric field is omitted by default, never sent as `null`, and
  * never coerced through `Number(null)`. A field can opt into `"zero"`.
+ *
+ * A `select` whose keys are codes rather than ids (Хүйс `"M"` / `"F"`) says
+ * `textValue` and is sent as the text it holds.
  */
 
 export type EmptyAs = "omit" | "zero";
 
 type Values = Record<string, unknown>;
-type PayloadField = { name: string; type: string; emptyAs?: EmptyAs };
+type PayloadField = { name: string; type: string; emptyAs?: EmptyAs; textValue?: boolean };
 
 /** Field types whose value is a number on the wire. */
 const NUMERIC_TYPES = new Set(["number", "select", "combobox"]);
@@ -44,6 +47,8 @@ function encodeField(payload: Values, field: PayloadField): void {
 /** The body for a section save: numeric fields as numbers, empty ones per `emptyAs`. */
 export function encodeSectionValues(fields: PayloadField[], values: Values): Values {
   const payload: Values = { entryid: 0, ...values };
-  for (const field of fields) if (NUMERIC_TYPES.has(field.type)) encodeField(payload, field);
+  for (const field of fields) {
+    if (NUMERIC_TYPES.has(field.type) && !field.textValue) encodeField(payload, field);
+  }
   return payload;
 }

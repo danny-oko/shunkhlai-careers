@@ -933,6 +933,125 @@ describe.each(["upsert", "replace"] as const)("SaveAppSkillComp array, ERP %s mo
   });
 });
 
+/* --- SaveAppFamily: the body is the whole set, every Postman field ------ */
+
+describe.each(["upsert", "replace"] as const)("SaveAppFamily array, ERP %s mode", (mode) => {
+  /** The Postman SaveAppFamily row, as a new member. */
+  const MOTHER: Row = {
+    entryid: 0,
+    relativeid: 2004,
+    lastname: "Бат",
+    firstname: "Туяа",
+    gender: "F",
+    famregno: "УБ72020202",
+    birthdate: "1972-02-02",
+    countryid: 496,
+    divisionid: 1,
+    districtid: 11,
+    professionid: 10,
+    orgname: "ААН",
+    jobid: 8477,
+    phone: "99330044",
+    note: "",
+  };
+  const LABELS = ["relativename", "countryname", "divisionname", "districtname", "professionname", "jobname"];
+
+  /** Two members in the ERP (ids only, as Postman `hrappfamilylist`). */
+  const twoMembers = () =>
+    new FakeErp((e) => {
+      const { entryid: _new, ...member } = MOTHER;
+      e.batchSaves = mode;
+      e.seedRow("hrappfamilylist", { ...member, relativeid: 2003, firstname: "Дорж", gender: "M", birthdate: "1970-01-01T00:00:00" });
+      e.seedRow("hrappfamilylist", { ...member, relativeid: 2009, firstname: "Сараа", jobid: 100, phone: 99001122 });
+    });
+  const familySent = () => erp.calls.filter((c) => c.endpoint === "SaveAppFamily").map((c) => c.body as Row[]);
+  const erpIds = () => erp.lists.hrappfamilylist.map((r) => Number(r.entryid));
+
+  it("a pull names every id: relation, place, profession, job", async () => {
+    await firstLoad(twoMembers());
+    const [father] = (await lists()).family;
+    expect(father).toMatchObject({
+      relativename: labelFor("GetRelativeDropDown", 2003),
+      countryname: labelFor("GetCountryDropDown", 496),
+      divisionname: labelFor("GetDivisionDropDown", 1),
+      districtname: labelFor("GetDistrictDropDown", 11),
+      professionname: labelFor("GetProfessionDropDown", 10),
+      jobname: labelFor("GetJobDropDown", 8477),
+    });
+    expect(father.districtname).toBe("Хан-Уул");
+  });
+
+  it("editing one member sends every member (with its ERP id, no labels) and loses none", async () => {
+    await firstLoad(twoMembers());
+    const ids = erpIds();
+    const [father] = (await lists()).family;
+    await post("SaveAppFamily", [{ ...father, orgname: "Шунхлай ХХК" }]);
+    await flushAfter();
+
+    const [body] = familySent();
+    expect(familySent()).toHaveLength(1);
+    expect(body.map((r) => r.entryid)).toEqual(ids);
+    expect(body[0]).toMatchObject({ entryid: ids[0], relativeid: 2003, orgname: "Шунхлай ХХК", gender: "M" });
+    expect(body[1]).toMatchObject({ entryid: ids[1], relativeid: 2009, jobid: 100 });
+    for (const row of body) {
+      expect(row).not.toHaveProperty("erp");
+      for (const name of LABELS) expect(row).not.toHaveProperty(name);
+    }
+    expect(erpIds()).toEqual(ids);
+    expect(erp.lists.hrappfamilylist[0]).toMatchObject({ orgname: "Шунхлай ХХК", famregno: "УБ72020202" });
+    expect(erp.lists.hrappfamilylist[1]).toMatchObject({ firstname: "Сараа" });
+
+    const family = (await lists()).family;
+    expect(family.map((r) => r.entryid)).toEqual(ids);
+    expect(family.every((r) => r.erp === "synced")).toBe(true);
+  });
+
+  it("a new member goes with every Postman field as entryid 0 next to the others; the re-read adopts it, no duplicates", async () => {
+    await firstLoad(twoMembers());
+    const ids = erpIds();
+    await post("SaveAppFamily", [MOTHER]);
+    await flushAfter();
+
+    const [body] = familySent();
+    expect(body.map((r) => r.entryid)).toEqual([...ids, 0]);
+    expect(body[2]).toEqual(MOTHER);
+    expect(erp.lists.hrappfamilylist).toHaveLength(3);
+
+    const family = (await lists()).family;
+    expect(family.map((r) => Number(r.entryid))).toEqual(erpIds());
+    expect(family.every((r) => r.erp === "synced")).toBe(true);
+    expect(family[2]).toMatchObject({ ...MOTHER, entryid: erpIds()[2], relativename: labelFor("GetRelativeDropDown", 2004) });
+
+    // The next pull finds the same three, and the next edit goes with the ERP id.
+    advance(11 * 60_000);
+    await get("get");
+    await flushAfter();
+    expect((await lists()).family.map((r) => Number(r.entryid))).toEqual(erpIds());
+    await post("SaveAppFamily", [{ ...(await lists()).family[2], note: "Тэтгэвэрт" }]);
+    await flushAfter();
+    expect(familySent().at(-1)!.map((r) => r.entryid)).toEqual(erpIds());
+    expect(erp.lists.hrappfamilylist).toHaveLength(3);
+    expect(erp.lists.hrappfamilylist[2]).toMatchObject({ note: "Тэтгэвэрт", firstname: "Туяа" });
+  });
+
+  it("a member deleted here is left out of the array (and deleted first); the other stays", async () => {
+    await firstLoad(twoMembers());
+    const ids = erpIds();
+    await post("DeleteAppFamily", undefined, `?entryid=${ids[0]}`);
+    const [sister] = (await lists()).family;
+    await post("SaveAppFamily", [{ ...sister, note: "Дүү" }]);
+    await flushAfter();
+
+    expect(erp.endpoints().filter((e) => e === "DeleteAppFamily" || e === "SaveAppFamily")).toEqual([
+      "DeleteAppFamily",
+      "SaveAppFamily",
+    ]);
+    expect(familySent()[0].map((r) => r.entryid)).toEqual([ids[1]]);
+    expect(erpIds()).toEqual([ids[1]]);
+    expect((await lists()).family.map((r) => r.entryid)).toEqual([ids[1]]);
+  });
+});
+
 /* --- deletes: every section --------------------------------------------- */
 
 type DeleteCase = {

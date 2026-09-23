@@ -512,14 +512,7 @@ async function handlePost(
 
     case "SaveAppFamily": {
       const saved: Row[] = [];
-      for (const row of asRows(rawBody)) {
-        saved.push(
-          upsert(doc.family, {
-            ...row,
-            relativename: await label("GetRelativeDropDown", row.relativeid),
-          }),
-        );
-      }
+      for (const row of asRows(rawBody)) saved.push(upsert(doc.family, await labelRow("family", row, label)));
       return ok(saved, true);
     }
 

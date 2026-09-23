@@ -152,6 +152,9 @@ export const DISPLAY_ONLY = new Set([
   "businesstypename",
   "headjobname",
   "relativename",
+  "countryname",
+  "divisionname",
+  "districtname",
   "posgroupname",
   "positionname",
 ]);
@@ -352,6 +355,27 @@ export const SECTION_LABELS: Partial<Record<SectionKey, LabelSpec[]>> = {
     { name: "jobname", id: "jobid", dropdown: "GetJobDropDown" },
     { name: "businesstypename", id: "businesstypeid", dropdown: "GetBusinessTypeDropDown" },
     { name: "headjobname", id: "headjobid", dropdown: "GetJobDropDown" },
+  ],
+  // Postman `hrappfamilylist` is ids only as well. Оршин суугаа газар is the
+  // profile's chain: the province list read under the row's country, the
+  // district list under its province (live 2026-09-23: none → no rows).
+  family: [
+    { name: "relativename", id: "relativeid", dropdown: "GetRelativeDropDown" },
+    { name: "countryname", id: "countryid", dropdown: "GetCountryDropDown" },
+    {
+      name: "divisionname",
+      id: "divisionid",
+      dropdown: "GetDivisionDropDown",
+      parents: (row) => [{ countryid: row.countryid }],
+    },
+    {
+      name: "districtname",
+      id: "districtid",
+      dropdown: "GetDistrictDropDown",
+      parents: (row) => [{ divisionid: row.divisionid }],
+    },
+    { name: "professionname", id: "professionid", dropdown: "GetProfessionDropDown" },
+    { name: "jobname", id: "jobid", dropdown: "GetJobDropDown" },
   ],
 };
 

@@ -368,3 +368,123 @@ describe("labelSources (experience)", () => {
     expect(bundle.hrappprojectlist).toEqual([{ entryid: 3, jobid: 7134 }]);
   });
 });
+
+/* --- Гэр бүл ------------------------------------------------------------ */
+
+/** GetRelativeDropDown / GetDivisionDropDown / GetDistrictDropDown, live 2026-09-23 (part). */
+function familyLabel() {
+  const calls: Array<[string, unknown, Row | undefined]> = [];
+  const lists: Record<string, (key: string, parent?: Row) => string> = {
+    GetRelativeDropDown: (key) => ({ "2003": "Аав", "19": "Авга ах" })[key] ?? "",
+    GetCountryDropDown: (key) => ({ "28": "Монгол", "3": "Орос" })[key] ?? "",
+    // Province ids are per country, district ids per province.
+    GetDivisionDropDown: (key, parent) =>
+      String(parent?.countryid) === "28" ? (({ "1": "Улаанбаатар" }) as Record<string, string>)[key] ?? "" : "",
+    GetDistrictDropDown: (key, parent) =>
+      String(parent?.divisionid) === "1" ? (({ "11": "Хан-Уул" }) as Record<string, string>)[key] ?? "" : "",
+    GetProfessionDropDown: (key) => (key === "1006" ? "Өмгөөлөгч" : ""),
+    GetJobDropDown: (key) => JOBS[key] ?? "",
+  };
+  const label: HandlerDeps["label"] = async (dropdown, key, parent) => {
+    calls.push([dropdown, key, parent]);
+    return lists[dropdown]?.(String(key), parent) ?? "";
+  };
+  return { label, calls };
+}
+
+/** The Postman SaveAppFamily row. */
+const FATHER: Row = {
+  entryid: 0,
+  relativeid: 2003,
+  lastname: "Бат",
+  firstname: "Дорж",
+  gender: "M",
+  famregno: "УБ70010101",
+  birthdate: "1970-01-01",
+  countryid: 28,
+  divisionid: 1,
+  districtid: 11,
+  professionid: 1006,
+  orgname: "ААН",
+  jobid: 8477,
+  phone: "99330033",
+  note: "",
+};
+
+describe("SaveAppFamily", () => {
+  let next = 400;
+  const save = async (doc: ApplicantDoc, body: unknown) => {
+    const recorded = familyLabel();
+    const result = await handleApplicantRequest(
+      { endpoint: "SaveAppFamily", method: "POST", query: new URLSearchParams(), body },
+      doc,
+      { label: recorded.label, nextEntryId: () => (next += 1), jobOrder: () => null },
+    );
+    return { result, calls: recorded.calls };
+  };
+
+  it("stores every Postman field and names the relation, the place (each under its parent), profession and job", async () => {
+    const doc = emptyDoc();
+    const { calls } = await save(doc, [FATHER]);
+    expect(doc.family[0]).toMatchObject({
+      ...FATHER,
+      entryid: expect.any(Number),
+      relativename: "Аав",
+      countryname: "Монгол",
+      divisionname: "Улаанбаатар",
+      districtname: "Хан-Уул",
+      professionname: "Өмгөөлөгч",
+      jobname: "Админ менежер",
+    });
+    expect(calls).toEqual([
+      ["GetRelativeDropDown", 2003, undefined],
+      ["GetCountryDropDown", 28, undefined],
+      ["GetDivisionDropDown", 1, { countryid: 28 }],
+      ["GetDistrictDropDown", 11, { divisionid: 1 }],
+      ["GetProfessionDropDown", 1006, undefined],
+      ["GetJobDropDown", 8477, undefined],
+    ]);
+  });
+
+  it("ids left out ask nothing and name nothing; an edit that drops one drops its name", async () => {
+    const doc = emptyDoc();
+    await save(doc, [FATHER]);
+    const entryid = doc.family[0].entryid;
+    const { professionid: _p, jobid: _j, divisionid: _d, districtid: _t, ...rest } = FATHER;
+    const { calls } = await save(doc, [{ ...rest, entryid }]);
+    expect(doc.family).toHaveLength(1);
+    expect(doc.family[0]).toMatchObject({
+      countryname: "Монгол",
+      divisionname: "",
+      districtname: "",
+      professionname: "",
+      jobname: "",
+    });
+    expect(doc.family[0]).not.toHaveProperty("jobid");
+    expect(calls.map(([dropdown]) => dropdown)).toEqual(["GetRelativeDropDown", "GetCountryDropDown"]);
+  });
+});
+
+describe("labelSources (family)", () => {
+  it("labels hrappfamilylist in a GetHrAppFamilyData bundle and leaves hrapprelativelist alone", async () => {
+    const bundle = {
+      hrappfamilylist: [{ entryid: 1, relativeid: 2003, countryid: 28, divisionid: 1, districtid: 11, jobid: 8477 }],
+      hrapprelativelist: [{ entryid: 2, relativeid: 19 }],
+    };
+    await labelSources({ GetHrAppFamilyData: bundle }, familyLabel().label);
+    expect(bundle.hrappfamilylist[0]).toEqual({
+      entryid: 1,
+      relativeid: 2003,
+      countryid: 28,
+      divisionid: 1,
+      districtid: 11,
+      jobid: 8477,
+      relativename: "Аав",
+      countryname: "Монгол",
+      divisionname: "Улаанбаатар",
+      districtname: "Хан-Уул",
+      jobname: "Админ менежер",
+    });
+    expect(bundle.hrapprelativelist).toEqual([{ entryid: 2, relativeid: 19 }]);
+  });
+});

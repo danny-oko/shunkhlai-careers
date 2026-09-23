@@ -65,6 +65,13 @@ export type FieldDef = {
    * empty, so a value typed before it was hidden does not linger.
    */
   hidden?: (values: Values) => boolean;
+  /**
+   * A `select` whose keys are codes, not ids (Хүйс `"M"` / `"F"`): sent as the
+   * text it holds rather than as a number.
+   */
+  textValue?: boolean;
+  /** A filled value's problem as a Mongolian message, else null (an empty one is `required`'s). */
+  validate?: (value: string) => string | null;
   wide?: boolean;
 };
 
@@ -243,6 +250,21 @@ function EntryForm({
     if (missing) {
       setError(`«${missing.label}» талбарыг бөглөнө үү.`);
       return;
+    }
+    for (const field of shownFields) {
+      const answer = String(answerOf(field) ?? "").trim();
+      const problem = answer && field.validate ? field.validate(answer) : null;
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
+
+    // A typed name only counts in typed mode; a picked id drops it.
+    const sent = { ...values };
+    for (const field of fields) {
+      if (field.freeText && !manual[field.name]) sent[field.freeText.name] = "";
+      if (field.hidden?.(values)) sent[field.name] = "";
     }
 
     // A typed name only counts in typed mode; a picked id drops it.
