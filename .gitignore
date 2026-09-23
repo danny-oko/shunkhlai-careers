@@ -28,6 +28,12 @@
 # issued tokens and uploaded CVs — local scratch data, never committed.
 /.mock-data/
 
+# Uploaded file bytes in development: the default UPLOAD_DIR when the env var
+# is unset and NODE_ENV is not production (src/server/files/store.ts). Real CVs
+# and photographs if you have ever run against a copy of the customer's data.
+# On their server this lives at /var/lib/shunhlai/uploads instead.
+/.file-store/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

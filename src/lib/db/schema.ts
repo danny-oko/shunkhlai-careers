@@ -25,9 +25,10 @@
  * app's public types promise happens at the store boundary (see
  * `src/server/news/store.ts`), not by widening those types.
  *
- * The base64 file tables (`applicant_file`, `news_media`) stay chunked. D1's
- * 2 MB value cap is gone, but the chunking is harmless, and un-chunking would
- * be a data migration on top of a database migration.
+ * The base64 file tables (`applicant_file`, `news_media`) are being retired.
+ * Uploaded bytes now go to the filesystem (`stored_file` plus
+ * `src/server/files/store.ts`); these two tables are read-only legacy that the
+ * stores still fall back to for files the migration has not moved yet.
  */
 import {
   boolean,
@@ -231,6 +232,53 @@ export const newsMedia = pgTable(
 );
 
 /**
+ * Metadata for a file whose bytes live on the filesystem, not in here.
+ *
+ * The bytes are content-addressed under `UPLOAD_DIR` — see
+ * `src/server/files/store.ts` for the layout and why. This row is what turns
+ * an owner ("this applicant's CV", "cover med_ab12…") into a digest, and it
+ * carries everything a response needs without opening the file: the content
+ * type, the size, and the original filename for a CV download.
+ *
+ * `(owner_kind, owner_key)` is unique: an owner has at most one current file,
+ * and re-uploading replaces the row rather than accumulating versions. That is
+ * the same rule the chunked tables enforced with their own unique indexes.
+ *
+ * `sha256` is deliberately NOT unique. Two applicants who upload the same PDF
+ * get one file on disk and two rows here — the row is the reference, and a
+ * blob is only removed once no row names it.
+ *
+ * `applicant_file` and `news_media` stay in place while the move runs: a file
+ * that has no row here is still read from its chunks (see the fallbacks in
+ * `src/server/applicant/account-store.ts` and `src/server/news/store.ts`), so
+ * nothing 404s mid-migration. Dropping those tables is a later change, once
+ * `scripts/files/move-to-disk.ts` has been run and verified.
+ */
+export const storedFile = pgTable(
+  "stored_file",
+  {
+    id: text("id").primaryKey(),
+    sha256: text("sha256").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    // applicant_cv | applicant_picture | news_media — see src/server/files/records.ts
+    ownerKind: text("owner_kind").notNull(),
+    // The applicant's lowercased email, or the `med_<12 hex>` cover key.
+    ownerKey: text("owner_key").notNull(),
+    // The name the applicant uploaded the CV under; null for the other kinds.
+    filename: text("filename"),
+    createdAt: tstz("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byOwner: uniqueIndex("stored_file_owner_key").on(t.ownerKind, t.ownerKey),
+    // "Does anything still point at these bytes?" — asked on every delete.
+    bySha: index("stored_file_sha256_idx").on(t.sha256),
+  }),
+);
+
+/**
  * Staff who sign in to this app itself (the customer's guide, section 2).
  *
  * Nothing reads it yet: this slice ships the table, the argon2id helper
@@ -267,4 +315,6 @@ export type ApplicantAccountRow = typeof applicantAccount.$inferSelect;
 export type ApplicantFileRow = typeof applicantFile.$inferSelect;
 export type NewsArticleRow = typeof newsArticle.$inferSelect;
 export type NewsMediaRow = typeof newsMedia.$inferSelect;
+export type StoredFileRow = typeof storedFile.$inferSelect;
+export type NewStoredFile = typeof storedFile.$inferInsert;
 export type AppUserRow = typeof appUser.$inferSelect;

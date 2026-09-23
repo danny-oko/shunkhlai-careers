@@ -36,6 +36,7 @@ const TABLES = [
   "application_log",
   "news_article",
   "news_media",
+  "stored_file",
 ] as const;
 
 /** The committed migrations, one statement per entry. */
