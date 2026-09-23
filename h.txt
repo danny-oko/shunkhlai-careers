@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+Vary: Accept
+Cache-Control: public, max-age=0, must-revalidate
+ETag: aeTzfd8KaqV3rh90m_uPXYTF3AhriECqZaKFetzZlrI
+Content-Type: image/webp
+Content-Disposition: attachment; filename="kv-hogjil.webp"
+Content-Security-Policy: script-src 'none'; frame-src 'none'; sandbox;
+X-Nextjs-Cache: MISS
+Content-Length: 396244
+Date: Wed, 23 Sep 2026 16:28:07 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+

@@ -185,7 +185,7 @@ export function JobBrowser({
 
       {/* The one filter the API searches on by text, above both layouts: on a
           phone it must not be hidden behind the drawer. */}
-      <div className="border-b border-border/70 px-6 py-3 sm:px-10 lg:px-5">
+      <div className="border-b border-border/70 px-6 py-3 sm:px-10 lg:px-10">
         <div className="max-w-md">
           <JobSearch
             value={jobName}
@@ -254,7 +254,7 @@ export function JobBrowser({
       <div className="grid lg:grid-cols-[minmax(0,17.5rem)_minmax(0,1fr)]">
         <aside className="hidden border-border/70 lg:block lg:border-r">
           <div className="lg:sticky lg:top-16">
-            <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border/70 px-5 py-3">
+            <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border/70 px-5 py-3 lg:pl-10">
               <div className="min-w-0">
                 <h2 className="text-[0.9375rem] font-semibold tracking-[-0.01em]">
                   Шүүлтүүр

@@ -2,40 +2,40 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import { Dateline } from "@/components/news/dateline";
-import { Kicker } from "@/components/news/kicker";
 import { NewsCover } from "@/components/news/news-cover";
 import type { NewsArticle } from "@/lib/news/types";
 
 /**
  * The story above the fold.
  *
- * Asymmetric on purpose — seven columns of photograph against five of type.
+ * Asymmetric on purpose — seven columns of photograph against five of type,
+ * and only from `xl`. At a laptop's 1024 the type column was 5 of 12 minus a
+ * gutter, which is narrow enough that a Mongolian headline broke into five
+ * lines; under that width the two stack as they do on a tablet.
  * An even split reads as two equal things; the lead has to read as one thing
  * with a picture, which is also why the headline is the only element on the
  * page allowed past 2.5rem.
  */
 export function LeadStory({ article }: { article: NewsArticle }) {
   return (
-    <article className="grid gap-6 lg:grid-cols-12 lg:gap-9">
+    <article className="grid gap-6 xl:grid-cols-12 xl:items-center xl:gap-9">
       <Link
         href={`/news/${article.slug}`}
         tabIndex={-1}
         aria-hidden
-        className="lg:col-span-7"
+        className="xl:col-span-7"
       >
         <NewsCover
           coverKey={article.coverKey}
           alt={article.coverAlt}
           ratio="16 / 10"
           priority
-          sizes="(min-width: 1024px) 58vw, 100vw"
+          sizes="(min-width: 1280px) 58vw, 100vw"
         />
       </Link>
 
-      <div className="flex flex-col justify-center lg:col-span-5">
-        <Kicker category={article.category} />
-
-        <h2 className="news-headline mt-3 text-[clamp(1.75rem,4.4vw,2.875rem)]">
+      <div className="flex flex-col xl:col-span-5">
+        <h2 className="news-headline text-[clamp(1.75rem,4.4vw,2.875rem)]">
           <Link
             href={`/news/${article.slug}`}
             className="decoration-1 underline-offset-[6px] hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"

@@ -49,7 +49,7 @@ describe("ArticleBody", () => {
 
   it("gives the first paragraph, and only it, the drop cap", () => {
     expect(out.match(/news-dropcap/gu)).toHaveLength(1);
-    expect(out).toContain('<p class="news-dropcap">Opening words</p>');
+    expect(out).toMatch(/<p class="[^"]*\bnews-dropcap\b[^"]*">Opening words<\/p>/u);
   });
 
   it("renders marks as elements", () => {

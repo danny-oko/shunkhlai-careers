@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import { Check } from "lucide-react";
 
 import { IdentityForm } from "@/components/account/identity-gate";
@@ -34,9 +34,14 @@ export const SentPanel = ({ job, onClose }: { job: JobDetail; onClose: () => voi
   </div>
 );
 
-export const SignInPanel = () => {
-  const signInHref = `/sign-in?redirect_url=${encodeURIComponent(usePathname())}`;
-
+/**
+ * `onClose` shuts the sheet on the way to Clerk's dialog, and it is not
+ * optional: the sheet is a Radix dialog with a focus trap, and a Clerk modal
+ * opened underneath one renders but cannot be typed into - the trap pulls
+ * focus straight back to the sheet. `SignInButton` runs this `onClick` before
+ * it opens, so the sheet is already closing by then.
+ */
+export const SignInPanel = ({ onClose }: { onClose: () => void }) => {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
       <div className="space-y-2">
@@ -49,12 +54,20 @@ export const SignInPanel = () => {
         </SheetDescription>
       </div>
       <div className="flex gap-3">
-        <Button asChild className="h-10 rounded-full px-6">
-          <Link href={signInHref}>Нэвтрэх</Link>
-        </Button>
-        <Button asChild variant="outline" className="h-10 rounded-full px-6">
-          <Link href="/register">Бүртгүүлэх</Link>
-        </Button>
+        <SignInButton mode="modal">
+          <Button className="h-10 rounded-full px-6" onClick={onClose}>
+            Нэвтрэх
+          </Button>
+        </SignInButton>
+        <SignUpButton mode="modal">
+          <Button
+            variant="outline"
+            className="h-10 rounded-full px-6"
+            onClick={onClose}
+          >
+            Бүртгүүлэх
+          </Button>
+        </SignUpButton>
       </div>
     </div>
   );
