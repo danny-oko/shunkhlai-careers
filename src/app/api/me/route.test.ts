@@ -118,6 +118,13 @@ const rows = (sql: string, ...p: unknown[]) =>
 
 const profileOf = async () => (await get("get")).body.retdata as Record<string, unknown>;
 
+/** GET /api/me/cv: the raw response (a file, or the failure envelope). */
+const download = () => GET(new Request("http://x/api/me/cv"), ctx("cv") as never);
+
+/** Every write but SaveHrApplicant needs регистр + утас stored (names come from Clerk). */
+const IDENTITY = { regno: "УБ99010101", mobilephone: "99112233" };
+const ready = () => post("SaveHrApplicant", IDENTITY);
+
 beforeEach(async () => {
   state.users.clear();
   state.userId = null;
@@ -170,7 +177,7 @@ describe("account document", () => {
 
   it("email is case-insensitive: Foo@X.com and foo@x.com share one doc", async () => {
     as("u1", "Foo@X.com");
-    await post("SaveHrApplicant", { addr2: "Улаанбаатар, 1-р хороо" });
+    await post("SaveHrApplicant", { ...IDENTITY, addr2: "Улаанбаатар, 1-р хороо" });
     as("u1", "foo@x.com");
     expect((await profileOf()).addr2).toBe("Улаанбаатар, 1-р хороо");
     as("u1", "  FOO@x.COM ");
@@ -180,8 +187,8 @@ describe("account document", () => {
 
   it("isolation: user B never sees user A's data", async () => {
     as("uA", "a@x.mn");
-    await post("SaveHrApplicant", { addr2: "A-гийн хаяг", regno: "АА00000001" });
-    await post("SaveHrAppEducation", { entryid: 0, schoolname: "A school" });
+    await post("SaveHrApplicant", { addr2: "A-гийн хаяг", regno: "АА00000001", mobilephone: "99001100" });
+    await post("SaveHrAppEducation", { entryid: 0, universitynametext: "A school" });
     await post("SaveAppFamily", [{ entryid: 0, firstname: "A-relative" }]);
     await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 });
     const cv = new FormData();
@@ -193,7 +200,8 @@ describe("account document", () => {
     expect(p.addr2).not.toBe("A-гийн хаяг");
     expect(p.regno).not.toBe("АА00000001");
     expect(p.filename).toBeNull();
-    expect(p.filedata).toBeNull();
+    expect(p).not.toHaveProperty("filedata");
+    expect((await download()).status).toBe(404);
     const edu = (await get("GetHrAppEducationData")).body.retdata as Record<string, unknown[]>;
     expect(edu.hrappedulist).toEqual([]);
     const fam = (await get("GetHrAppFamilyData")).body.retdata as Record<string, unknown[]>;
@@ -218,7 +226,7 @@ describe("account document", () => {
 describe("profile", () => {
   it("parallel saves do not overwrite each other (optimistic lock + retry)", async () => {
     as("u1");
-    await get("get"); // create the row first
+    await ready(); // create the row first
     await Promise.all([
       post("SaveHrApplicant", { addr2: "Хан-Уул" }),
       post("SaveHrApplicant", { email2: "second@example.mn" }),
@@ -251,9 +259,87 @@ describe("profile", () => {
 
   it("a later partial save merges over, not replaces, the profile", async () => {
     as("u1");
-    await post("SaveHrApplicant", { regno: "УБ99010101", addr2: "old" });
+    await post("SaveHrApplicant", { ...IDENTITY, addr2: "old" });
     await post("SaveHrApplicant", { addr2: "new" });
     expect(await profileOf()).toMatchObject({ regno: "УБ99010101", addr2: "new" });
+  });
+});
+
+/* --- identity gate ----------------------------------------------------- */
+
+describe("identity gate (регистр, овог, нэр, утас before any write)", () => {
+  const stored = () => JSON.parse(String(rows("select data_json from applicant_account")[0].data_json));
+
+  it("refuses every other POST while регистр/утас are blank: 409, Mongolian retmsg, no D1 write", async () => {
+    as("u1");
+    await get("get");
+    const before = stored();
+    const cv = new FormData();
+    cv.set("file", new File([new Uint8Array([1, 2, 3])], "cv.pdf"));
+    const attempts = [
+      await post("SaveHrAppEducation", { entryid: 0, universitynametext: "X" }),
+      await post("SaveAppFamily", [{ entryid: 0, firstname: "X" }]),
+      await post("SaveInterestedJobItem", { entryid: 0, posgroupid: 142 }),
+      await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786 }),
+      await post("DeleteOrderApp", undefined, "?entryID=1"),
+      await post("SaveAppCV", cv),
+      await post("deleteAppCV"),
+    ];
+    for (const r of attempts) {
+      expect(r.status).toBe(409);
+      expect(r.body.rettype).not.toBe(0);
+      expect(r.body.retmsg).toBe("Эхлээд регистр, овог, нэр, утасны дугаараа бөглөнө үү.");
+      expect(r.body.retdata).toBeNull();
+    }
+    expect(stored()).toEqual(before);
+    expect(rows("select * from applicant_file")).toEqual([]);
+  });
+
+  it("SaveHrApplicant must leave all four filled, judged on the merge with what is stored", async () => {
+    as("u1", "u1@example.mn", ["", ""]); // Clerk without a name
+    for (const body of [
+      { addr2: "x" },
+      { regno: "УБ99010101", mobilephone: "99112233" }, // names still blank
+      { regno: "УБ99010101", mobilephone: "99112233", lastname: "Дорж", firstname: "  " },
+    ]) {
+      const r = await post("SaveHrApplicant", body);
+      expect(r.status).toBe(409);
+      expect(r.body.rettype).not.toBe(0);
+    }
+    expect(stored().profile).toMatchObject({ regno: "", mobilephone: "", addr2: "" });
+
+    const ok = await post("SaveHrApplicant", { lastname: "Дорж", firstname: "Бат", ...IDENTITY });
+    expect(ok.body.rettype).toBe(0);
+    // A partial body (the client drops blank regno/phone) merges over the stored four.
+    expect((await post("SaveHrApplicant", { addr2: "Хан-Уул" })).body.rettype).toBe(0);
+    // Blanking one of them is refused.
+    expect((await post("SaveHrApplicant", { lastname: "" })).status).toBe(409);
+    expect(stored().profile).toMatchObject({ lastname: "Дорж", addr2: "Хан-Уул" });
+    // …and the other writes now go through.
+    expect((await post("SaveHrAppEducation", { entryid: 0, universitynametext: "X" })).body.rettype).toBe(0);
+  });
+
+  it("get tells the client whether the регистр is linked to an ERP record", async () => {
+    as("u1");
+    expect(await profileOf()).toMatchObject({ erplinked: false, erplinkerror: null });
+  });
+
+  it("an unchanged регистр / утас in another spelling keeps the stored value", async () => {
+    state.sqlite!
+      .prepare("insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values (?, ?, ?, ?)")
+      .run("p1", "u1", JSON.stringify({ regno: "УБ99010101", mobilephone: "9911-2233" }), Date.now());
+    as("u1");
+    await post("SaveHrApplicant", { regno: "уб99010101", mobilephone: "9911-2233", addr2: "x" });
+    await post("SaveHrApplicant", { mobilephone: "9911 2233" });
+    expect(stored().profile).toMatchObject({ regno: "УБ99010101", mobilephone: "9911-2233", addr2: "x" });
+    await post("SaveHrApplicant", { mobilephone: "8811 2233" }); // a new number is normalised
+    expect(stored().profile.mobilephone).toBe("88112233");
+  });
+
+  it("SaveHrApplicant stores регистр upper-cased and the phone as its 8 digits", async () => {
+    as("u1");
+    await post("SaveHrApplicant", { regno: " уб99010101 ", mobilephone: "+976 9911-2233" });
+    expect(stored().profile).toMatchObject({ regno: "УБ99010101", mobilephone: "99112233" });
   });
 });
 
@@ -273,18 +359,22 @@ const listOf = (endpoint: string, key?: string) => async () => {
   return (key ? data[key] : data) as Array<Record<string, unknown>>;
 };
 
+/** Each interest body names another position: the same group + position twice is refused. */
+let interestSeq = 3700;
+
 const sections: Section[] = [
-  { name: "education", save: "SaveHrAppEducation", body: (id) => ({ entryid: id, schoolname: "MUST" }), list: listOf("GetHrAppEducationData", "hrappedulist"), del: "DeleteHrAppEducation", marker: "schoolname" },
+  { name: "education", save: "SaveHrAppEducation", body: (id) => ({ entryid: id, universitynametext: "MUST" }), list: listOf("GetHrAppEducationData", "hrappedulist"), del: "DeleteHrAppEducation", marker: "universitynametext" },
   { name: "language", save: "SaveAppForLanguage", body: (id) => ({ entryid: id, forlanguageid: 1, note: "MUST" }), list: listOf("GetHrAppEducationData", "hrapplanglist"), del: "DeleteAppForLanguage", marker: "note" },
   { name: "skill", save: "SaveAppSkillComp", body: (id) => [{ entryid: id, skillcompid: 1, note: "MUST" }], list: listOf("GetHrAppEducationData", "hrappcomplist"), del: "DeleteAppSkillComp", marker: "note" },
-  { name: "experience", save: "SaveAppExperience", body: (id) => ({ entryid: id, companyname: "MUST" }), list: listOf("GetHrAppExperienceData", "hrappexplist"), del: "DeleteAppExperience", marker: "companyname" },
-  { name: "family", save: "SaveAppFamily", body: (id) => [{ entryid: id, firstname: "MUST" }], list: listOf("GetHrAppFamilyData", "hrappfamilylist"), del: "DeleteAppFamily", marker: "firstname" },
-  { name: "interests", save: "SaveInterestedJobItem", body: (id) => ({ entryid: id, posgroupid: 142, note: "MUST" }), list: listOf("getInterestedJobsList"), del: "deleteInterestedJob", marker: "note" },
+  { name: "experience", save: "SaveAppExperience", body: (id) => ({ entryid: id, orgname: "Шунхлай", jobid: 100, companyname: "MUST" }), list: listOf("GetHrAppExperienceData", "hrappexplist"), del: "DeleteAppExperience", marker: "companyname" },
+  { name: "family", save: "SaveAppFamily", body: (id) => [{ entryid: id, relativeid: 1, firstname: "MUST" }], list: listOf("GetHrAppFamilyData", "hrappfamilylist"), del: "DeleteAppFamily", marker: "firstname" },
+  { name: "interests", save: "SaveInterestedJobItem", body: (id) => ({ entryid: id, posgroupid: 142, positionid: (interestSeq += 1), note: "MUST" }), list: listOf("getInterestedJobsList"), del: "deleteInterestedJob", marker: "note" },
 ];
 
 describe.each(sections)("section $name", (s) => {
   it("save → list shows it → update in place → delete → gone (all via D1)", async () => {
     as("u1");
+    await ready();
     const created = await post(s.save, s.body(0));
     expect(created.body.rettype).toBe(0);
 
@@ -340,6 +430,7 @@ describe("files", () => {
 
   it("CV larger than one D1 chunk round-trips byte-exact, then deletes", async () => {
     as("u1");
+    await ready();
     const bytes = new Uint8Array(1_200_000).map((_, i) => (i * 31) % 256); // ~1.6 MB base64
     const fd = new FormData();
     fd.set("file", new File([bytes], "cv.pdf", { type: "application/pdf" }));
@@ -353,30 +444,125 @@ describe("files", () => {
 
     const p = await profileOf();
     expect(p.filename).toBe("cv.pdf");
-    expect(Buffer.from(String(p.filedata), "base64").equals(Buffer.from(bytes))).toBe(true);
+    // `get` stays light: the name only; the bytes come from GET /api/me/cv.
+    expect(p).not.toHaveProperty("filedata");
+    const res = await download();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.headers.get("content-disposition")).toContain('filename="cv.pdf"');
+    expect(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(bytes))).toBe(true);
 
-    // A non-"get" mutation must not wipe the file (files load only on "get").
+    // A non-"get" mutation must not wipe the file (it is never loaded into the doc).
     await post("SaveHrApplicant", { addr2: "x" });
-    const p2 = await profileOf();
-    expect(p2.filename).toBe("cv.pdf");
-    expect(String(p2.filedata).length).toBe(String(p.filedata).length);
+    expect((await profileOf()).filename).toBe("cv.pdf");
+    expect(Buffer.from(await (await download()).arrayBuffer()).equals(Buffer.from(bytes))).toBe(true);
 
     expect((await post("deleteAppCV")).body.rettype).toBe(0);
     const p3 = await profileOf();
     expect(p3.filename).toBeNull();
     expect(rows("select * from applicant_file where kind = 'cv'")).toEqual([]);
+    const gone = await download();
+    expect(gone.status).toBe(404);
+    expect(((await gone.json()) as Env).retmsg).toBe("CV хавсаргаагүй байна.");
+  });
+
+  it("re-uploading replaces the CV; the download keeps a Cyrillic name and the Word MIME type", async () => {
+    as("u1");
+    await ready();
+    const first = new FormData();
+    first.set("file", new File([new Uint8Array([1])], "old.pdf"));
+    await post("SaveAppCV", first);
+    const second = new FormData();
+    second.set("file", new File([new Uint8Array([7, 8, 9])], "Анкет Бат.docx"));
+    expect((await post("SaveAppCV", second)).body.rettype).toBe(0);
+
+    expect((await profileOf()).filename).toBe("Анкет Бат.docx");
+    const res = await download();
+    expect(res.headers.get("content-type")).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(res.headers.get("content-disposition")).toBe(
+      `attachment; filename="_____ ___.docx"; filename*=UTF-8''${encodeURIComponent("Анкет Бат.docx")}`,
+    );
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([7, 8, 9]);
+  });
+
+  it("the download is the signed-in applicant's own: 401 signed out, 404 for another user", async () => {
+    as("uA", "a@x.mn");
+    await post("SaveHrApplicant", { regno: "АА00000001", mobilephone: "99001100" });
+    const fd = new FormData();
+    fd.set("file", new File([new Uint8Array([1, 2, 3])], "a.pdf"));
+    await post("SaveAppCV", fd);
+    expect((await download()).status).toBe(200);
+
+    as(null);
+    expect((await download()).status).toBe(401);
+    as("uB", "b@x.mn");
+    expect((await download()).status).toBe(404);
   });
 
   it("picture upload is served back as a data URL", async () => {
     as("u1");
+    await ready();
     const fd = new FormData();
     fd.set("file", new File([new Uint8Array([0xff, 0xd8, 0xff])], "me.jpg"));
     expect((await post("SaveAppPicture", fd)).body.rettype).toBe(0);
     expect((await profileOf()).picturedata).toBe("data:image/jpeg;base64,/9j/");
   });
 
+  it("refuses a CV that is not PDF/DOC/DOCX by extension or reported type: Mongolian retmsg, nothing stored", async () => {
+    as("u1");
+    await ready();
+    const before = String(rows("select data_json from applicant_account")[0].data_json);
+    for (const file of [
+      new File([new Uint8Array([1])], "cv.exe"),
+      new File([new Uint8Array([1])], "cv", { type: "application/pdf" }), // no extension
+      new File([new Uint8Array([1])], "cv.pdf", { type: "text/html" }), // lying extension
+      new File([new Uint8Array([1])], "photo.png", { type: "image/png" }),
+    ]) {
+      const fd = new FormData();
+      fd.set("file", file);
+      const r = await post("SaveAppCV", fd);
+      expect(r.status, file.name).toBe(415);
+      expect(r.body.rettype).not.toBe(0);
+      expect(r.body.retmsg).toBe("PDF, DOC эсвэл DOCX файл оруулна уу.");
+    }
+    expect(rows("select * from applicant_file")).toEqual([]);
+    expect(String(rows("select data_json from applicant_account")[0].data_json)).toBe(before);
+    expect((await profileOf()).filename).toBeNull();
+
+    // An unknown type (octet-stream, or none) with an accepted extension is fine.
+    const ok = new FormData();
+    ok.set("file", new File([new Uint8Array([1])], "CV.DOCX", { type: "application/octet-stream" }));
+    expect((await post("SaveAppCV", ok)).body.rettype).toBe(0);
+  });
+
+  it("refuses a photo that is not JPEG/PNG/WebP by type or first bytes; nothing stored", async () => {
+    as("u1");
+    await ready();
+    for (const file of [
+      new File([new TextEncoder().encode("<svg/>")], "me.jpg"), // bytes are not an image
+      new File([new Uint8Array([0xff, 0xd8, 0xff])], "me.gif", { type: "image/gif" }),
+      new File([new TextEncoder().encode("%PDF-1.4")], "me.png", { type: "image/png" }),
+    ]) {
+      const fd = new FormData();
+      fd.set("file", file);
+      const r = await post("SaveAppPicture", fd);
+      expect(r.status, file.name).toBe(415);
+      expect(r.body.retmsg).toBe("Зураг оруулна уу (JPG, PNG).");
+    }
+    expect(rows("select * from applicant_file")).toEqual([]);
+    expect((await profileOf()).picturedata ?? null).toBeNull();
+
+    const png = new FormData();
+    png.set("file", new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a])], "me.png", { type: "image/png" }));
+    expect((await post("SaveAppPicture", png)).body.rettype).toBe(0);
+  });
+
   it("upload with no file → failure envelope, nothing stored", async () => {
     as("u1");
+    await ready();
     const r = await post("SaveAppCV", new FormData());
     expect(r.body.rettype).not.toBe(0);
     expect(rows("select * from applicant_file")).toEqual([]);
@@ -388,6 +574,7 @@ describe("files", () => {
 describe("applications", () => {
   it("submit → appears in getRecruitmenRequestList; duplicate refused; DeleteOrderApp removes it", async () => {
     as("u1");
+    await ready();
     const r = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 786, salrequest: 3_000_000 });
     expect(r.body.rettype).toBe(0);
 
@@ -406,6 +593,7 @@ describe("applications", () => {
 
   it("unknown posting → failure envelope, nothing recorded", async () => {
     as("u1");
+    await ready();
     const r = await post("SaveHrRecruitmentOrderApp", { recruitmentorderid: 999_999 });
     expect(r.body.rettype).not.toBe(0);
     expect((await get("getRecruitmenRequestList")).body.retdata).toEqual([]);
@@ -436,7 +624,7 @@ describe("legacy applicant_profile snapshot", () => {
       .run("p1", "u_legacy", JSON.stringify({ addr2: "Legacy addr" }), Date.now());
     as("u_legacy", "legacy@x.mn");
     await get("get");
-    await post("SaveHrApplicant", { addr2: "Edited" });
+    await post("SaveHrApplicant", { ...IDENTITY, addr2: "Edited" });
     expect((await profileOf()).addr2).toBe("Edited");
   });
 

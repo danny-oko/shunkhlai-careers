@@ -15,11 +15,15 @@ const SEARCH_ONLY = new Set(["getPosGroupDropdown", "getPositionsDropdown", "Get
 
 type Envelope = { rettype?: number; retdata?: unknown };
 
+const LOOKUP_TIMEOUT_MS = 10_000;
+
 async function liveGet(endpoint: string, params: Record<string, string>): Promise<unknown> {
   const query = new URLSearchParams(params).toString();
   const res = await fetch(`${API_BASE_URL}${APPLICANT_BASE}/${endpoint}?${query}`, {
     headers: { Accept: "application/json", language: LANGUAGE },
     cache: "no-store",
+    // A pull labels its rows through here; a hung list must not hold it.
+    signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`${endpoint}: HTTP ${res.status}`);
   const body = (await res.json()) as Envelope;
@@ -30,7 +34,10 @@ async function liveGet(endpoint: string, params: Record<string, string>): Promis
 const blank = (value: unknown) => value === null || value === undefined || value === "";
 
 function liveDeps(): Pick<HandlerDeps, "label" | "jobOrder"> {
-  // One request may resolve several keys from the same list.
+  // One request may resolve several keys from the same list. The whole list:
+  // live (2026-09-22) the dropdowns ignore `ids` — the job list asked for one
+  // id, or the university list under Монгол, still answers all 1788 / 1762
+  // rows — so asking for one key would only fetch them under another cache key.
   const lists = new Map<string, Promise<Row[]>>();
 
   const list = (dropdown: string, parent: Row | undefined) => {

@@ -26,15 +26,17 @@ export function HeroOverlay({
   onSelect: (index: number) => void;
 }) {
   return (
-    <div className="absolute inset-x-0 bottom-0 text-white">
+    // z-30: over the slides, which carry a z-index of their own. See the note
+    // on the scrim in <HeroStage>.
+    <div className="absolute inset-x-0 bottom-0 z-30 text-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 pb-10 sm:pb-14 lg:px-10 lg:pb-16">
         <p
-          key={slide.word}
+          key={slide.src}
           className="brand-word-in text-[clamp(1.1875rem,0.9583rem_+_1.0185vw,1.875rem)] font-semibold tracking-[-0.02em] [text-shadow:0_2px_24px_rgb(0_0_0/45%)]"
         >
-          Хөдөлмөр {slide.word} хөдөлгүүр
+          Хүчирхэг монголын хөгжлийн хүрд
           <span className="mt-1 block type-copy font-medium opacity-75">
-            {slide.caption} · {slide.captionEn}
+            {slide.caption}
           </span>
         </p>
 

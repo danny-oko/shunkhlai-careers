@@ -213,11 +213,13 @@ async function createAccount(email: string, identity: ClerkIdentity): Promise<vo
 
 /**
  * The applicant document for this Clerk identity, created on first use.
- * File contents are loaded only when `withFiles` is set (the `get` call).
+ * The photo's contents are loaded only when `withPicture` is set (the `get`
+ * call, which shows it). The CV's never are: `get` carries only its name and
+ * the file is read on demand (`readCv` — the `/api/me/cv` download, the ERP push).
  */
 export async function loadAccount(
   identity: ClerkIdentity,
-  { withFiles = false }: { withFiles?: boolean } = {},
+  { withPicture = false }: { withPicture?: boolean } = {},
 ): Promise<LoadedAccount> {
   const email = normalizeEmail(identity.email);
   const select = () =>
@@ -239,10 +241,7 @@ export async function loadAccount(
     picture: picture ? "" : null,
   };
 
-  if (withFiles) {
-    if (doc.cv) doc.cv.filedata = (await readFile(email, "cv"))?.data ?? "";
-    if (picture) doc.picture = (await readFile(email, "picture"))?.data ?? null;
-  }
+  if (withPicture && picture) doc.picture = (await readFile(email, "picture"))?.data ?? null;
 
   return { email, doc, nextEntryId, version: row.updatedAt };
 }
@@ -337,7 +336,7 @@ async function writeFile(
   }
 }
 
-/** The stored CV (base64) for this account, or null — used by the ERP push. */
+/** The stored CV (base64) for this account, or null — the download and the ERP push. */
 export async function readCv(email: string): Promise<{ filename: string; data: string } | null> {
   const file = await readFile(normalizeEmail(email), "cv");
   return file ? { filename: file.filename ?? "cv", data: file.data } : null;

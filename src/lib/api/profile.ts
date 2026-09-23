@@ -1,4 +1,7 @@
+import { RETRY_LINK_FLAG } from "@/lib/applicant-identity";
+
 import { ME_BASE } from "./core/config";
+import { ApiError } from "./core/errors";
 import { apiGet, apiPost, apiUpload } from "./core/request";
 import { buildProfilePayload } from "./profile-payload";
 
@@ -6,8 +9,9 @@ export { buildProfilePayload };
 
 /**
  * The applicant's core record. One call returns the personal details, the
- * profile photo, the CV *and* the per-section completion percentages — there
- * is no separate endpoint for downloading a CV.
+ * profile photo, the CV *and* the per-section completion percentages — the
+ * ERP has no separate endpoint for downloading a CV. `/api/me/get` sends only
+ * the CV's `filename`; its bytes come from `downloadCv` (`/api/me/cv`).
  */
 
 export type MaritalOption = { key: string; text: string };
@@ -50,7 +54,7 @@ export type ApplicantProfile = {
   maritalOptions?: MaritalOption[];
   /** Base64 profile photo. */
   picturedata?: string | null;
-  /** CV file name and Base64 contents. */
+  /** CV file name (null: none) and, from the ERP only, its Base64 contents. */
   filename?: string | null;
   filedata?: string | null;
   /** Completion percentages, 0-100. */
@@ -60,6 +64,13 @@ export type ApplicantProfile = {
   distinctper?: number;
   familyper?: number;
   totalper?: number;
+  /**
+   * `/api/me` only: the account is linked to an ERP record, so the регистр
+   * can no longer change. Never sent back.
+   */
+  erplinked?: boolean;
+  /** `/api/me` only: the ERP's refusal of the stored регистр + утас, else null. */
+  erplinkerror?: string | null;
   [extra: string]: unknown;
 };
 
@@ -88,6 +99,9 @@ export type ProfileInput = {
   custom1?: string;
   custom2?: string;
 };
+
+/** Ids the profile form can empty (`toInput` sends them as null). */
+const CLEARABLE_IDS = ["countryid", "divisionid", "districtid", "relativeid", "relativeid2"] as const;
 
 type Wrapped = { applicantdata: ApplicantProfile[]; maritalstatus?: unknown };
 
@@ -118,9 +132,25 @@ export async function getProfile(): Promise<ApplicantProfile> {
   return unwrapProfile(await apiGet<unknown>(`${ME_BASE}/get`));
 }
 
-/** POST /api/me/SaveHrApplicant */
-export function saveProfile(body: ProfileInput, loaded?: ApplicantProfile | null) {
-  return apiPost<unknown>(`${ME_BASE}/SaveHrApplicant`, buildProfilePayload(body, loaded));
+/**
+ * POST /api/me/SaveHrApplicant. `retryLink`: the applicant asked to try the
+ * ERP again with a регистр + утас it refused (the identity form / banner only;
+ * an ordinary profile save never lifts the refusal — see `RETRY_LINK_FLAG`).
+ */
+export function saveProfile(
+  body: ProfileInput,
+  loaded?: ApplicantProfile | null,
+  options: { retryLink?: boolean } = {},
+) {
+  const payload = buildProfilePayload(body, loaded);
+  // The ERP body leaves a blank id out; /api/me still has to hear that it was
+  // emptied (a missing key would keep the stored one), and the sync then
+  // leaves it out of the ERP's full replace, which empties it there too.
+  for (const key of CLEARABLE_IDS) {
+    if (key in body && (body[key] === null || body[key] === undefined)) payload[key] = null;
+  }
+  if (options.retryLink) payload[RETRY_LINK_FLAG] = true;
+  return apiPost<unknown>(`${ME_BASE}/SaveHrApplicant`, payload);
 }
 
 /** POST /api/me/SaveAppPicture */
@@ -136,6 +166,25 @@ export function uploadCv(file: File) {
 /** POST /api/me/deleteAppCV — no parameters; the Clerk session identifies the applicant. */
 export function deleteCv() {
   return apiPost<unknown>(`${ME_BASE}/deleteAppCV`);
+}
+
+/**
+ * GET /api/me/cv — the stored CV's bytes, typed from its name, for the
+ * applicant to save again. Throws `ApiError` with the server's Mongolian
+ * message (none stored → 404 "CV хавсаргаагүй байна.").
+ */
+export async function downloadCv(): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(`${ME_BASE}/cv`, { credentials: "same-origin", cache: "no-store" });
+  } catch {
+    throw new ApiError("Серверт холбогдож чадсангүй. Холболтоо шалгаад дахин оролдоно уу.");
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { retmsg?: string } | null;
+    throw new ApiError(body?.retmsg || "Алдаа гарлаа. Дахин оролдоно уу.", { status: response.status });
+  }
+  return response.blob();
 }
 
 /** Turns the Base64 photo from `getProfile` into something `<img src>` accepts. */

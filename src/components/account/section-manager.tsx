@@ -14,6 +14,7 @@ import { Field, FormMessage } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toApiError } from "@/lib/api";
 import type { DropdownOption, DropdownQuery, SectionEntry, SectionResource } from "@/lib/api";
@@ -30,7 +31,8 @@ import type { DropdownOption, DropdownQuery, SectionEntry, SectionResource } fro
 export type FieldDef = {
   name: string;
   label: string;
-  type: "text" | "number" | "date" | "textarea" | "select" | "combobox" | "yesno";
+  /** `switch` holds "Y" / "N" (a Postman `is…` flag), like `yesno` as a toggle. */
+  type: "text" | "number" | "date" | "textarea" | "select" | "combobox" | "yesno" | "switch";
   required?: boolean;
   placeholder?: string;
   hint?: string;
@@ -50,20 +52,65 @@ export type FieldDef = {
    * (default) or `0`. Never `null` — the backend 400s on it for some columns.
    */
   emptyAs?: EmptyAs;
+  /**
+   * A `select` / `combobox` whose list may not have the answer: a switch
+   * under it trades the list for a text input writing `name` (the id is then
+   * left empty — so `emptyAs` decides what it is sent as). `required` is met
+   * by either, and so is a dependent field's `depsRequired`.
+   */
+  freeText?: { name: string; toggle: string; placeholder?: string };
+  /**
+   * The field does not apply while this holds (say, Ажлаас гарсан while
+   * «Одоо ажиллаж байгаа» is on): it is not shown, not required, and sent
+   * empty, so a value typed before it was hidden does not linger.
+   */
+  hidden?: (values: Values) => boolean;
+  /**
+   * A `select` whose keys are codes, not ids (Хүйс `"M"` / `"F"`): sent as the
+   * text it holds rather than as a number.
+   */
+  textValue?: boolean;
+  /** A filled value's problem as a Mongolian message, else null (an empty one is `required`'s). */
+  validate?: (value: string) => string | null;
   wide?: boolean;
 };
 
 export type Values = Record<string, unknown>;
+
+const isBlank = (value: unknown) => String(value ?? "").trim() === "";
+
+/** Free-text fields that open typed: a saved row with the name and no id. */
+function initialManual(fields: FieldDef[], initial: Values): Record<string, boolean> {
+  const manual: Record<string, boolean> = {};
+  for (const field of fields) {
+    if (!field.freeText) continue;
+    manual[field.name] = isBlank(initial[field.name]) && !isBlank(initial[field.freeText.name]);
+  }
+  return manual;
+}
 
 /** The parent values this field's list was, or would be, read under. */
 function depKeyOf(field: FieldDef, values: Values): string {
   return (field.deps ?? []).map((name) => String(values[name] ?? "")).join("|");
 }
 
-/** `false` while a required parent is still unchosen. */
-function isReady(field: FieldDef, values: Values): boolean {
+/**
+ * `false` while a required parent is still unchosen. A parent answered by
+ * hand (its `freeText` switched on) counts once its name is typed — the list
+ * under it is then read with the parent's id empty (`0`).
+ */
+function isReady(
+  field: FieldDef,
+  values: Values,
+  fields: FieldDef[],
+  manual: Record<string, boolean>,
+): boolean {
   if (!field.depsRequired) return true;
-  return (field.deps ?? []).every((name) => String(values[name] ?? "") !== "");
+  return (field.deps ?? []).every((name) => {
+    if (String(values[name] ?? "") !== "") return true;
+    const typed = manual[name] ? fields.find((parent) => parent.name === name)?.freeText : undefined;
+    return !!typed && !isBlank(values[typed.name]);
+  });
 }
 
 function SelectField({
@@ -72,6 +119,7 @@ function SelectField({
   value,
   onChange,
   id,
+  ready,
   waitingFor,
 }: {
   field: FieldDef;
@@ -79,10 +127,10 @@ function SelectField({
   value: string;
   onChange: (value: string) => void;
   id: string;
+  ready: boolean;
   waitingFor: string;
 }) {
   const depKey = depKeyOf(field, values);
-  const ready = isReady(field, values);
 
   // The same loader the standalone forms use, so a dependent list behaves the
   // same way whether it is described by a `FieldDef` or wired up by hand.
@@ -125,6 +173,7 @@ function ComboboxField({
   value,
   onChange,
   id,
+  ready,
   waitingFor,
 }: {
   field: FieldDef;
@@ -132,10 +181,9 @@ function ComboboxField({
   value: string;
   onChange: (value: string) => void;
   id: string;
+  ready: boolean;
   waitingFor: string;
 }) {
-  const ready = isReady(field, values);
-
   return (
     <AsyncCombobox
       id={id}
@@ -165,6 +213,7 @@ function EntryForm({
   onSubmit: (values: Values) => Promise<void>;
 }) {
   const [values, setValues] = React.useState<Values>(initial);
+  const [manual, setManual] = React.useState(() => initialManual(fields, initial));
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -178,21 +227,50 @@ function EntryForm({
     setValues((current) => clearDependents({ ...current, [name]: value }, name, edges));
   }
 
+  /**
+   * List ⇄ typed: the side switched away from is emptied, so only one is sent.
+   * Either way the answer changed, so what hangs off the field goes too.
+   */
+  function setTyped(field: FieldDef, typed: boolean) {
+    setManual((current) => ({ ...current, [field.name]: typed }));
+    set(field.name, "");
+    if (!typed) set(field.freeText!.name, "");
+  }
+
+  /** What the field holds: the typed name in typed mode, else its value. */
+  const answerOf = (field: FieldDef) =>
+    field.freeText && manual[field.name] ? values[field.freeText.name] : values[field.name];
+
+  const shownFields = fields.filter((field) => !field.hidden?.(values));
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const missing = fields.find(
-      (field) => field.required && String(values[field.name] ?? "").trim() === "",
-    );
+    const missing = shownFields.find((field) => field.required && isBlank(answerOf(field)));
     if (missing) {
       setError(`«${missing.label}» талбарыг бөглөнө үү.`);
       return;
+    }
+    for (const field of shownFields) {
+      const answer = String(answerOf(field) ?? "").trim();
+      const problem = answer && field.validate ? field.validate(answer) : null;
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
+
+    // A typed name only counts in typed mode; a picked id drops it.
+    const sent = { ...values };
+    for (const field of fields) {
+      if (field.freeText && !manual[field.name]) sent[field.freeText.name] = "";
+      if (field.hidden?.(values)) sent[field.name] = "";
     }
 
     setError(null);
     setIsSaving(true);
     try {
-      await onSubmit(values);
+      await onSubmit(sent);
     } catch (submitError) {
       setError(toApiError(submitError).message);
     } finally {
@@ -207,26 +285,54 @@ function EntryForm({
       noValidate
     >
       <div className="grid gap-5 sm:grid-cols-2">
-        {fields.map((field) => {
+        {shownFields.map((field) => {
           const id = `field-${field.name}`;
           const raw = values[field.name];
           const value = raw === null || raw === undefined ? "" : String(raw);
+          const typed = field.freeText && manual[field.name] ? field.freeText : null;
+
+          if (field.type === "switch") {
+            // A toggle reads as its own sentence, so it sits level with the
+            // inputs beside it rather than under a label of its own.
+            return (
+              <label
+                key={field.name}
+                className={`flex w-fit cursor-pointer items-center gap-2 self-end pb-2 text-sm${field.wide ? " sm:col-span-2" : ""}`}
+              >
+                <Switch
+                  id={id}
+                  checked={value === "Y"}
+                  onCheckedChange={(checked) => set(field.name, checked ? "Y" : "N")}
+                />
+                {field.label}
+              </label>
+            );
+          }
 
           return (
             <Field
               key={field.name}
               label={field.label}
-              htmlFor={id}
+              htmlFor={typed ? `field-${typed.name}` : id}
               required={field.required}
-              hint={field.hint}
+              hint={typed ? undefined : field.hint}
               className={field.wide ? "sm:col-span-2" : undefined}
             >
-              {field.type === "select" ? (
+              {typed ? (
+                <Input
+                  id={`field-${typed.name}`}
+                  type="text"
+                  placeholder={typed.placeholder}
+                  value={String(values[typed.name] ?? "")}
+                  onChange={(event) => set(typed.name, event.target.value)}
+                />
+              ) : field.type === "select" ? (
                 <SelectField
                   id={id}
                   field={field}
                   values={values}
                   value={value}
+                  ready={isReady(field, values, fields, manual)}
                   waitingFor={labelOf(field.deps?.[0] ?? "")}
                   onChange={(next) => set(field.name, next)}
                 />
@@ -236,6 +342,7 @@ function EntryForm({
                   field={field}
                   values={values}
                   value={value}
+                  ready={isReady(field, values, fields, manual)}
                   waitingFor={labelOf(field.deps?.[0] ?? "")}
                   onChange={(next) => set(field.name, next)}
                 />
@@ -267,6 +374,17 @@ function EntryForm({
                   onChange={(event) => set(field.name, event.target.value)}
                 />
               )}
+              {field.freeText ? (
+                <label className="text-muted-foreground flex w-fit cursor-pointer items-center gap-2 text-xs">
+                  <Switch
+                    id={`${id}-manual`}
+                    size="sm"
+                    checked={!!manual[field.name]}
+                    onCheckedChange={(checked) => setTyped(field, checked)}
+                  />
+                  {field.freeText.toggle}
+                </label>
+              ) : null}
             </Field>
           );
         })}
@@ -298,6 +416,8 @@ export function SectionManager<TEntry extends SectionEntry>({
   resource,
   fields,
   defaults,
+  payload: toPayload,
+  edit,
   primary,
   secondary,
   emptyText = "Одоогоор бичлэг алга.",
@@ -308,6 +428,10 @@ export function SectionManager<TEntry extends SectionEntry>({
   resource: SectionResource<TEntry>;
   fields: FieldDef[];
   defaults: Values;
+  /** Last word on the save body — for a column derived from the others. */
+  payload?: (values: Values) => Values;
+  /** What an edit opens with, from the saved row — for a value derived from the others. */
+  edit?: (values: Values) => Values;
   primary: (row: TEntry) => string;
   secondary: (row: TEntry) => string;
   emptyText?: string;
@@ -348,7 +472,8 @@ export function SectionManager<TEntry extends SectionEntry>({
   }, []);
 
   async function save(values: Values) {
-    const payload = encodeSectionValues(fields, values);
+    const encoded = encodeSectionValues(fields, values);
+    const payload = toPayload ? toPayload(encoded) : encoded;
 
     await resource.save(payload as TEntry);
     setEditing(null);
@@ -392,7 +517,11 @@ export function SectionManager<TEntry extends SectionEntry>({
         <EntryForm
           fields={fields}
           // Defaults are for new rows only; see `initialValues`.
-          initial={initialValues(fields, defaults, editing === "new" ? "new" : (editing as Values))}
+          initial={
+            editing === "new"
+              ? initialValues(fields, defaults, "new")
+              : (edit ?? ((values: Values) => values))(initialValues(fields, defaults, editing as Values))
+          }
           onCancel={() => setEditing(null)}
           onSubmit={save}
         />

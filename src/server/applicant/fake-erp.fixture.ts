@@ -2,7 +2,8 @@
  * Test-only: a stateful fake of the live ERP (careers.shunkhlai.mn), served
  * through a `fetch` replacement. It holds the applicant's record, every list,
  * the CV/photo and the request list, assigns entry ids, and enforces the
- * Postman collection's delete query-parameter casing. Nothing here talks to the
+ * Postman collection's delete query-parameter casing. Login and SaveHrAppUser
+ * answer as the live ERP does (see `saveUser`). Nothing here talks to the
  * network.
  */
 
@@ -50,10 +51,18 @@ export const ERP_DELETES: Record<string, { list: ListName; param: string }> = {
   DeleteOrderApp: { list: "requests", param: "entryID" },
 };
 
+/** The live ERP's answer to an unknown регистр or a wrong phone. */
+export const MISMATCH = "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!";
+
+/** changeUserInfo's answer to a wrong `oldpassword` (as the dev mock words it). */
+export const WRONG_PASSWORD = "Одоогийн нууц үг буруу байна.";
+
 export class FakeErp {
   regno = "УБ99010101";
   phone = "99112233";
   token = "tok-FAKE-ERP-SECRET-9f8e7d";
+  /** The ERP knows `regno` (false: a candidate new to the ERP). */
+  registered = true;
 
   record: Row = {};
   lists: Record<ListName, Row[]> = {
@@ -70,6 +79,8 @@ export class FakeErp {
     requests: [],
   };
   recruitmentorders: Row[] = [];
+  /** `/get`'s `maritalstatus[]` sibling (left out while empty). */
+  marital: Row[] = [];
   calls: FakeCall[] = [];
   nextId = 500;
 
@@ -79,6 +90,13 @@ export class FakeErp {
   refuse = new Map<string, string>();
   /** Delay (ms) before answering any call — driven by the test's timers. */
   delayMs = 0;
+  /**
+   * How an array save (SaveAppSkillComp, SaveAppFamily) treats the rows it
+   * is NOT sent. Postman only says "бүх мөрийг нэг дор илгээнэ" and a live
+   * write cannot be tried, so both readings are modelled: `upsert` leaves
+   * them, `replace` makes the list exactly the array (unsent rows are gone).
+   */
+  batchSaves: "upsert" | "replace" = "upsert";
 
   constructor(seed?: (erp: FakeErp) => void) {
     this.record = {
@@ -134,21 +152,44 @@ export class FakeErp {
     return this.answer(endpoint, url.searchParams, body, headers.get("authorization"));
   };
 
+  /**
+   * Postman 01/02: a new регистр is created (from the body) and logged in; an
+   * existing one only logs in when `mobilephone` matches, and is never changed.
+   */
+  private saveUser(b: Row | null): Response {
+    const regno = String(b?.regno ?? "");
+    const phone = String(b?.mobilephone ?? "");
+    if (!regno || !phone || !b?.lastname || !b?.firstname) return env(null, 1, "Мэдээлэл дутуу байна.");
+    if (this.registered && regno === this.regno) {
+      return phone === this.phone ? env({ "access_token": this.token }) : env(null, 1, MISMATCH);
+    }
+    this.registered = true;
+    this.regno = regno;
+    this.phone = phone;
+    this.record = { lastname: b.lastname, firstname: b.firstname, regno, mobilephone: phone, email2: b.email ?? "" };
+    return env({ "access_token": this.token });
+  }
+
   private answer(endpoint: string, params: URLSearchParams, body: unknown, auth: string | null): Response {
     if (endpoint === "auth/login") {
+      // Live: unknown регистр and wrong phone are the same HTTP 401.
       const b = body as { regNo?: string; mobile?: string } | null;
-      if (b?.regNo !== this.regno || b?.mobile !== this.phone) {
-        return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 });
+      if (!this.registered || b?.regNo !== this.regno || b?.mobile !== this.phone) {
+        return new Response(JSON.stringify({ rettype: -1, retmsg: MISMATCH, retdata: null }), { status: 401 });
       }
-      return new Response(JSON.stringify({ access_token: this.token }), { status: 200 });
+      return new Response(JSON.stringify({ "access_token": this.token }), { status: 200 });
     }
-    if (endpoint === "SaveHrAppUser") return env(null, 1, "SaveHrAppUser must never be called");
+    if (endpoint === "SaveHrAppUser") return this.saveUser(body as Row | null);
     if (auth !== `Bearer ${this.token}`) return env(null, 1, "Нэвтрэх шаардлагатай.");
 
     const L = this.lists;
     switch (endpoint) {
       case "get":
-        return env({ applicantdata: [{ ...this.record, persinfoper: 50 }], recruitmentorders: this.recruitmentorders });
+        return env({
+          applicantdata: [{ ...this.record, persinfoper: 50 }],
+          recruitmentorders: this.recruitmentorders,
+          ...(this.marital.length ? { maritalstatus: this.marital } : {}),
+        });
       case "GetHrAppEducationData":
         return env({ hrappedulist: L.hrappedulist, hrapplanglist: L.hrapplanglist, hrappquallist: L.hrappquallist, hrappcomplist: L.hrappcomplist });
       case "GetHrAppExperienceData":
@@ -160,6 +201,16 @@ export class FakeErp {
       case "getRecruitmenRequestList":
         // Like the real list: no recruitmentorderid.
         return env(L.requests.map(({ recruitmentorderid: _drop, ...row }) => row));
+      case "changeUserInfo": {
+        // Postman 03: type PASSWORD changes what auth/login compares (the утас);
+        // a wrong oldpassword is rettype ≠ 0 and changes nothing.
+        const b = (body ?? {}) as Row;
+        if (b.type !== "PASSWORD") return env(null, 1, `unsupported type ${String(b.type)}`);
+        if (String(b.oldpassword ?? "") !== this.phone) return env(null, 1, WRONG_PASSWORD);
+        if (!b.newpassword) return env(null, 1, "Шинэ нууц үг хоосон байна.");
+        this.phone = String(b.newpassword);
+        return env(true);
+      }
       case "SaveHrApplicant": {
         // Full replace: whatever is not sent is reset (files are separate).
         const { filedata, filename, picturedata } = this.record;
@@ -197,17 +248,24 @@ export class FakeErp {
     const save = SAVES[endpoint];
     if (save) {
       const rows = save.batch ? (Array.isArray(body) ? (body as Row[]) : []) : [body as Row];
+      const list = L[save.list];
+      const next = save.batch && this.batchSaves === "replace" ? [] : [...list];
       for (const row of rows) {
         const entryid = Number(row.entryid ?? 0);
-        const list = L[save.list];
         if (entryid > 0) {
-          const i = list.findIndex((r) => Number(r.entryid) === entryid);
-          if (i < 0) return env(null, 1, "Мөр олдсонгүй.");
-          list[i] = { ...list[i], ...row };
+          const old = list.find((r) => Number(r.entryid) === entryid);
+          if (!old) return env(null, 1, "Мөр олдсонгүй.");
+          // An edit is the row as sent (an omitted column is reset, as
+          // SaveHrApplicant's is); only the audit columns stay.
+          const edited = { ...audit(old), ...row, entryid };
+          const i = next.indexOf(old);
+          if (i >= 0) next[i] = edited;
+          else next.push(edited);
         } else {
-          list.push({ ...row, entryid: this.id() });
+          next.push({ ...row, entryid: this.id() });
         }
       }
+      L[save.list] = next;
       return env(true);
     }
 
@@ -228,6 +286,9 @@ export class FakeErp {
   }
 }
 
+/** The ERP's own audit columns of a row (`createdby`, `createddate`, …). */
+const audit = (row: Row) => Object.fromEntries(Object.entries(row).filter(([key]) => /^(created|updated)/.test(key)));
+
 function env(retdata: unknown, rettype = 0, retmsg = "") {
   return new Response(JSON.stringify({ rettype, retmsg, retdata }), {
     status: 200,
@@ -246,10 +307,11 @@ async function readBody(init?: RequestInit): Promise<unknown> {
     }
   }
   if (b instanceof FormData) {
-    for (const value of b.values()) {
+    for (const [field, value] of b.entries()) {
       if (value instanceof Blob) {
         const name = value instanceof File ? value.name : "blob";
-        return { filename: name, bytes: Buffer.from(await value.arrayBuffer()).toString("base64") };
+        const bytes = Buffer.from(await value.arrayBuffer()).toString("base64");
+        return { field, filename: name, type: value.type, bytes };
       }
     }
     return null;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+import { Rise } from "@/components/brand/rise";
 import { BriefList } from "@/components/news/brief-list";
 import { CategoryRail } from "@/components/news/category-rail";
 import { LeadStory } from "@/components/news/lead-story";
@@ -9,7 +10,6 @@ import { Masthead } from "@/components/news/masthead";
 import { SectionHead } from "@/components/news/section-head";
 import { StoryGrid } from "@/components/news/story-grid";
 import { getCategoryCounts, getPublishedArticles } from "@/lib/news/service";
-import { todayInUlaanbaatar } from "@/lib/news/today";
 import { categoryLabel, isNewsCategory } from "@/lib/news/types";
 
 export const metadata: Metadata = {
@@ -56,9 +56,21 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
   const deskName = category ? categoryLabel(category) : null;
 
   return (
-    <main data-newsroom className="flex-1 bg-background pt-16 text-foreground">
-      <Masthead storyCount={everything.length} today={todayInUlaanbaatar()} />
-      <CategoryRail active={category} counts={counts} total={everything.length} />
+    <main
+      data-newsroom
+      className="flex-1 bg-background pt-16 text-foreground"
+    >
+      <Masthead />
+      {/* Carrying on the masthead's stagger, which ends at 260: the desks,
+          then the lead. Only these two - everything under them is below the
+          fold. */}
+      <Rise delay={340}>
+        <CategoryRail
+          active={category}
+          counts={counts}
+          total={everything.length}
+        />
+      </Rise>
 
       <div className="mx-auto max-w-6xl px-6 pb-20 lg:px-10">
         {lead ? (
@@ -67,7 +79,9 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
               <h2 id="lead-heading" className="sr-only">
                 {deskName ? `${deskName} — гол мэдээ` : "Гол мэдээ"}
               </h2>
-              <LeadStory article={lead} />
+              <Rise delay={420}>
+                <LeadStory article={lead} />
+              </Rise>
             </section>
 
             {columns.length > 0 && (

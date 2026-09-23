@@ -14,7 +14,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       type="button"
       variant="ghost"
       size="icon-sm"
-      aria-label="Toggle light or dark theme"
+      aria-label="Цайвар, бараан горим солих"
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       className={cn("rounded-full", className)}
     >

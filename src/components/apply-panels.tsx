@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Check } from "lucide-react";
 
+import { IdentityForm } from "@/components/account/identity-gate";
 import { Button } from "@/components/ui/button";
 import { SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { JobDetail } from "@/lib/jobs/types";
@@ -58,3 +59,17 @@ export const SignInPanel = () => {
     </div>
   );
 };
+
+/** Signed in, but регистр / овог / нэр / утас are not stored yet: fill them here first. */
+export const IdentityPanel = () => (
+  <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-6 py-8">
+    <div className="space-y-2">
+      <SheetTitle className="text-xl tracking-[-0.02em]">Эхлээд үндсэн мэдээллээ бөглөнө үү</SheetTitle>
+      <SheetDescription id="apply-description" className="text-pretty">
+        Анкет илгээхийн өмнө регистр, овог, нэр, утасны дугаараа оруулна уу. Эдгээрээр таны
+        бүртгэлийг ERP системд үүсгэнэ.
+      </SheetDescription>
+    </div>
+    <IdentityForm />
+  </div>
+);

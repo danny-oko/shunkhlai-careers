@@ -23,6 +23,8 @@ import type { ApplicantProfile } from "@/lib/api/profile";
 type SessionValue = {
   status: "loading" | "authenticated" | "anonymous";
   profile: ApplicantProfile | null;
+  /** Signed in, the read finished, and it failed (profile stays null). */
+  profileFailed: boolean;
   refresh: () => Promise<void>;
   signOut: () => void;
 };
@@ -55,6 +57,7 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
     profile: ApplicantProfile | null;
   } | null>(null);
   const profile = isSignedIn && loaded?.userId === userId ? loaded.profile : null;
+  const profileFailed = !!isSignedIn && loaded?.userId === userId && loaded.profile === null;
 
   const status: SessionValue["status"] = !isLoaded
     ? "loading"
@@ -105,8 +108,8 @@ export const SessionProvider = ({ children }: { children: React.ReactNode }) => 
   }, [router]);
 
   const value = React.useMemo<SessionValue>(
-    () => ({ status, profile, refresh, signOut }),
-    [status, profile, refresh, signOut],
+    () => ({ status, profile, profileFailed, refresh, signOut }),
+    [status, profile, profileFailed, refresh, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -3,8 +3,20 @@ import { createHash } from "node:crypto";
 
 import { buildProfilePayload } from "@/lib/api/profile-payload";
 import type { ApplicantProfile, ProfileInput } from "@/lib/api/profile";
-import { ErpError, erpGet, erpLogin, erpPost, erpUpload, hasErp } from "./erp";
-import { CLAIM_TTL_MS, MAX_ATTEMPTS, PROFILE_KEYS, RETRY_FAILED_AFTER_MS, RETRY_PENDING_AFTER_MS, erpIdOfApplication } from "./erp-model";
+import { isIdentityComplete } from "@/lib/applicant-identity";
+import { ErpError, erpGet, erpLogin, erpPost, erpRegister, erpUpload, hasErp } from "./erp";
+import {
+  CLAIM_TTL_MS,
+  MAX_ATTEMPTS,
+  NEVER_BLANK,
+  PROFILE_KEYS,
+  RETRY_FAILED_AFTER_MS,
+  RETRY_PENDING_AFTER_MS,
+  credentialKey,
+  erpIdOfApplication,
+  linkRefused,
+  linkedRegno,
+} from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
@@ -53,9 +65,37 @@ export type PushDeps = {
   batch?: PushBatch;
   /** Postings the ERP already has an application for (`/get` recruitmentorders). */
   appliedOrderIds?: number[];
+  /**
+   * Postings whose earlier application still waits for its DeleteOrderApp
+   * (`withdrawingOrderIds`): a new one for them waits too — the ERP would take
+   * it for the old one ("already applied") and the cancel would then remove it.
+   */
+  withdrawingOrderIds?: Set<number>;
 };
 
-export type Step<T> = { ok: true; value: T } | { ok: false; error: string };
+/**
+ * `linkError`: the ERP's own refusal of the регистр + утас, worth showing the
+ * applicant; `linkKey` is the `credentialKey` of the pair it refused.
+ */
+export type Step<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; linkError?: string; linkKey?: string };
+
+/**
+ * Failures that mean "not ready", not "the ERP failed": nothing was sent, so
+ * they never count towards a pull backoff.
+ */
+export const NOT_READY = new Set(["profile_incomplete", "erp_link_refused", "erp_register_busy"]);
+
+export type LoginOptions = {
+  /** Clerk email, used when the profile has none. */
+  email?: string;
+  /**
+   * Claims the one SaveHrAppUser for this applicant (stored on the document
+   * under its optimistic lock). False: another request is registering.
+   */
+  claimRegister?: () => Promise<boolean>;
+};
 
 export type PushBatch = {
   login?: Promise<Step<string>>;
@@ -78,20 +118,30 @@ function logFailure(code: string, error: unknown) {
 const LICENCE_KEYS = ["isa", "isb", "isc", "isd", "ise"] as const;
 
 /**
- * The D1 profile values worth sending: non-empty ones only, so nothing the
- * ERP holds is blanked. Licence flags only ever go from false to true.
+ * D1 profile values to write over the ERP record: the non-empty ones, plus
+ * `cleared` — fields the applicant emptied here (`DocErp.profileCleared`),
+ * sent empty so the full replace empties them in the ERP too. Never a blank
+ * регистр, овог, нэр or утас (`NEVER_BLANK`). Licence flags only ever go from
+ * false to true.
+ *
+ * `erpRecord` given: the applicant has not saved their profile on our site,
+ * so D1 only holds Clerk defaults (name, email) — those may fill ERP blanks
+ * but never replace what the ERP already has. The утас is the exception: it
+ * is the ERP password, and the record's phone follows it.
  */
-/**
- * D1 profile values to write over the ERP record. Until the applicant has saved
- * their profile on our site, D1 only holds Clerk defaults (name, email), so
- * those may fill ERP blanks but never replace what the ERP already has.
- */
-export function profileOverlay(profile: Row, erpRecord?: Row): Partial<ProfileInput> {
+export function profileOverlay(
+  profile: Row,
+  erpRecord?: Row,
+  cleared: readonly string[] = [],
+): Partial<ProfileInput> {
   const overlay: Record<string, unknown> = {};
   for (const key of PROFILE_KEYS) {
     const value = profile[key];
-    if (str(value) === "") continue;
-    if (erpRecord && str(erpRecord[key]) !== "") continue;
+    if (str(value) === "") {
+      if (cleared.includes(key) && !NEVER_BLANK.has(key)) overlay[key] = value ?? null;
+      continue;
+    }
+    if (erpRecord && str(erpRecord[key]) !== "" && key !== "mobilephone") continue;
     overlay[key] = value;
   }
   for (const key of LICENCE_KEYS) {
@@ -152,19 +202,146 @@ function entryIdFrom(retdata: unknown): number | undefined {
 
 /* --- steps -------------------------------------------------------------- */
 
-/** One ERP login with the applicant's регистр + phone. Never throws. */
-export async function loginFor(doc: ApplicantDoc): Promise<Step<string>> {
-  const regno = str(doc.profile.regno);
-  const phone = str(doc.profile.mobilephone);
-  // No auto-register: the ERP answers "not registered" and "wrong phone" with
-  // the same 401, and SaveHrAppUser is a create-or-update keyed by регистр
-  // that returns a token — registering on a failed login could overwrite (or
-  // hand over) another applicant's ERP record. The row stays in D1 as failed.
+/** SaveHrAppUser's answer when the регистр exists with another phone (password). */
+const MISMATCH = /зөрж байна/i;
+
+/** The ERP's wording, for a refusal that came without it. */
+export const MISMATCH_MESSAGE = "Бүртгэгдсэн регистрийн дугаар болон утасны дугаар зөрж байна!";
+
+/** Shown when changeUserInfo refuses the new утас without saying why. */
+export const PASSWORD_REFUSED_MESSAGE =
+  "ERP систем утасны дугаарыг (нууц үгийг) солихыг зөвшөөрсөнгүй. Өмнөх дугаараа оруулна уу.";
+
+const is401 = (error: unknown) => error instanceof ErpError && error.status === 401;
+
+/** A linked account's 401: the stored регистр + утас are refused — kept so calls stop. */
+function mismatch(doc: ApplicantDoc, error: unknown): Step<string> {
+  logFailure("erp_link_mismatch", error);
+  const message = error instanceof ErpError && MISMATCH.test(error.message) ? error.message : MISMATCH_MESSAGE;
+  return { ok: false, error: "erp_link_mismatch", linkError: message, linkKey: credentialKey(doc.profile) };
+}
+
+/** `auth/login` with the stored pair on a linked account. */
+async function linkedLogin(doc: ApplicantDoc, regno: string, phone: string): Promise<Step<string>> {
   try {
     return { ok: true, value: await erpLogin(regno, phone) };
   } catch (error) {
+    if (is401(error)) return mismatch(doc, error);
     logFailure("erp_login_failed", error);
     return { ok: false, error: "erp_login_failed" };
+  }
+}
+
+/**
+ * The applicant changed утас here on a linked account, and the утас is the
+ * ERP password (Postman 02): log in with the утас the ERP last accepted,
+ * change the password to the new one (Postman 03 `changeUserInfo`, type
+ * PASSWORD), then log in with the new pair. Every refusal ends as `linkError`
+ * + `linkKey` so it is shown and not retried until the applicant acts:
+ * changeUserInfo's own message (rettype ≠ 0), else "…зөрж байна!".
+ *
+ * The new pair is tried whenever the old one no longer works or the change is
+ * refused: the password may already be the new утас (a change that went
+ * through but was not recorded, or a parallel request that got there first).
+ */
+async function followPassword(
+  doc: ApplicantDoc,
+  regno: string,
+  oldPhone: string,
+  newPhone: string,
+  email: string,
+): Promise<Step<string>> {
+  let token: string;
+  try {
+    token = await erpLogin(regno, oldPhone);
+  } catch (error) {
+    if (is401(error)) return linkedLogin(doc, regno, newPhone);
+    logFailure("erp_login_failed", error);
+    return { ok: false, error: "erp_login_failed" };
+  }
+  try {
+    await erpPost("changeUserInfo", token, {
+      phonenumber: newPhone,
+      email,
+      oldpassword: oldPhone,
+      newpassword: newPhone,
+      type: "PASSWORD",
+    });
+  } catch (error) {
+    if (!(error instanceof ErpError && error.rettype !== undefined)) {
+      logFailure("erp_password_failed", error);
+      return { ok: false, error: "erp_password_failed" };
+    }
+    const retry = await linkedLogin(doc, regno, newPhone);
+    if (retry.ok) return retry;
+    logFailure("erp_password_refused", error);
+    const message = error.message && error.message !== "erp_error" ? error.message : PASSWORD_REFUSED_MESSAGE;
+    return { ok: false, error: "erp_password_refused", linkError: message, linkKey: credentialKey(doc.profile) };
+  }
+  return linkedLogin(doc, regno, newPhone);
+}
+
+/**
+ * The ERP token for this applicant. Never throws; one attempt per batch.
+ *
+ * Nothing is called until регистр, овог, нэр and утас are all stored — the
+ * ERP cannot be logged into (or registered with) on less.
+ *
+ * Login first (`auth/login`), so an applicant the ERP already knows is never
+ * sent through SaveHrAppUser. Only a 401 falls back to SaveHrAppUser (Postman
+ * 01/02), which tells the two 401 causes apart: a new регистр is created and
+ * answered with a token; an existing регистр with another phone gets
+ * "…зөрж байна!" and no change — that message comes back as `linkError`
+ * (stored with `linkKey`), and from then on these credentials are not sent at
+ * all until the applicant changes регистр or утас. Only one SaveHrAppUser
+ * per applicant is in flight (`claimRegister`). Other failures (timeout, 5xx)
+ * never register, and neither does a 401 on an account already linked.
+ *
+ * A linked account whose утас changed since the last token (`loginPhone`)
+ * moves the ERP password along first (`followPassword`).
+ */
+export async function loginFor(doc: ApplicantDoc, options: LoginOptions = {}): Promise<Step<string>> {
+  if (!isIdentityComplete(doc.profile)) return { ok: false, error: "profile_incomplete" };
+  if (linkRefused(doc)) return { ok: false, error: "erp_link_refused", linkError: doc.erp?.linkError };
+  const regno = str(doc.profile.regno);
+  const phone = str(doc.profile.mobilephone);
+  const email = str(doc.profile.email2) || (options.email ?? "");
+  const lastGood = doc.erp?.loginPhone;
+  if (linkedRegno(doc) && lastGood && lastGood !== phone) {
+    return followPassword(doc, regno, lastGood, phone, email);
+  }
+  try {
+    return { ok: true, value: await erpLogin(regno, phone) };
+  } catch (error) {
+    if (!is401(error)) {
+      logFailure("erp_login_failed", error);
+      return { ok: false, error: "erp_login_failed" };
+    }
+    // Already linked: the ERP knows this applicant, so a 401 means the stored
+    // регистр + утас are wrong (and no earlier утас is known to change the
+    // password from). Registering is not the point — record the refusal so
+    // the applicant sees it and calls stop.
+    if (linkedRegno(doc)) return mismatch(doc, error);
+  }
+  if (options.claimRegister && !(await options.claimRegister())) {
+    return { ok: false, error: "erp_register_busy" };
+  }
+  try {
+    const token = await erpRegister({
+      lastname: str(doc.profile.lastname),
+      firstname: str(doc.profile.firstname),
+      regno,
+      email,
+      mobilephone: phone,
+    });
+    return { ok: true, value: token };
+  } catch (error) {
+    if (error instanceof ErpError && MISMATCH.test(error.message)) {
+      logFailure("erp_link_mismatch", error);
+      return { ok: false, error: "erp_link_mismatch", linkError: error.message, linkKey: credentialKey(doc.profile) };
+    }
+    logFailure("erp_register_failed", error);
+    return { ok: false, error: "erp_register_failed" };
   }
 }
 
@@ -177,7 +354,11 @@ async function syncProfileAndCv(
   try {
     const record = erpRecord(await erpGet<unknown>("get", token));
     const input = {
-      ...profileOverlay(doc.profile, doc.erp?.profileEdited ? undefined : (record as Row)),
+      ...profileOverlay(
+        doc.profile,
+        doc.erp?.profileEdited ? undefined : (record as Row),
+        doc.erp?.profileCleared,
+      ),
     } as ProfileInput;
     await erpPost("SaveHrApplicant", token, buildProfilePayload(input, record));
   } catch (error) {
@@ -208,12 +389,10 @@ export async function pushApplication(
   deps: PushDeps,
 ): Promise<PushResult> {
   if (!hasErp()) return { status: "skipped" };
-  if (!str(doc.profile.regno) || !str(doc.profile.mobilephone)) {
-    return { status: "failed", error: "profile_incomplete" };
-  }
+  if (!isIdentityComplete(doc.profile)) return { status: "failed", error: "profile_incomplete" };
 
   const batch = deps.batch ?? createPushBatch();
-  batch.login ??= loginFor(doc);
+  batch.login ??= loginFor(doc, { email: deps.identity.email });
   const session = await batch.login;
   if (!session.ok) return { status: "failed", error: session.error };
   const token = session.value;
@@ -222,6 +401,10 @@ export async function pushApplication(
   const synced = await batch.sync;
   if (!synced.ok) return { status: "failed", error: synced.error };
   const cvHash = synced.value;
+
+  if (deps.withdrawingOrderIds?.has(Number(app.recruitmentorderid))) {
+    return { status: "failed", error: "erp_withdraw_pending", cvHash };
+  }
 
   // Already applied (per the ERP's own record): never submit it twice.
   if ((deps.appliedOrderIds ?? []).includes(Number(app.recruitmentorderid))) {
@@ -265,22 +448,6 @@ export async function pushApplication(
   }
 
   return { status: "sent", erpEntryId, cvHash, erpList };
-}
-
-/** Withdraws the ERP copy of an application. Best-effort; never throws. */
-export async function withdrawFromErp(
-  doc: ApplicantDoc,
-  erpEntryId: number,
-  // Accepted for call-site symmetry with `pushApplication`; login needs only the profile.
-  _identity?: PushIdentity,
-): Promise<void> {
-  if (!hasErp() || !str(doc.profile.regno) || !str(doc.profile.mobilephone)) return;
-  try {
-    const token = await erpLogin(str(doc.profile.regno), str(doc.profile.mobilephone));
-    await erpPost("DeleteOrderApp", token, undefined, `?entryID=${erpEntryId}`);
-  } catch (error) {
-    logFailure("erp_withdraw_failed", error);
-  }
 }
 
 /* --- retry policy ------------------------------------------------------- */

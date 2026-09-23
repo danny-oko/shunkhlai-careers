@@ -1,7 +1,14 @@
 import { ALL, type FacetOption } from "@/lib/jobs/types";
 import type { JobFacets } from "@/lib/jobs/filters";
 
-export type FilterKey = "group" | "location" | "salary" | "company" | "workType";
+export type FilterKey =
+  | "search"
+  | "group"
+  | "location"
+  | "salary"
+  | "company"
+  | "positionType"
+  | "workType";
 
 export type ActiveFilter = {
   key: FilterKey;
@@ -11,10 +18,12 @@ export type ActiveFilter = {
 };
 
 export const FILTER_TITLES: Record<FilterKey, string> = {
+  search: "Хайлт",
   group: "Албан тушаалын бүлэг",
   location: "Байршил",
   salary: "Цалингийн түвшин",
   company: "Компани",
+  positionType: "Ажиллах хэлбэр",
   workType: "Ажлын төрөл",
 };
 
@@ -29,10 +38,13 @@ export function selectedLabel(
 
 export type ActiveFilterInput = {
   facets: JobFacets;
+  /** The `jobName` search the URL carries. */
+  jobName: string;
   locationId: string;
   salaryLevelId: string;
   groups: FacetOption[];
   companies: FacetOption[];
+  positionTypes: FacetOption[];
   workTypes: FacetOption[];
   locations: FacetOption[];
   salaryLevels: FacetOption[];
@@ -49,9 +61,22 @@ export function buildActiveFilters(input: ActiveFilterInput): ActiveFilter[] {
     ["location", input.locationId, input.locations],
     ["salary", input.salaryLevelId, input.salaryLevels],
     ["company", input.facets.company, input.companies],
+    ["positionType", input.facets.positionType, input.positionTypes],
     ["workType", input.facets.workType, input.workTypes],
   ];
   const active: ActiveFilter[] = [];
+
+  // The search text is its own chip, first, quoted so it reads as what was
+  // typed rather than as the name of an option.
+  const search = (input.jobName ?? "").trim();
+  if (search) {
+    active.push({
+      key: "search",
+      title: FILTER_TITLES.search,
+      label: `«${search}»`,
+    });
+  }
+
   for (const [key, value, options] of entries) {
     if (!value || value === ALL) continue;
     active.push({

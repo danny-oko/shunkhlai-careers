@@ -48,14 +48,25 @@ export type EducationEntry = SectionEntry & {
   note?: string;
 };
 
+/**
+ * The ERP's `hrapplanglist` carries ids only; the `*name` labels are added by
+ * `/api/me` (on save and on pull) for the list to show, and never sent back.
+ */
 export type LanguageEntry = SectionEntry & {
   entryid: number;
   forlanguageid?: number;
   forlanguagename?: string;
+  /** Судалсан хугацаа, in years. */
+  studytime?: number;
   listeninglevelid?: number;
+  listeninglevelname?: string;
   speakinglevelid?: number;
+  speakinglevelname?: string;
   readinglevelid?: number;
+  readinglevelname?: string;
   writinglevelid?: number;
+  writinglevelname?: string;
+  /** Free text, e.g. "IELTS 6.5". */
   score?: string;
 };
 
@@ -74,17 +85,23 @@ export type ExperienceEntry = SectionEntry & {
   orgname?: string;
   businesstypeid?: number;
   businesstypename?: string;
+  /** A business type the list lacks, typed — `businesstypeid` left out (asked of the ERP team). */
+  businesstypenametext?: string;
   jobid?: number;
   jobname?: string;
   fromdate?: string;
+  /** Empty while `isworking` is "Y". */
   todate?: string;
-  /** Derived by the server from `todate`; `isworking` is ignored. */
+  /** "Y" — одоо ажиллаж байгаа; "N" otherwise. */
+  isworking?: "Y" | "N";
+  /** The ERP's own flag, seen derived from `todate`; not sent. */
   working?: string;
   basewage?: number;
   responsibility?: string;
   reason?: string;
   headname?: string;
   headjobid?: number;
+  headjobname?: string;
   headphone?: string;
 };
 

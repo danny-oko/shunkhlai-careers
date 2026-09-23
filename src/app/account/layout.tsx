@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Loader2 } from "lucide-react";
 
+import { IdentityLock, IdentityPanel } from "@/components/account/identity-gate";
 import { useSession } from "@/components/auth/session-provider";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +81,20 @@ export default function AccountLayout({ children }: LayoutProps<"/account">) {
             </ul>
           </nav>
 
-          <div className="min-w-0">{children}</div>
+          <div className="min-w-0">
+            {/* The profile form carries the four fields itself: notice only, and it locks its files only. */}
+            {pathname.startsWith("/account/profile") ? (
+              <>
+                <IdentityPanel withForm={false} />
+                {children}
+              </>
+            ) : (
+              <>
+                <IdentityPanel />
+                <IdentityLock>{children}</IdentityLock>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </main>

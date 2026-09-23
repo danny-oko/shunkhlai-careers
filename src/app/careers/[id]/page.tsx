@@ -74,7 +74,7 @@ export default async function JobPage({ params }: PageProps<"/careers/[id]">) {
           ) : (
             <Reveal as="section" className="my-16 border-t border-border/70 pt-12">
               <h2 className="text-2xl font-semibold tracking-[-0.025em]">
-                Энэ зарын хугацаа дууссан
+                Энэ зар анкет хүлээн авахгүй байна
               </h2>
               <p className="mt-3 max-w-xl text-[0.9375rem] leading-relaxed text-muted-foreground text-pretty">
                 Тохирох ажлын байр нээгдэхэд мэдэгдэхийг хүсвэл анкетдаа сонирхож буй

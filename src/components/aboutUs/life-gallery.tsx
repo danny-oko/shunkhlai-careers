@@ -55,7 +55,7 @@ export function LifeGallery() {
                 13px and the kicker step floors at 11, so the denser role would
                 have made it smaller on a phone than it is today. */}
             <p className="type-eyebrow font-medium tracking-[0.14em] text-ink-muted uppercase">
-              Ажилтны түүх · Life at Shunkhlai
+              Ажилтны түүх
             </p>
             <h2 className="mt-5 type-section font-semibold tracking-[-0.02em]">
               Бидний хамгийн…

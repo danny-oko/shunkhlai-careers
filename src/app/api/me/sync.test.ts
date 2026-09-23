@@ -285,7 +285,11 @@ describe("pull (ERP → D1)", () => {
 
     expect(profile.addr2).toBe("ERP хаяг"); // ERP value wins on the first pull
     expect(profile.firstname).toBe("Бат");
-    expect(profile.filedata).toBe(CV_B64);
+    expect(profile.filename).toBe("cv.pdf");
+    expect(profile).not.toHaveProperty("filedata"); // served by GET /api/me/cv
+    const cv = await GET(new Request("http://x/api/me/cv"), ctx("cv") as never);
+    expect(Buffer.from(await cv.arrayBuffer()).toString("base64")).toBe(CV_B64);
+    expect(cv.headers.get("content-type")).toBe("application/pdf");
     expect(profile.picturedata).toBe("data:image/jpeg;base64,UElD");
     // The ERP's percentages are not copied; ours are computed from the sections.
     expect(profile.totalper).not.toBe(80);
@@ -327,7 +331,7 @@ describe("pull (ERP → D1)", () => {
   it("existing D1 rows (entered here before sync) survive the first pull and are pushed", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "");
     await post("SaveHrApplicant", { regno: REGNO, mobilephone: PHONE });
-    await post("SaveAppExperience", { entryid: 0, orgname: "Local LLC" });
+    await post("SaveAppExperience", { entryid: 0, orgname: "Local LLC", jobid: 100 });
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://erp.test");
     state.after = [];
 
@@ -338,7 +342,7 @@ describe("pull (ERP → D1)", () => {
 
     await runAfter();
     const saved = erp.calls.find((c) => c.endpoint === "SaveAppExperience")!;
-    expect(saved.body).toMatchObject({ entryid: 0, orgname: "Local LLC" });
+    expect(saved.body).toMatchObject({ entryid: 0, orgname: "Local LLC", jobid: 100 });
     const after = ((await get("GetHrAppExperienceData")).retdata as Record<string, Row[]>).hrappexplist;
     expect(after.map((r) => [r.orgname, r.erp])).toEqual([
       ["Шунхлай", "synced"],
@@ -374,11 +378,11 @@ describe("write-through (D1 → ERP)", () => {
 
   it("editing a synced row sends the ERP id", async () => {
     await pulled();
-    await post("SaveAppExperience", { entryid: 13, orgname: "Шунхлай ХХК" });
+    await post("SaveAppExperience", { entryid: 13, orgname: "Шунхлай ХХК", jobid: 100 });
     await runAfter();
     const saved = erp.calls.find((c) => c.endpoint === "SaveAppExperience")!;
-    expect(saved.body).toMatchObject({ entryid: 13, orgname: "Шунхлай ХХК" });
-    expect(erp.lists.hrappexplist).toEqual([{ entryid: 13, orgname: "Шунхлай ХХК" }]);
+    expect(saved.body).toMatchObject({ entryid: 13, orgname: "Шунхлай ХХК", jobid: 100 });
+    expect(erp.lists.hrappexplist).toEqual([{ entryid: 13, orgname: "Шунхлай ХХК", jobid: 100 }]);
     expect(saved.body).not.toHaveProperty("erp");
   });
 
@@ -390,11 +394,11 @@ describe("write-through (D1 → ERP)", () => {
     expect(doc().erp?.pendingDeletes).toHaveLength(3);
     await runAfter();
 
-    const deletes = erp.calls.filter((c) => /^delete/i.test(c.endpoint)).map((c) => `${c.endpoint}${c.query}`);
+    const deletes = erp.calls.filter((c) => /^delete/i.test(c.endpoint)).map((c) => [c.endpoint, c.query]);
     expect(deletes).toEqual([
-      "DeleteHrAppEducation?ENTRYID=11",
-      "deleteInterestedJob?entryid=15",
-      "DeleteOrderApp?entryID=16",
+      ["DeleteHrAppEducation", "?ENTRYID=11"],
+      ["deleteInterestedJob", "?entryid=15"],
+      ["DeleteOrderApp", "?entryID=16"],
     ]);
     expect(doc().erp?.pendingDeletes).toBeUndefined();
     expect(erp.lists.hrappedulist).toEqual([]);
@@ -421,7 +425,7 @@ describe("write-through (D1 → ERP)", () => {
   it("deleting a local-only row makes no ERP call", async () => {
     await pulled();
     erp.down = true;
-    const saved = (await post("SaveAppExperience", { entryid: 0, orgname: "Temp" })).retdata as Row;
+    const saved = (await post("SaveAppExperience", { entryid: 0, orgname: "Temp", jobid: 100 })).retdata as Row;
     await runAfter();
     erp.down = false;
     erp.calls = [];
@@ -471,7 +475,9 @@ describe("write-through (D1 → ERP)", () => {
     expect(apps[1]).toMatchObject({ recruitmentorderid: 707, erp: { status: "sent", erpEntryId: 500 } });
   });
 
-  it("never sends SaveHrAppUser", async () => {
+  // Login first: SaveHrAppUser is only the fallback for a 401 (a регистр new to
+  // the ERP), so an applicant whose login works is never sent through it.
+  it("never sends SaveHrAppUser while auth/login works", async () => {
     await pulled();
     await post("SaveHrApplicant", { addr2: "x" });
     await runAfter();

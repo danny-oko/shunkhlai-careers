@@ -18,6 +18,7 @@ export async function listOrders(query: JobQuery = {}): Promise<JobListRow[]> {
   return jobList({
     jobName: query.jobName ?? "",
     locationid: Number(query.locationid) || 0,
+    salaryLevelID: query.salaryLevelID ?? "",
   }) as JobListRow[];
 }
 

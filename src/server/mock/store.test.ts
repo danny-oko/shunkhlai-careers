@@ -104,3 +104,64 @@ describe("saveDb / loadDb", () => {
     expect(() => second.saveDb()).not.toThrow();
   });
 });
+
+describe("jobList", () => {
+  it("filters by salary band, the key standing for its text", async () => {
+    const store = await loadStore();
+    const band = store.filterData.salarylevel.find(
+      (row) => row.text === "2,100,000-2,500,000",
+    )!;
+
+    const rows = store.jobList({ salaryLevelID: band.key });
+    const bandOf = (entryid: number) =>
+      store.postings.find((posting) => posting.entryid === entryid)?.salarylevel;
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.map((row) => bandOf(row.entryid))).toEqual(rows.map(() => band.text));
+    expect(rows.length).toBeLessThan(store.jobList({}).length);
+  });
+
+  it("accepts the key as the string the query string carries", async () => {
+    const store = await loadStore();
+    const band = store.filterData.salarylevel.find(
+      (row) => row.text === "792,000-1,000,000",
+    )!;
+
+    expect(store.jobList({ salaryLevelID: String(band.key) })).toEqual(
+      store.jobList({ salaryLevelID: band.key }),
+    );
+  });
+
+  it("treats a blank or zero salary filter as no filter", async () => {
+    const store = await loadStore();
+    const all = store.jobList({});
+
+    expect(store.jobList({ salaryLevelID: "" })).toEqual(all);
+    expect(store.jobList({ salaryLevelID: 0 })).toEqual(all);
+  });
+
+  it("answers empty for a key that names no band, never the whole list", async () => {
+    const store = await loadStore();
+
+    expect(store.jobList({ salaryLevelID: 9999 })).toEqual([]);
+  });
+
+  it("combines the salary band with the name and location filters", async () => {
+    const store = await loadStore();
+    const posting = store.postings[0];
+    const band = store.filterData.salarylevel.find(
+      (row) => row.text === posting.salarylevel,
+    )!;
+    const location = store.filterData.location.find(
+      (row) => row.name === posting.locname,
+    )!;
+
+    const rows = store.jobList({
+      jobName: posting.posname.slice(0, 5),
+      locationid: location.entryid,
+      salaryLevelID: band.key,
+    });
+
+    expect(rows.map((row) => row.entryid)).toContain(posting.entryid);
+  });
+});

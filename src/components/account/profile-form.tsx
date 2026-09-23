@@ -36,6 +36,7 @@ import { profile as profileApi, reference, toApiError } from "@/lib/api";
  * longer belongs to the selection above it.
  */
 
+/** Each dependent list is read for the parent currently chosen (and only then). */
 const useReferenceLists = (values: State) => ({
   countries: useDropdown(() => reference.countries(), []),
   divisions: useDropdown(
@@ -83,7 +84,7 @@ export const ProfileForm = () => {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const problem = missingRequired(values);
+    const problem = missingRequired(values, profile);
     setError(problem);
     if (problem) return;
 
@@ -108,8 +109,8 @@ export const ProfileForm = () => {
 
       <PersonalSection values={values} set={set} profile={profile} />
       <LicenceSection values={values} toggle={toggle} />
-      <AddressSection values={values} set={set} {...lists} />
-      <ContactSection values={values} set={set} relatives={lists.relatives} />
+      <AddressSection values={values} set={set} profile={profile} {...lists} />
+      <ContactSection values={values} set={set} profile={profile} relatives={lists.relatives} />
       <OtherSection values={values} set={set} />
 
     </form>

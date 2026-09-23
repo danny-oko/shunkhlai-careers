@@ -1,4 +1,5 @@
 import type { ApplicantProfile, MaritalOption, ProfileInput } from "@/lib/api/profile";
+import { identityProblem, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 
 /** Form values are strings (what inputs hold); licence flags are booleans. */
 const TEXT_KEYS = [
@@ -49,9 +50,39 @@ export function maritalOptions(list?: MaritalOption[]): MaritalOption[] {
   return list?.length ? list : FALLBACK_MARITAL;
 }
 
+export type Choice = { value: string; label: string };
+
+/**
+ * `options` plus the saved value when the list lacks it, so a saved choice is
+ * shown rather than a blank "- Сонгох -" (a code the ERP list does not carry,
+ * a list still loading or failed). Only the value as loaded — once the
+ * applicant picks another one, or a parent change empties it, the extra goes.
+ */
+export function withSavedChoice(
+  options: Choice[],
+  value: string,
+  saved: { value: unknown; label?: unknown },
+): Choice[] {
+  if (!value || value !== asText(saved.value)) return options;
+  if (options.some((option) => option.value === value)) return options;
+  return [...options, { value, label: asText(saved.label).trim() || value }];
+}
+
+/**
+ * Гэрлэлтийн байдал choices: the ERP's `maritalstatus[]` when the record came
+ * with it, else the fallback list; a stored code in neither still shows (by
+ * the fallback's text when it has one, else as the code itself).
+ */
+export function maritalChoices(profile: ApplicantProfile | null | undefined, value: string): Choice[] {
+  const options = maritalOptions(profile?.maritalOptions).map((m) => ({ value: m.key, label: m.text }));
+  const known = FALLBACK_MARITAL.find((m) => m.key === profile?.maritalstatus)?.text;
+  return withSavedChoice(options, value, { value: profile?.maritalstatus, label: known });
+}
+
+const asText = (value: unknown) => (value === null || value === undefined ? "" : String(value));
+
 function read(source: Record<string, unknown>, key: string): string {
-  const value = source[key];
-  return value === null || value === undefined ? "" : String(value);
+  return asText(source[key]);
 }
 
 export function toState(profile: ApplicantProfile | null): State {
@@ -68,8 +99,8 @@ export function toInput(values: State): ProfileInput {
     ...values,
     lastname: values.lastname.trim(),
     firstname: values.firstname.trim(),
-    regno: values.regno.trim().toUpperCase(),
-    mobilephone: values.mobilephone.trim(),
+    regno: normalizeRegno(values.regno),
+    mobilephone: normalizePhone(values.mobilephone),
     maritalstatus: values.maritalstatus || undefined,
     email2: values.email2.trim(),
     addr2: values.addr2.trim(),
@@ -85,9 +116,12 @@ export function toInput(values: State): ProfileInput {
   };
 }
 
-/** Marked * on the old site's form; the label is what the error names. */
+/**
+ * Marked * on the old site's form; the label is what the error names.
+ * регистр, овог, нэр, утас come first and are checked by `identityProblem`
+ * (shared with the /api/me gate), formats included.
+ */
 const REQUIRED: Array<[TextKey, string]> = [
-  ["mobilephone", "Утас"],
   ["email2", "Имэйл"],
   ["countryid", "Улс"],
   ["divisionid", "Аймаг, хот"],
@@ -98,8 +132,13 @@ const REQUIRED: Array<[TextKey, string]> = [
   ["contactphone", "Холбоо барих хүний утас"],
 ];
 
-/** The first required field left empty, as a Mongolian message, else null. */
-export function missingRequired(values: State): string | null {
+/**
+ * The first problem with the form as a Mongolian message, else null. `saved`
+ * is the loaded profile: an unchanged регистр/утас is not format-checked.
+ */
+export function missingRequired(values: State, saved?: ApplicantProfile | null): string | null {
+  const identity = identityProblem(values, saved);
+  if (identity) return identity;
   const missing = REQUIRED.find(([key]) => !values[key].trim());
   return missing ? `«${missing[1]}» талбарыг бөглөнө үү.` : null;
 }

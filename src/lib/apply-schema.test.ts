@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CV_LIMITS_TEXT,
   MAX_CV_BYTES,
   PHONE_PATTERN,
   REGISTER_ID_PATTERN,
@@ -90,6 +91,14 @@ describe("describeCvFileError", () => {
 
   it("rejects other formats", () => {
     expect(describeCvFileError(cv("cv.png", "image/png"))).toMatch(/PDF/);
+  });
+
+  it("says why in Mongolian (the account and apply toasts show it as is)", () => {
+    expect(describeCvFileError(cv("cv.png", "image/png"))).toBe("PDF, DOC эсвэл DOCX файл оруулна уу.");
+    expect(describeCvFileError(cv("cv.pdf", "application/pdf", MAX_CV_BYTES + 1))).toBe(
+      "Файл 5 MB-аас том байна. Жижиг файл сонгоно уу.",
+    );
+    expect(CV_LIMITS_TEXT).toBe("PDF, DOC эсвэл DOCX · 5 MB хүртэл");
   });
 
   it("holds the size limit at exactly 5 MB", () => {

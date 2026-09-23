@@ -33,7 +33,7 @@ DB is already provisioned: Cloudflare D1, tables created, creds in `.env.local`.
    ERP's `regno`+`phone`. After sign-in, if the current Clerk user has no
    `applicant_link` row, prompt for `regno` + `phone` (+ first/last name), then:
    - Verify by authenticating to the ERP via the existing
-     `src/lib/api/auth.ts` path (register-or-login `SaveHrAppUser`) **sending the
+     `src/lib/api/auth.ts (removed in step 02)` path (register-or-login `SaveHrAppUser`) **sending the
      real names** (never blanks — see landmine #1).
    - On success, upsert an `applicant_link` row keyed by `auth().userId`, storing
      `regno`/`phone`/tokens **encrypted** (`encryptSecret`), plus `erpAppId` from
@@ -56,7 +56,7 @@ DB is already provisioned: Cloudflare D1, tables created, creds in `.env.local`.
    `POST /api/applicant/SaveHrApplicant` (save) go to real production using the
    step-3 token. Show a success/error toast from the `rettype`/`retmsg` envelope.
 
-6. **Fix landmine #1 before any real login.** `src/lib/api/auth.ts` `signIn()`
+6. **Fix landmine #1 before any real login.** `src/lib/api/auth.ts (removed in step 02)` `signIn()`
    posts blank `lastname`/`firstname`/`email` to `SaveHrAppUser`. Against real
    prod this can blank the applicant's stored name/email on every login. Send the
    stored real names, or switch to `POST /api/applicant/auth/login {regNo,

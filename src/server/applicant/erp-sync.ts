@@ -15,20 +15,31 @@ import {
   CLAIM_TTL_MS,
   type ErpSnapshot,
   SECTIONS,
+  type SectionKey,
   type SnapshotEffect,
+  type Unadopted,
   applySnapshot,
+  erpReady,
   flushDue,
   hasLocalWork,
+  isLocalId,
+  linkedRegno,
+  markLinked,
   mergeApplications,
   mergeSection,
   migrateForFirstPull,
+  applyAdoption,
+  deletedIds,
   pullDue,
+  registering,
+  unadoptedOf,
   sectionList,
+  settleWithdrawnPush,
   snapshotOf,
 } from "./erp-model";
 import { fetchSnapshot } from "./erp-pull";
-import { type ApplicationErp, type PushResult, isDue, loginFor } from "./erp-push";
-import type { ApplicantDoc, Row } from "./handlers";
+import { type ApplicationErp, NOT_READY, type PushResult, type Step, isDue, loginFor } from "./erp-push";
+import type { ApplicantDoc, DocErp, Row } from "./handlers";
 
 /**
  * Two-way ERP sync around D1. Called from `/api/me`: the first pull may run
@@ -88,15 +99,64 @@ const recentlyClaimed = (iso: string | undefined, now: number) => {
 
 /** Anything due for the ERP on this document (flush or application push). */
 export const syncDue = (doc: ApplicantDoc, now = Date.now()) =>
-  flushDue(doc, now) || doc.applications.some((row) => isDue(row, now));
+  (!hasErp() || erpReady(doc)) && (flushDue(doc, now) || doc.applications.some((row) => isDue(row, now)));
+
+/* --- ERP account link ----------------------------------------------------- */
+
+/**
+ * Claims the one SaveHrAppUser for this applicant: a stamp on the document,
+ * written under the optimistic lock, so of two requests that both got a 401
+ * (an `after()` sync and an inline pull) only one registers.
+ */
+async function claimRegistration(identity: ClerkIdentity): Promise<boolean> {
+  const account = await update(identity, ({ doc }) => {
+    if (registering(doc)) return false;
+    (doc.erp ??= {}).registeringAt = new Date().toISOString();
+    return true;
+  });
+  return account !== null;
+}
+
+/** The login for this document, with the registration claim wired in. */
+const login = (identity: ClerkIdentity, doc: ApplicantDoc): Promise<Step<string>> =>
+  loginFor(doc, { email: identity.email, claimRegister: () => claimRegistration(identity) });
+
+/**
+ * A token for this account: record the link (fixes the регистр) and the утас
+ * that earned it (the ERP password now; see `loginFor`).
+ */
+async function recordLinked(identity: ClerkIdentity, doc: ApplicantDoc) {
+  const phone = String(doc.profile.mobilephone ?? "").trim();
+  if (linkedRegno(doc) && doc.erp?.loginPhone === phone) return;
+  await update(identity, ({ doc: fresh }) => {
+    markLinked(fresh, doc.profile.regno, phone);
+    return true;
+  });
+}
 
 /* --- failures ----------------------------------------------------------- */
 
+/** Keeps the ERP's refusal of exactly these credentials; ends a registration claim. */
+function noteLoginFailure(doc: ApplicantDoc, session: Extract<Step<string>, { ok: false }>) {
+  const erp = (doc.erp ??= {});
+  if (session.error !== "erp_register_busy") delete erp.registeringAt;
+  if (session.linkError && session.linkKey) {
+    erp.linkError = session.linkError;
+    erp.linkKey = session.linkKey;
+  }
+}
+
 /** Login failed: the pull backs off, and due work counts the attempt. */
-async function recordLoginFailure(identity: ClerkIdentity, pulled: boolean, error: string) {
+async function recordLoginFailure(
+  identity: ClerkIdentity,
+  pulled: boolean,
+  session: Extract<Step<string>, { ok: false }>,
+) {
+  const error = session.error;
   await update(identity, ({ doc }) => {
     const now = new Date();
     const erp = (doc.erp ??= {});
+    noteLoginFailure(doc, session);
     if (pulled) {
       erp.pullFailures = (erp.pullFailures ?? 0) + 1;
       erp.pullFailedAt = now.toISOString();
@@ -140,11 +200,14 @@ export type InlinePull = { ok: true; token: string } | { ok: false } | { pending
  */
 export async function pullInline(identity: ClerkIdentity, doc: ApplicantDoc): Promise<InlinePull> {
   const work = (async (): Promise<InlinePull> => {
-    const session = await loginFor(doc);
+    const session = await login(identity, doc);
     if (!session.ok) {
-      await recordLoginFailure(identity, true, session.error);
+      // Not ready (identity blank, already refused, another request registering):
+      // nothing was sent, so no failure is counted and no backoff starts.
+      if (!NOT_READY.has(session.error)) await recordLoginFailure(identity, true, session);
       return { ok: false };
     }
+    await recordLinked(identity, doc);
     await pullWith(identity, session.value);
     return { ok: true, token: session.value };
   })().catch((error) => {
@@ -162,36 +225,50 @@ export async function pullInline(identity: ClerkIdentity, doc: ApplicantDoc): Pr
 }
 
 /** Should this `get` pull inline (never pulled, not backing off)? */
-export const wantsInlinePull = (doc: ApplicantDoc) => hasErp() && !doc.erp?.pulledAt && pullDue(doc);
+export const wantsInlinePull = (doc: ApplicantDoc) =>
+  hasErp() && erpReady(doc) && !doc.erp?.pulledAt && pullDue(doc);
 
 /** Should this `get` pull in the background (stale, not backing off)? */
-export const wantsBackgroundPull = (doc: ApplicantDoc) => hasErp() && !!doc.erp?.pulledAt && pullDue(doc);
+export const wantsBackgroundPull = (doc: ApplicantDoc) =>
+  hasErp() && erpReady(doc) && !!doc.erp?.pulledAt && pullDue(doc);
 
 /* --- sync task ------------------------------------------------------------ */
 
-type Claim = { local: boolean; apps: number[] };
+type Claim = {
+  local: boolean;
+  apps: number[];
+  /** The bookkeeping as it was before this claim (to hand the work back untouched). */
+  before: { flush?: DocErp["flush"]; apps: Map<number, ApplicationErp> };
+};
+
+const emptyClaim = (): Claim => ({ local: false, apps: [], before: { apps: new Map() } });
 
 /** Claims the due work (and clears the "scheduled" stamp). */
 async function claim(
   identity: ClerkIdentity,
   mode: "mutation" | "retry",
 ): Promise<{ account: LoadedAccount; claim: Claim } | null> {
-  let claimed: Claim = { local: false, apps: [] };
+  let claimed: Claim = emptyClaim();
   const account = await update(identity, ({ doc }) => {
     const now = new Date();
     const iso = now.toISOString();
     const erp = (doc.erp ??= {});
     const hadSchedule = !!erp.scheduledAt;
     delete erp.scheduledAt;
-    claimed = { local: false, apps: [] };
+    claimed = emptyClaim();
+    // Not ready for the ERP (identity blank, credentials already refused):
+    // claim nothing, so no attempt is spent; the work waits for new credentials.
+    if (hasErp() && !erpReady(doc)) return hadSchedule;
 
     if (hasErp() && flushDue(doc, now.getTime())) {
+      claimed.before.flush = erp.flush ? { ...erp.flush } : undefined;
       erp.flush = { attempts: (erp.flush?.attempts ?? 0) + 1, lastAttemptAt: iso, claimedAt: iso };
       claimed.local = true;
     }
     for (const row of doc.applications) {
       const state = appErp(row);
       if (!state) continue;
+      claimed.before.apps.set(Number(row.entryid), { ...state });
       if (isDue(row, now.getTime())) {
         row.erp = { ...state, attempts: (state.attempts ?? 0) + 1, lastAttemptAt: iso, claimedAt: iso };
         claimed.apps.push(Number(row.entryid));
@@ -206,11 +283,37 @@ async function claim(
   return account ? { account, claim: claimed } : null;
 }
 
-/** Saved but not re-read: mark them synced (their ids adopt on the next pull). */
-function markPushed(rows: Row[], pushed: Set<string>) {
-  for (const row of rows) {
-    if (row.erp === "pending" && pushed.has(snapshotOf(row))) row.erp = "synced";
+/** Hands claimed work back with its attempts and timestamps as they were. */
+function releaseClaim(doc: ApplicantDoc, claimed: Claim) {
+  const erp = (doc.erp ??= {});
+  if (claimed.local) {
+    if (claimed.before.flush) erp.flush = claimed.before.flush;
+    else delete erp.flush;
   }
+  for (const entryid of claimed.apps) {
+    const row = doc.applications.find((r) => Number(r.entryid) === entryid);
+    const before = claimed.before.apps.get(entryid);
+    if (row && before) row.erp = before;
+  }
+}
+
+/**
+ * Saved but not re-read: mark them synced. A new row's ERP id is not known
+ * yet — it is noted as unadopted with the body it was saved with, so it is
+ * never sent as new again before the next pull or flush has looked for its
+ * ERP row (`planAdoption`).
+ */
+function markPushed(doc: ApplicantDoc, key: SectionKey, pushed: Set<string>) {
+  const local: Unadopted[] = [];
+  for (const row of doc[key]) {
+    if (row.erp !== "pending" || !pushed.has(snapshotOf(row))) continue;
+    row.erp = "synced";
+    if (isLocalId(row.entryid)) local.push(unadoptedOf(row));
+  }
+  if (local.length === 0) return;
+  const unadopted = ((doc.erp ??= {}).unadopted ??= {});
+  const ids = new Set(local.map((entry) => entry.id));
+  unadopted[key] = [...(unadopted[key] ?? []).filter((entry) => !ids.has(entry.id)), ...local];
 }
 
 /** Stores what a flush achieved, on a freshly loaded document. */
@@ -224,7 +327,10 @@ function applyOutcome(
   const erp = (doc.erp ??= {});
 
   if (outcome) {
-    if (outcome.profileStamp && erp.profileDirty === outcome.profileStamp) delete erp.profileDirty;
+    if (outcome.profileStamp && erp.profileDirty === outcome.profileStamp) {
+      delete erp.profileDirty;
+      delete erp.profileCleared; // the ERP has them empty now
+    }
     if (outcome.cv && erp.cvDirty === outcome.cv.stamp) {
       delete erp.cvDirty;
       if (outcome.cv.hash) erp.cvHash = outcome.cv.hash;
@@ -234,8 +340,14 @@ function applyOutcome(
       delete erp.pictureDirty;
       if (outcome.picture.hash) erp.pictureHash = outcome.picture.hash;
     }
-    if (outcome.deletesDone.length && erp.pendingDeletes) {
-      const done = new Set(outcome.deletesDone.map((d) => `${d.endpoint}:${d.entryid}`));
+    // The ERP said no to a cancel: it still holds the application, so the
+    // delete is not retried and the row comes back with the ERP's message.
+    for (const refusal of outcome.deletesRefused) {
+      (erp.withdrawRefused ??= {})[String(refusal.entryid)] = refusal.message;
+    }
+    const settled = [...outcome.deletesDone, ...outcome.deletesRefused];
+    if (settled.length && erp.pendingDeletes) {
+      const done = new Set(settled.map((d) => `${d.endpoint}:${d.entryid}`));
       erp.pendingDeletes = erp.pendingDeletes.filter((d) => !done.has(`${d.endpoint}:${d.entryid}`));
       if (erp.pendingDeletes.length === 0) delete erp.pendingDeletes;
     }
@@ -243,19 +355,23 @@ function applyOutcome(
 
     // Sections: rows the ERP now has are represented by the re-read list.
     for (const config of SECTIONS) {
+      const adoption = outcome.adopted[config.key];
+      if (adoption) applyAdoption(doc, config.key, adoption);
       const pushed = outcome.pushed[config.key];
       const reread = config.source in outcome.sources ? sectionList(config, outcome.sources[config.source]) : null;
       if (reread) {
         doc[config.key] = mergeSection(config, doc[config.key], reread, erp.pendingDeletes, pushed);
       } else if (pushed?.size) {
-        markPushed(doc[config.key], pushed);
+        markPushed(doc, config.key, pushed);
       }
     }
 
-    // Applications: per-row results, then fold into the re-read list.
+    // Applications: per-row results, then fold into the re-read list. A row
+    // withdrawn while its push ran: its ERP copy is cancelled, not re-imported.
     for (const [entryid, result] of outcome.appResults) {
       const row = doc.applications.find((r) => Number(r.entryid) === entryid);
       if (row) row.erp = nextAppErp(appErp(row), result);
+      else settleWithdrawnPush(doc, entryid, result);
     }
     if (outcome.appList) {
       doc.applications = mergeApplications(doc.applications, outcome.appList, erp.pendingDeletes, now);
@@ -275,6 +391,9 @@ function applyOutcome(
   }
 }
 
+/** ERP ids of the applications queued for DeleteOrderApp. */
+const queuedCancels = (doc: ApplicantDoc) => deletedIds(doc.erp?.pendingDeletes, "DeleteOrderApp");
+
 function nextAppErp(previous: ApplicationErp | undefined, result: PushResult): ApplicationErp {
   const erp: ApplicationErp = {
     status: result.status,
@@ -293,11 +412,11 @@ function nextAppErp(previous: ApplicationErp | undefined, result: PushResult): A
  */
 export async function syncTask(
   identity: ClerkIdentity,
-  options: { mode: "mutation" | "retry"; pull?: boolean; token?: string },
+  options: { mode: "mutation" | "retry"; pull?: boolean; token?: string; followUp?: boolean },
 ): Promise<void> {
   try {
     const claimed = await claim(identity, options.mode);
-    const work = claimed?.claim ?? { local: false, apps: [] };
+    const work = claimed?.claim ?? emptyClaim();
     const pull = !!options.pull && hasErp();
     if (!work.local && work.apps.length === 0 && !pull) return;
 
@@ -310,14 +429,22 @@ export async function syncTask(
     }
 
     const doc = claimed?.account.doc ?? (await loadAccount(identity)).doc;
+    if (!erpReady(doc)) return; // nothing was claimed; nothing to send
     let token = options.token;
     if (!token) {
-      const session = await loginFor(doc);
+      const session = await login(identity, doc);
       if (!session.ok) {
         await update(identity, ({ doc: fresh }) => {
-          applyOutcome(fresh, work, null, session.error, new Date());
           const erp = (fresh.erp ??= {});
-          if (pull) {
+          if (session.error === "erp_register_busy") {
+            // Another request is registering: nothing was tried, so the
+            // claimed work goes back exactly as it was — no attempt spent.
+            releaseClaim(fresh, work);
+            return true;
+          }
+          applyOutcome(fresh, work, null, session.error, new Date());
+          noteLoginFailure(fresh, session);
+          if (pull && !NOT_READY.has(session.error)) {
             erp.pullFailures = (erp.pullFailures ?? 0) + 1;
             erp.pullFailedAt = new Date().toISOString();
           }
@@ -326,6 +453,7 @@ export async function syncTask(
         return;
       }
       token = session.value;
+      await recordLinked(identity, doc);
     }
 
     const outcome =
@@ -342,13 +470,21 @@ export async function syncTask(
         : null;
     const snapshot = pull ? await fetchSnapshot(token) : null;
 
+    let cancelQueued = false;
     await update(identity, (account) => {
       const now = new Date();
+      const before = queuedCancels(account.doc);
       if (outcome) applyOutcome(account.doc, work, outcome, undefined, now);
-      if (!snapshot) return true;
       // Files written to D1 only when the pull brought new content.
-      return persistSnapshot(account, snapshot);
+      const files = snapshot ? persistSnapshot(account, snapshot) : true;
+      cancelQueued = [...queuedCancels(account.doc)].some((id) => !before.has(id));
+      return files;
     });
+    // A withdrawn application's ERP copy was found in this run: cancel it now
+    // (same token), not on some later visit.
+    if (cancelQueued && !options.followUp) {
+      await syncTask(identity, { mode: "retry", token, followUp: true });
+    }
   } catch (error) {
     console.error("[erp-sync]", "sync_crashed", "-", String(error));
   }

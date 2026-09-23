@@ -1,10 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ALL, type FacetOption } from "@/lib/jobs/types";
 import { selectedLabel } from "@/components/job-filter-state";
+
+/**
+ * An option nobody can reach: a reference row with no open posting behind it.
+ * It stays in the list — the owner wants every company visible, and "0" is
+ * the answer to "is anything open there?" — but choosing it could only ever
+ * produce the empty state, so it is not a target.
+ */
+function isUnreachable(option: FacetOption, isSelected: boolean): boolean {
+  return option.count === 0 && option.value !== ALL && !isSelected;
+}
 
 function FilterOption({
   option,
@@ -17,6 +27,8 @@ function FilterOption({
   isTabStop: boolean;
   onSelect: (value: string) => void;
 }) {
+  const isDisabled = isUnreachable(option, isSelected);
+
   // The rail is narrow and some location names are long, so the label
   // truncates - `title` keeps the whole of it reachable.
   return (
@@ -24,15 +36,18 @@ function FilterOption({
       type="button"
       role="radio"
       aria-checked={isSelected}
-      tabIndex={isTabStop ? 0 : -1}
+      aria-disabled={isDisabled || undefined}
+      disabled={isDisabled}
+      tabIndex={isTabStop && !isDisabled ? 0 : -1}
       onClick={() => onSelect(option.value)}
       title={option.label}
       className={cn(
         "flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[0.8125rem] transition-colors",
         "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+        isDisabled && "cursor-not-allowed text-muted-foreground/60",
         isSelected
           ? "bg-primary/10 font-medium text-foreground"
-          : "text-foreground/85 hover:bg-muted",
+          : !isDisabled && "text-foreground/85 hover:bg-muted",
       )}
     >
       <span
@@ -51,6 +66,120 @@ function FilterOption({
         </span>
       )}
     </button>
+  );
+}
+
+/** Long enough that a word is finished before the URL moves, short enough
+    that the results feel tied to the typing. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * `jobName`, the one filter the API searches on by text.
+ *
+ * The URL owns the value — the query goes back to `getRecruitmentOrderList` on
+ * the server — so the box keeps a draft while it is being typed and hands it
+ * over once the typing settles. A chip removal or "Цэвэрлэх" changes the URL,
+ * and the box follows it back.
+ */
+export function JobSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = React.useState(value);
+
+  /**
+   * `seen` is the last `value` this box was rendered with; `committed` is the
+   * last text it pushed into the URL.
+   *
+   * Both are needed because a navigation is not instant. While `router.push`
+   * is in flight the prop still holds the old text and the new one arrives a
+   * render or two later — so the box reacts only when the prop actually moves
+   * (`value !== seen`), and even then leaves the draft alone when what arrived
+   * is its own push catching up (`value === committed`). Anything else is an
+   * edit from elsewhere — a chip removal, "Цэвэрлэх", the back button — and
+   * refills the box. Without the pair, every letter typed during a slow
+   * navigation would be thrown away when it landed.
+   */
+  const [seen, setSeen] = React.useState(value);
+  const [committed, setCommitted] = React.useState(value);
+
+  // Reset while rendering, not in an effect, so a change from elsewhere never
+  // paints the old text for a frame first.
+  if (value !== seen) {
+    setSeen(value);
+    if (value !== committed) {
+      setCommitted(value);
+      setDraft(value);
+    }
+  }
+
+  // Kept in a ref so a new handler identity (the parent re-renders on every
+  // navigation) does not restart the timer and delay the search.
+  const handler = React.useRef(onChange);
+  React.useEffect(() => {
+    handler.current = onChange;
+  });
+
+  /** Pushes `next` now. Recording it as committed retires the debounced push
+      waiting behind it, so Enter and the clear button navigate exactly once. */
+  function commitNow(next: string) {
+    if (next === committed) return;
+    setCommitted(next);
+    handler.current(next);
+  }
+
+  React.useEffect(() => {
+    // Compared trimmed: the URL never carries the padding, so a trailing
+    // space must not look like a pending change and push forever.
+    const next = draft.trim();
+    if (next === committed) return;
+    const timer = setTimeout(() => {
+      setCommitted(next);
+      handler.current(next);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [draft, committed]);
+
+  function clear() {
+    setDraft("");
+    commitNow("");
+  }
+
+  return (
+    <div className="relative">
+      <Search
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+      />
+      <input
+        type="text"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          // Enter is "I have finished typing" — don't make it wait out the debounce.
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commitNow(draft.trim());
+          }
+        }}
+        placeholder="Албан тушаалаар хайх"
+        aria-label="Албан тушаалаар хайх"
+        className="h-[2.375rem] w-full rounded-full border border-border/70 bg-background pr-10 pl-9 text-[0.8125rem] transition-colors placeholder:text-muted-foreground hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      />
+      {draft !== "" && (
+        <button
+          type="button"
+          onClick={clear}
+          aria-label="Хайлтыг цэвэрлэх"
+          className="absolute top-1/2 right-2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <X aria-hidden className="size-3.5" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -81,8 +210,10 @@ function OptionList({
   function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     const keys = ["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"];
     if (!keys.includes(event.key)) return;
+    // Options with no postings behind them are disabled, so they are skipped
+    // rather than trapping the arrow keys on an unreachable row.
     const radios = Array.from(
-      event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'),
+      event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]:not([disabled])'),
     );
     const current = radios.indexOf(document.activeElement as HTMLElement);
     if (current === -1) return;

@@ -1,10 +1,13 @@
 import "server-only";
 
+import { mimeFromName } from "@/lib/file-type";
+
 /**
  * Server-side calls to the live ERP (careers.shunkhlai.mn), used only to push
  * an application (see `erp-push.ts`). Restored and trimmed from the retired
  * `src/server/erp/client.ts`: no stored tokens — each push batch logs in with
- * the applicant's регистр + phone from their D1 profile.
+ * the applicant's регистр + phone from their D1 profile (registering them
+ * first when the ERP does not know them yet; see `loginFor`).
  *
  * Every call has a timeout. Errors carry an endpoint and HTTP status for
  * logging; never log the request payload, the credentials or the token.
@@ -80,19 +83,26 @@ export async function erpLogin(regno: string, phone: string): Promise<string> {
   return data.access_token;
 }
 
-/** `SaveHrAppUser` — creates the ERP applicant (no auth). */
+/**
+ * `SaveHrAppUser` (Postman 01/02) → the access token, in `retdata.access_token`.
+ * A new регистр creates the ERP applicant; an existing one only logs in when
+ * `mobilephone` (the password) matches, else "…зөрж байна!" (thrown as
+ * `ErpError`). No auth header.
+ */
 export async function erpRegister(input: {
   lastname: string;
   firstname: string;
   regno: string;
   email: string;
   mobilephone: string;
-}): Promise<void> {
-  await call<unknown>("SaveHrAppUser", {
+}): Promise<string> {
+  const data = await call<{ access_token?: string } | null>("SaveHrAppUser", {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(input),
   });
+  if (!data?.access_token) throw new ErpError("no_token", "SaveHrAppUser");
+  return data.access_token;
 }
 
 export function erpGet<T>(endpoint: string, token: string, query = ""): Promise<T> {
@@ -116,13 +126,17 @@ export function erpPost<T>(
   );
 }
 
-/** Multipart upload under the field name the browser client uses (`file`). */
+/**
+ * Multipart upload under the field name the browser client uses (`file`),
+ * typed from the file name so the ERP does not keep the CV as octet-stream.
+ */
 export function erpUpload<T>(
   endpoint: string,
   token: string,
   file: { filename: string; base64: string },
 ): Promise<T> {
   const form = new FormData();
-  form.append("file", new Blob([Buffer.from(file.base64, "base64")]), file.filename);
+  const blob = new Blob([Buffer.from(file.base64, "base64")], { type: mimeFromName(file.filename) });
+  form.append("file", blob, file.filename);
   return call<T>(endpoint, { method: "POST", headers: headers(token, false), body: form });
 }
