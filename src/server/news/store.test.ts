@@ -1,9 +1,6 @@
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import { join } from "node:path";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import type { TestDatabase } from "@/lib/db/testing";
 import { blocksToDoc } from "@/lib/news/legacy";
 
 import {
@@ -25,55 +22,33 @@ import {
  * `getMedia` is the one function here that turns a stored string into a
  * filesystem read.
  *
- * The real store talks to Cloudflare D1, which is shared with production, so
- * these tests never reach it. `@/lib/db` is swapped for the same Drizzle
- * `sqlite-proxy` driver over an in-memory SQLite (Node's built-in
- * `node:sqlite`), built from the very migration that was applied to D1 — so
- * the SQL the store generates is executed for real, against the real schema.
- * Nothing in this file can reach the network.
+ * The real store talks to the customer's PostgreSQL, which these tests never
+ * reach. `@/lib/db` is swapped for a drizzle client over PGlite — Postgres
+ * itself, compiled to WASM, in this process — with the tables created from the
+ * committed migration (see `src/lib/db/testing.ts`). So the SQL the store
+ * generates is executed for real, against the real schema, including the
+ * `jsonb` body and the `boolean` this port introduced. Nothing in this file
+ * can reach the network.
  */
 
-// node:sqlite ships with Node 22 but @types/node@20 has no declarations for it
-// (same workaround as src/app/api/me/route.test.ts).
-type Row = Record<string, unknown>;
-type SqliteDb = {
-  exec(sql: string): void;
-  prepare(sql: string): { all(...params: unknown[]): Row[]; run(...params: unknown[]): unknown };
-};
-const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
-  DatabaseSync: new (path: string) => SqliteDb;
-};
-
 const memory = vi.hoisted(() => ({
-  db: null as SqliteDb | null,
-  /** A statement matching this throws, as a D1 outage mid-save would. */
+  db: null as TestDatabase | null,
+  /** A statement matching this throws, as a database outage mid-save would. */
   failOn: null as RegExp | null,
 }));
 
 vi.mock("@/lib/db", async () => {
-  const { drizzle } = await import("drizzle-orm/sqlite-proxy");
-  const schema = await import("@/lib/db/schema");
+  const schema = await vi.importActual<typeof import("@/lib/db/schema")>("@/lib/db/schema");
+  const { createTestDatabase } = await import("@/lib/db/testing");
 
-  const db = drizzle(
-    async (sql, params, method) => {
-      if (memory.failOn?.test(sql)) throw new Error(`D1 unavailable: ${sql.slice(0, 40)}`);
-      const statement = memory.db!.prepare(sql);
-      if (method === "run") {
-        statement.run(...params);
-        return { rows: [] };
-      }
-      // Objects in, positional arrays out — the same mapping `src/lib/db`
-      // applies to what the D1 HTTP API returns.
-      const rows = statement.all(...params).map((row) => Object.values(row));
-      return { rows: method === "get" ? (rows[0] ?? []) : rows };
+  memory.db = await createTestDatabase({
+    onQuery: (sql) => {
+      if (memory.failOn?.test(sql)) throw new Error(`database unavailable: ${sql.slice(0, 40)}`);
     },
-    { schema },
-  );
+  });
 
-  return { ...schema, getDb: () => db };
+  return { ...schema, getDb: () => memory.db!.db };
 });
-
-const MIGRATION = readFileSync(join(process.cwd(), "drizzle", "0002_news.sql"), "utf8");
 
 const BODY = blocksToDoc([{ kind: "paragraph", text: "Туршилтын бичвэр." }]);
 
@@ -92,11 +67,15 @@ function article(overrides: Partial<Parameters<typeof saveArticle>[0]> = {}) {
   });
 }
 
-beforeEach(() => {
-  // A fresh database per case, so no test sees what the previous one left.
-  memory.db = new DatabaseSync(":memory:");
+beforeAll(async () => {
+  // Touch the store so the mocked module (and its PGlite) is built once.
+  await listArticles({ status: "all" });
+});
+
+beforeEach(async () => {
+  // Empty tables per case, so no test sees what the previous one left.
   memory.failOn = null;
-  memory.db.exec(MIGRATION.replaceAll("--> statement-breakpoint", ""));
+  await memory.db!.reset();
 });
 
 describe("saveArticle — create", () => {
@@ -347,14 +326,16 @@ describe("media", () => {
   });
 
   it("splits a large upload across rows and reads it back whole", async () => {
-    // 1.2 MB of bytes is ~1.6 MB of base64: four 500k-character chunks. D1
-    // refuses a value over 2 MB, so a phone photograph only fits this way.
+    // 1.2 MB of bytes is ~1.6 MB of base64: four 500k-character chunks. The
+    // chunking came from D1's 2 MB value cap and is kept on Postgres, so the
+    // rows an old cover was written as still read back.
     const bytes = new Uint8Array(1_200_000).map((_, index) => index % 251);
     const key = await putMedia(bytes, "image/jpeg");
 
-    const rows = memory.db!
-      .prepare("SELECT chunk_index, length(data) AS size FROM news_media WHERE key = ? ORDER BY chunk_index")
-      .all(key);
+    const { rows } = await memory.db!.client.query<{ chunk_index: number; size: number }>(
+      "SELECT chunk_index, length(data) AS size FROM news_media WHERE key = $1 ORDER BY chunk_index",
+      [key],
+    );
     expect(rows.map((row) => row.chunk_index)).toEqual([0, 1, 2, 3]);
     expect(rows.every((row) => Number(row.size) <= 500_000)).toBe(true);
 
@@ -417,14 +398,18 @@ describe("bodies", () => {
   it("reads a row written before rich text — a NewsBlock[] body — as a document", async () => {
     // Rows laid down by the first seed hold the old block array. They must
     // render without a migration.
-    memory.db!
-      .prepare(
-        `INSERT INTO news_article (id, slug, title, lede, category, author, published_at,
-           cover_key, cover_alt, body_json, status, featured, created_at, updated_at)
-         VALUES ('art_legacy0000', 'legacy', 'Хуучин', 'Тэргүүн', 'company', 'Б', '2026-09-01',
-           NULL, '', ?, 'published', 0, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')`,
-      )
-      .run(JSON.stringify([{ kind: "heading", text: "Гарчиг" }, { kind: "paragraph", text: "Бичвэр." }]));
+    await memory.db!.client.query(
+      `INSERT INTO news_article (id, slug, title, lede, category, author, published_at,
+         cover_key, cover_alt, body_json, status, featured, created_at, updated_at)
+       VALUES ('art_legacy0000', 'legacy', 'Хуучин', 'Тэргүүн', 'company', 'Б', '2026-09-01',
+         NULL, '', $1, 'published', false, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')`,
+      [
+        JSON.stringify([
+          { kind: "heading", text: "Гарчиг" },
+          { kind: "paragraph", text: "Бичвэр." },
+        ]),
+      ],
+    );
 
     const read = await getArticleBySlug("legacy");
     expect(read?.body.type).toBe("doc");
@@ -432,14 +417,16 @@ describe("bodies", () => {
   });
 
   it("survives a row whose body is not JSON at all", async () => {
-    memory.db!
-      .prepare(
-        `INSERT INTO news_article (id, slug, title, lede, category, author, published_at,
-           cover_key, cover_alt, body_json, status, featured, created_at, updated_at)
-         VALUES ('art_broken0000', 'broken', 'Эвдэрсэн', 'Т', 'company', 'Б', '2026-09-01',
-           NULL, '', '{not json', 'published', 0, '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')`,
-      )
-      .run();
+    // `jsonb` will not take `{not json`, so the corrupt row is a JSON *string*
+    // holding it — which is exactly what a row copied verbatim out of D1's
+    // TEXT column would be, and `parseBody` still has to survive it.
+    await memory.db!.client.query(
+      `INSERT INTO news_article (id, slug, title, lede, category, author, published_at,
+         cover_key, cover_alt, body_json, status, featured, created_at, updated_at)
+       VALUES ('art_broken0000', 'broken', 'Эвдэрсэн', 'Т', 'company', 'Б', '2026-09-01',
+         NULL, '', to_jsonb('{not json'::text), 'published', false,
+         '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z')`,
+    );
 
     expect((await getArticleBySlug("broken"))?.body.type).toBe("doc");
   });

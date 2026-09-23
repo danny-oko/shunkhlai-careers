@@ -1,0 +1,37 @@
+# Local PostgreSQL for development, matching the customer's server closely
+# enough to be worth trusting: same major version (16), same database and role
+# names as `app_db` / `app_user` on 192.168.2.23.
+#
+#   docker compose up -d
+#   DATABASE_URL=postgresql://app_user:app_password@localhost:5432/app_db bun run db:push
+#
+# The password here is a local development password and nothing else. The real
+# one is held by the customer's IT and belongs only in the server's own
+# environment — never in this file, never in the repository.
+#
+# The data lives in a named volume, so `docker compose down` keeps it and
+# `docker compose down -v` throws it away.
+services:
+  postgres:
+    image: postgres:16
+    container_name: shunhlai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: app_db
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: app_password
+      # The customer's server is a Mongolian deployment; keep the collation
+      # predictable rather than inheriting the image's host locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d app_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
