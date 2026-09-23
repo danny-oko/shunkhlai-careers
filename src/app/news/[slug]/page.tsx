@@ -19,6 +19,12 @@ import {
 } from "@/lib/news/service";
 import { bodyExcerpt, categoryLabel, coverUrl } from "@/lib/news/types";
 
+/**
+ * Read from D1 on every request. The row can change from any host — an edit
+ * saved on localhost writes the same database production reads — and only a
+ * per-request read is guaranteed to see it; the admin actions' revalidatePath
+ * cannot reach another host's cache.
+ */
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
@@ -28,6 +34,9 @@ export async function generateMetadata({
   const article = await getArticle(slug);
   if (!article) return { title: "Мэдээ олдсонгүй" };
 
+  // A hosted cover is already absolute and is handed to Open Graph as-is —
+  // crawlers fetch it from Cloudinary directly. A media-route path is relative
+  // and resolved against the site's `metadataBase`.
   const image = coverUrl(article.coverKey);
 
   return {

@@ -13,6 +13,8 @@ import {
   sqliteTable,
   text,
   integer,
+  index,
+  primaryKey,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
@@ -141,9 +143,64 @@ export const applicantFile = sqliteTable(
   })
 );
 
+/**
+ * The newsroom (`/news`, edited at `/admin/news`). One row per story; the body
+ * is a `RichDoc` as JSON (rows written before rich text hold a `NewsBlock[]`,
+ * which the store reads through `coerceBody`). Dates stay text on purpose: `published_at` is an
+ * editorial `YYYY-MM-DD` (a lexical sort is the chronological one) and
+ * `created_at` / `updated_at` are ISO strings, which is what `NewsArticle`
+ * already promises its callers.
+ */
+export const newsArticle = sqliteTable(
+  "news_article",
+  {
+    id: text("id").primaryKey(), // art_<10 hex>
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    lede: text("lede").notNull(),
+    category: text("category").notNull(), // company | industry | society | people
+    author: text("author").notNull(),
+    publishedAt: text("published_at").notNull(),
+    // med_<12 hex> (bytes in news_media) | https://… (a hosted image, e.g.
+    // Cloudinary — never fetched by this app) | seed:<path under public/> | null
+    coverKey: text("cover_key"),
+    coverAlt: text("cover_alt").notNull().default(""),
+    bodyJson: text("body_json").notNull(),
+    status: text("status").notNull(), // draft | published
+    featured: integer("featured", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => ({
+    bySlug: uniqueIndex("news_article_slug_key").on(t.slug),
+    byStatusDate: index("news_article_status_published_idx").on(t.status, t.publishedAt),
+  })
+);
+
+/**
+ * Uploaded covers (base64), chunked for the same reason as `applicant_file`:
+ * D1 caps a value at 2 MB and a cover may be 5 MB. Seeded covers are files in
+ * `public/` and URL covers live on their own host; neither lands here.
+ */
+export const newsMedia = sqliteTable(
+  "news_media",
+  {
+    key: text("key").notNull(), // med_<12 hex>
+    chunkIndex: integer("chunk_index").notNull(),
+    contentType: text("content_type").notNull(),
+    data: text("data").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.key, t.chunkIndex] }),
+  })
+);
+
 export type ApplicantLink = typeof applicantLink.$inferSelect;
 export type NewApplicantLink = typeof applicantLink.$inferInsert;
 export type ApplicationLog = typeof applicationLog.$inferSelect;
 export type ApplicantProfileRow = typeof applicantProfile.$inferSelect;
 export type ApplicantAccountRow = typeof applicantAccount.$inferSelect;
 export type ApplicantFileRow = typeof applicantFile.$inferSelect;
+export type NewsArticleRow = typeof newsArticle.$inferSelect;
+export type NewsMediaRow = typeof newsMedia.$inferSelect;

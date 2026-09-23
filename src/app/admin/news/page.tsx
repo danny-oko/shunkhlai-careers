@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CheckCircle2, FileText, Newspaper, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileText, Newspaper, Plus } from "lucide-react";
 
 import { ArticleRow } from "@/components/admin/article-row";
 import { Button } from "@/components/ui/button";
 import { getAdminArticles } from "@/lib/news/service";
+import { NEWS_DB_ERROR } from "@/lib/news/schema";
 import { NEWS_STATUSES, type NewsArticle, type NewsStatus } from "@/lib/news/types";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,41 @@ const FILTERS: ReadonlyArray<{ value: Filter; label: string }> = [
   { value: "all", label: "Бүгд" },
   ...NEWS_STATUSES.map(({ value, label }) => ({ value, label })),
 ];
+
+/**
+ * Both lists, or null if the database could not be reached. The desk then says
+ * so instead of crashing — and instead of showing an empty desk, which would
+ * read as "every story is gone".
+ */
+async function loadDesk(
+  status: Filter,
+): Promise<{ articles: NewsArticle[]; everything: NewsArticle[] } | null> {
+  try {
+    const [articles, everything] = await Promise.all([
+      getAdminArticles({ status }),
+      getAdminArticles({ status: "all" }),
+    ]);
+    return { articles, everything };
+  } catch (error) {
+    console.error(
+      "[admin/news] D1 read failed:",
+      error instanceof Error ? error.message : error,
+    );
+    return null;
+  }
+}
+
+function DbError() {
+  return (
+    <p
+      role="alert"
+      className="mb-6 flex items-center gap-2 border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-[0.8125rem] text-destructive"
+    >
+      <AlertTriangle aria-hidden className="size-4 shrink-0" />
+      {NEWS_DB_ERROR}
+    </p>
+  );
+}
 
 function read(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value) ?? "";
@@ -77,14 +113,20 @@ export default async function AdminNewsPage({
     ? (requested as Filter)
     : "all";
 
-  const [articles, everything] = await Promise.all([
-    getAdminArticles({ status }),
-    getAdminArticles({ status: "all" }),
-  ]);
+  const desk = await loadDesk(status);
+  if (!desk) {
+    return (
+      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 lg:px-8">
+        <DbError />
+      </main>
+    );
+  }
+  const { articles, everything } = desk;
 
   const published = everything.filter((article) => article.status === "published").length;
   const saved = read(params.saved);
   const deleted = read(params.deleted);
+  const failed = read(params.error) === "db";
 
   // Looked up rather than taken from the query string: the banner needs the
   // story's status to know whether it has a public URL yet, and a hand-typed
@@ -94,6 +136,7 @@ export default async function AdminNewsPage({
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 lg:px-8">
+      {failed && <DbError />}
       <ActionNotice saved={savedArticle} deleted={Boolean(deleted)} />
 
       <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-b-[var(--rule-strong)] pb-4">

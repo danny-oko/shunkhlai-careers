@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 
+import { and, asc, eq, type SQL } from "drizzle-orm";
+
+import { getDb, newsArticle, newsMedia, type NewsArticleRow } from "@/lib/db";
 import { coerceBody } from "@/lib/news/legacy";
 import type { RichDoc } from "@/lib/news/shared/rich-text";
 import { uniqueSlug } from "@/lib/news/shared/slug";
@@ -10,23 +13,24 @@ import {
   type NewsArticle,
   type NewsCategory,
   type NewsStatus,
+  isUrlCoverKey,
 } from "@/lib/news/types";
 
-import { seedArticles } from "./seed";
-
 /**
- * Storage for the newsroom.
+ * Storage for the newsroom: two tables in Cloudflare D1 (`news_article`,
+ * `news_media`), through the same Drizzle client as the applicant account.
  *
- * Deliberately the same shape as `src/server/mock/store.ts`: state on
- * `globalThis` so a hot reload does not empty the desk mid-edit, mirrored to
- * `.mock-data/` after every write so a dev-server restart does not either, and
- * persistence switched off in production where the filesystem is read-only.
+ * The recruitment backend has no news endpoints, so this *is* the newsroom's
+ * database. `service.ts` and the admin actions are the only callers; the
+ * functions below are the whole surface the rest of the app knows.
  *
- * Unlike that module this is not a stand-in for anything. The recruitment
- * backend has no news endpoints — there is nothing to mock — so this *is* the
- * newsroom's database for as long as the newsroom has no other one. When a CMS
- * or a real table arrives, this file is the seam: the functions below are what
- * the rest of the app knows, and `service.ts` is the only thing that calls them.
+ * The database is shared by every host — localhost and production read and
+ * write the same rows — so nothing here caches, and every read is a query.
+ *
+ * There is no seeding in here on purpose. The newsroom's stories are laid down
+ * by `scripts/news/sync.ts`, a script a person runs; a store that re-seeded
+ * whenever the table was empty would bring them back after an editor deleted
+ * everything.
  */
 
 export type ListQuery = {
@@ -37,85 +41,8 @@ export type ListQuery = {
   limit?: number;
 };
 
-type MediaRecord = { contentType: string; base64: string };
-
-type Db = {
-  articles: NewsArticle[];
-  media: Record<string, MediaRecord>;
-  /**
-   * Whether the seed has already been laid down.
-   *
-   * Tracked separately from `articles.length` because the two answer different
-   * questions. An editor who deletes every story has an empty newsroom on
-   * purpose, and keying the seed off emptiness would resurrect all seven of
-   * them on the next restart — deleting something twice and having it come
-   * back is worse than never having seeded at all.
-   */
-  seeded: boolean;
-};
-
-/** What `.mock-data/news.json` holds. */
-type PersistedArticles = { seeded: boolean; articles: NewsArticle[] };
-
-const globalRef = globalThis as typeof globalThis & { __newsroomDb?: Db };
-
-/* --- persistence (development only) ------------------------------------- */
-
-/**
- * Off in production, where the filesystem is read-only — and off under the
- * test runner, which is not a nicety. The store writes to `process.cwd()`, and
- * the suite exercises `saveArticle` and `deleteArticle` dozens of times, so a
- * test run was overwriting `.mock-data/news.json` with whatever the last case
- * left behind: running the tests emptied the developer's newsroom.
- */
-const persists =
-  process.env.NODE_ENV !== "production" &&
-  process.env.NODE_ENV !== "test" &&
-  !process.env.VITEST;
-
-const dataDir = join(process.cwd(), ".mock-data");
-const articlesFile = join(dataDir, "news.json");
-const mediaFile = join(dataDir, "news-media.json");
-
-/**
- * Uploads live in their own file.
- *
- * A cover is held as base64, so one 4MB photograph is ~5.5MB of JSON. Keeping
- * it out of `news.json` means the article list — the file that is read and
- * rewritten on every single edit — stays a few kilobytes.
- */
-function readFile<T>(path: string, fallback: T): T {
-  if (!persists) return fallback;
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
-    // No file yet, or one left by an older shape. Starting clean beats taking
-    // the server down over a dev scratch file.
-    return fallback;
-  }
-}
-
-/** Through a temp file: a half-written JSON is unreadable, which loses everything. */
-function writeAtomic(path: string, value: unknown): void {
-  if (!persists) return;
-  try {
-    mkdirSync(dirname(path), { recursive: true });
-    const pending = `${path}.tmp`;
-    writeFileSync(pending, JSON.stringify(value), "utf8");
-    renameSync(pending, path);
-  } catch {
-    // Persistence is a convenience. A read-only mount or a full disk must not
-    // turn into a failed save the editor sees as lost work.
-  }
-}
-
-function saveArticles(): void {
-  writeAtomic(articlesFile, { seeded: db.seeded, articles: db.articles });
-}
-
-function saveMedia(): void {
-  writeAtomic(mediaFile, db.media);
-}
+/** D1 caps a value at 2 MB; stay well under it per chunk, as `applicant_file` does. */
+const MEDIA_CHUNK_CHARS = 500_000;
 
 /* --- ids ---------------------------------------------------------------- */
 
@@ -127,51 +54,46 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-/* --- load --------------------------------------------------------------- */
+/* --- rows --------------------------------------------------------------- */
 
 /**
- * Files written before rich text hold `NewsBlock[]` bodies. Reading them
- * through `coerceBody` means an old `.mock-data/news.json` still loads; the
- * next save writes the new shape.
+ * `body_json` as a `RichDoc`, whatever it holds.
+ *
+ * Rows written before rich text store a `NewsBlock[]`; `coerceBody` reads
+ * either shape (and sanitises the new one), so an old row renders without a
+ * migration and is rewritten in the new shape the next time it is saved.
  */
-function withDocBodies(articles: NewsArticle[]): NewsArticle[] {
-  return articles.map((article) => ({ ...article, body: coerceBody(article.body) }));
-}
-
-function loadDb(): Db {
-  const saved = readFile<PersistedArticles | NewsArticle[] | null>(articlesFile, null);
-  const media = readFile<Record<string, MediaRecord>>(mediaFile, {});
-
-  // An array is the shape an earlier build wrote. Reading it as already-seeded
-  // is the right guess: it only exists because that build seeded it.
-  if (Array.isArray(saved)) return { articles: withDocBodies(saved), media, seeded: true };
-  if (saved?.seeded) {
-    return { articles: withDocBodies(saved.articles ?? []), media, seeded: true };
+function parseBody(json: string): RichDoc {
+  try {
+    return coerceBody(JSON.parse(json));
+  } catch {
+    // One corrupt row must not take the whole front page down with it.
+    return coerceBody(null);
   }
-
-  // First run on this machine. The desk is seeded rather than empty because an
-  // empty newsroom cannot be reviewed: there is no way to see the front page,
-  // the category rail or the archive without stories in them.
-  const created = nowIso();
-  const taken: string[] = [];
-  const articles = seedArticles().map((draft) => {
-    const slug = uniqueSlug(draft.title, taken);
-    taken.push(slug);
-    return { ...draft, id: newId("art_", 5), slug, createdAt: created, updatedAt: created };
-  });
-
-  const db: Db = { articles, media, seeded: true };
-  writeAtomic(articlesFile, { seeded: true, articles });
-  return db;
 }
 
-export const db: Db = globalRef.__newsroomDb ?? (globalRef.__newsroomDb = loadDb());
+function toArticle(row: NewsArticleRow): NewsArticle {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    lede: row.lede,
+    category: row.category as NewsCategory,
+    author: row.author,
+    publishedAt: row.publishedAt,
+    coverKey: row.coverKey ?? null,
+    coverAlt: row.coverAlt,
+    body: parseBody(row.bodyJson),
+    status: row.status as NewsStatus,
+    featured: Boolean(row.featured),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
 
-/** Empties the desk. Tests only — nothing in the app has a reason to call it. */
-export function resetForTests(): void {
-  db.articles = [];
-  db.media = {};
-  db.seeded = true;
+function toRow(article: NewsArticle): NewsArticleRow {
+  const { body, ...rest } = article;
+  return { ...rest, bodyJson: JSON.stringify(body) };
 }
 
 /* --- reads -------------------------------------------------------------- */
@@ -181,7 +103,9 @@ export function resetForTests(): void {
  *
  * `publishedAt` is a plain `YYYY-MM-DD` string, so a lexical compare is also
  * the chronological one. `createdAt` breaks the remaining ties, which keeps the
- * order stable when an editor files two stories on the same day.
+ * order stable when an editor files two stories on the same day. Done in JS
+ * rather than `ORDER BY` so the order does not depend on the database's
+ * collation — the table is a few dozen rows.
  */
 function compare(a: NewsArticle, b: NewsArticle): number {
   if (a.publishedAt !== b.publishedAt) return a.publishedAt < b.publishedAt ? 1 : -1;
@@ -189,31 +113,46 @@ function compare(a: NewsArticle, b: NewsArticle): number {
   return a.createdAt < b.createdAt ? 1 : -1;
 }
 
+/**
+ * Case-folded in JS, not with SQL `LIKE`: SQLite only folds ASCII, and every
+ * headline here is Cyrillic.
+ */
 function haystack(article: NewsArticle): string {
   return `${article.title} ${article.lede} ${article.author}`.toLowerCase();
 }
 
-export function listArticles(query: ListQuery = {}): NewsArticle[] {
+export async function listArticles(query: ListQuery = {}): Promise<NewsArticle[]> {
   const status = query.status ?? "published";
   const search = (query.search ?? "").trim().toLowerCase();
 
-  const rows = db.articles.filter((article) => {
-    if (status !== "all" && article.status !== status) return false;
-    if (query.category && article.category !== query.category) return false;
-    if (search && !haystack(article).includes(search)) return false;
-    return true;
-  });
+  const where: SQL[] = [];
+  if (status !== "all") where.push(eq(newsArticle.status, status));
+  if (query.category) where.push(eq(newsArticle.category, query.category));
+
+  const rows = (
+    await getDb()
+      .select()
+      .from(newsArticle)
+      .where(where.length > 0 ? and(...where) : undefined)
+  )
+    .map(toArticle)
+    .filter((article) => !search || haystack(article).includes(search));
 
   rows.sort(compare);
   return typeof query.limit === "number" ? rows.slice(0, Math.max(0, query.limit)) : rows;
 }
 
-export function getArticleBySlug(slug: string): NewsArticle | null {
-  return db.articles.find((article) => article.slug === slug) ?? null;
+async function findOne(where: SQL): Promise<NewsArticle | null> {
+  const rows = await getDb().select().from(newsArticle).where(where).limit(1);
+  return rows[0] ? toArticle(rows[0]) : null;
 }
 
-export function getArticleById(id: string): NewsArticle | null {
-  return db.articles.find((article) => article.id === id) ?? null;
+export async function getArticleBySlug(slug: string): Promise<NewsArticle | null> {
+  return findOne(eq(newsArticle.slug, slug));
+}
+
+export async function getArticleById(id: string): Promise<NewsArticle | null> {
+  return findOne(eq(newsArticle.id, id));
 }
 
 /**
@@ -223,19 +162,28 @@ export function getArticleById(id: string): NewsArticle | null {
  * links, and a missing key there would read as a missing section rather than
  * as an empty one.
  */
-export function countByCategory(
+export async function countByCategory(
   status: NewsStatus | "all" = "published",
-): Record<NewsCategory, number> {
+): Promise<Record<NewsCategory, number>> {
   const counts = Object.fromEntries(
     NEWS_CATEGORIES.map((category) => [category.value, 0]),
   ) as Record<NewsCategory, number>;
 
-  for (const article of db.articles) {
-    if (status !== "all" && article.status !== status) continue;
-    counts[article.category] += 1;
+  const rows = await getDb()
+    .select({ category: newsArticle.category })
+    .from(newsArticle)
+    .where(status === "all" ? undefined : eq(newsArticle.status, status));
+
+  for (const { category } of rows) {
+    if (category in counts) counts[category as NewsCategory] += 1;
   }
 
   return counts;
+}
+
+async function allSlugs(): Promise<string[]> {
+  const rows = await getDb().select({ slug: newsArticle.slug }).from(newsArticle);
+  return rows.map((row) => row.slug);
 }
 
 /* --- writes ------------------------------------------------------------- */
@@ -255,13 +203,14 @@ export type SaveInput = {
   /**
    * Three states, and they are not the same: the key absent leaves the current
    * cover alone (the common case — an edit that does not touch the picture),
-   * a string replaces it, and an explicit `null` removes it.
+   * a string replaces it, and an explicit `null` removes it. The string is a
+   * media key or an absolute https URL; the store treats both as opaque.
    */
   coverKey?: string | null;
 };
 
-export function saveArticle(input: SaveInput): NewsArticle {
-  const existing = input.id ? getArticleById(input.id) : null;
+export async function saveArticle(input: SaveInput): Promise<NewsArticle> {
+  const existing = input.id ? await getArticleById(input.id) : null;
   const timestamp = nowIso();
 
   const fields = {
@@ -280,13 +229,12 @@ export function saveArticle(input: SaveInput): NewsArticle {
     const article: NewsArticle = {
       ...fields,
       id: newId("art_", 5),
-      slug: uniqueSlug(fields.title, db.articles.map((row) => row.slug)),
+      slug: uniqueSlug(fields.title, await allSlugs()),
       coverKey: input.coverKey ?? null,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
-    db.articles.push(article);
-    saveArticles();
+    await getDb().insert(newsArticle).values(toRow(article));
     return article;
   }
 
@@ -297,7 +245,7 @@ export function saveArticle(input: SaveInput): NewsArticle {
   const slug =
     fields.title === existing.title
       ? existing.slug
-      : uniqueSlug(fields.title, db.articles.map((row) => row.slug), existing.slug);
+      : uniqueSlug(fields.title, await allSlugs(), existing.slug);
 
   const coverKey = resolveCoverKey(existing, input);
 
@@ -309,27 +257,32 @@ export function saveArticle(input: SaveInput): NewsArticle {
     updatedAt: timestamp,
   };
 
-  db.articles = db.articles.map((row) => (row.id === existing.id ? updated : row));
-  saveArticles();
+  const { id, createdAt: _createdAt, ...changes } = toRow(updated);
+  await getDb().update(newsArticle).set(changes).where(eq(newsArticle.id, id));
+
+  // Only once the row points somewhere else. Dropping the old bytes first
+  // meant a failed UPDATE left a story whose cover key named nothing — a
+  // broken picture on a live page — where now it leaves, at worst, a few
+  // orphaned chunks nobody links to.
+  if (coverKey !== existing.coverKey) await dropMedia(existing.coverKey);
   return updated;
 }
 
-/** Applies the three-state `coverKey`, dropping the bytes of a cover it replaces. */
+/** Applies the three-state `coverKey`: absent keeps, a string replaces, null removes. */
 function resolveCoverKey(existing: NewsArticle, input: SaveInput): string | null {
   if (!("coverKey" in input)) return existing.coverKey;
-  if (input.coverKey === existing.coverKey) return existing.coverKey;
-
-  dropMedia(existing.coverKey);
   return input.coverKey ?? null;
 }
 
-export function deleteArticle(id: string): boolean {
-  const article = getArticleById(id);
+export async function deleteArticle(id: string): Promise<boolean> {
+  const article = await getArticleById(id);
   if (!article) return false;
 
-  dropMedia(article.coverKey);
-  db.articles = db.articles.filter((row) => row.id !== id);
-  saveArticles();
+  // Row first, bytes second — the same order as a cover swap in `saveArticle`,
+  // and for the same reason: a failure between the two must leave an orphan,
+  // never a story pointing at bytes that are gone.
+  await getDb().delete(newsArticle).where(eq(newsArticle.id, id));
+  await dropMedia(article.coverKey);
   return true;
 }
 
@@ -339,8 +292,8 @@ export function deleteArticle(id: string): boolean {
  * Seeded stories borrow photographs already in `public/`.
  *
  * They are addressed as `seed:brand/mock-03.jpg` rather than copied into the
- * store, so the seed costs nothing on disk and `public/brand/*` — which the
- * constraints fence off — is only ever read.
+ * store, so the seed costs nothing in the database and `public/brand/*` —
+ * which the constraints fence off — is only ever read.
  */
 const SEED_PREFIX = "seed:";
 
@@ -364,27 +317,63 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".avif": "image/avif",
 };
 
-export function putMedia(bytes: Uint8Array, contentType: string): string {
+/** Stores an uploaded cover as base64 chunks and returns its new key. */
+export async function putMedia(bytes: Uint8Array, contentType: string): Promise<string> {
   const key = newId("med_", 6);
-  db.media[key] = { contentType, base64: Buffer.from(bytes).toString("base64") };
-  saveMedia();
+  const data = Buffer.from(bytes).toString("base64");
+  const createdAt = nowIso();
+
+  // At least one row, so even an empty file reads back rather than 404ing.
+  const count = Math.max(1, Math.ceil(data.length / MEDIA_CHUNK_CHARS));
+  for (let index = 0; index < count; index += 1) {
+    const offset = index * MEDIA_CHUNK_CHARS;
+    await getDb()
+      .insert(newsMedia)
+      .values({
+        key,
+        chunkIndex: index,
+        contentType,
+        data: data.slice(offset, offset + MEDIA_CHUNK_CHARS),
+        createdAt,
+      });
+  }
+
   return key;
 }
 
-/** Uploaded covers only — a `seed:` key points at a file this store does not own. */
-function dropMedia(key: string | null): void {
-  if (!key || key.startsWith(SEED_PREFIX) || !(key in db.media)) return;
-  delete db.media[key];
-  saveMedia();
+/**
+ * Uploaded covers only. A `seed:` key points at a file this store does not
+ * own, and a URL key points at someone else's host — there are no bytes of
+ * either in `news_media` to delete.
+ *
+ * Exported for one caller outside the store: the save action, which uploads
+ * before it saves and has to take the upload back if the save then fails.
+ */
+export async function dropMedia(key: string | null): Promise<void> {
+  if (!key || key.startsWith(SEED_PREFIX) || isUrlCoverKey(key)) return;
+  await getDb().delete(newsMedia).where(eq(newsMedia.key, key));
 }
 
-export function getMedia(key: string): { bytes: Buffer; contentType: string } | null {
+export async function getMedia(
+  key: string,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
   if (!key) return null;
   if (key.startsWith(SEED_PREFIX)) return readSeedMedia(key.slice(SEED_PREFIX.length));
+  // A hosted cover is linked to directly (see `coverUrl`). Answering it here
+  // would make this route an open proxy, so it is simply not a key.
+  if (isUrlCoverKey(key)) return null;
 
-  const record = db.media[key];
-  if (!record) return null;
-  return { bytes: Buffer.from(record.base64, "base64"), contentType: record.contentType };
+  const chunks = await getDb()
+    .select({ contentType: newsMedia.contentType, data: newsMedia.data })
+    .from(newsMedia)
+    .where(eq(newsMedia.key, key))
+    .orderBy(asc(newsMedia.chunkIndex));
+  if (chunks.length === 0) return null;
+
+  return {
+    bytes: Buffer.from(chunks.map((chunk) => chunk.data).join(""), "base64"),
+    contentType: chunks[0].contentType,
+  };
 }
 
 /**

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ExternalLink, Eye, ImageOff, Loader2, PencilLine, Save, Upload } from "lucide-react";
+import { ExternalLink, Eye, ImageOff, Link2, Loader2, PencilLine, Save, Upload } from "lucide-react";
 
 import { type ArticleActionState, saveArticleAction } from "@/app/admin/news/actions";
 import { FieldShell } from "@/components/admin/field-shell";
@@ -20,18 +20,28 @@ import { prepareDoc } from "@/components/admin/rich-editor/commands";
 import { cleanForSave } from "@/components/admin/rich-editor/model";
 import { Textarea } from "@/components/ui/textarea";
 import { bodyFromField } from "@/lib/news/legacy";
-import { ARTICLE_LIMITS, COVER_TYPES } from "@/lib/news/schema";
+import { ARTICLE_LIMITS, COVER_TYPES, COVER_URL_ERROR } from "@/lib/news/schema";
 import { docText, isDocBlank } from "@/lib/news/shared/rich-text";
 import {
   NEWS_CATEGORIES,
   type NewsArticle,
   type NewsCategory,
   coverUrl,
+  coverUrlKey,
+  isOptimizableCover,
+  isUrlCoverKey,
   statusHint,
   statusLabel,
 } from "@/lib/news/types";
 import { confirmDiscard, useUnloadGuard } from "@/components/admin/unsaved-guard";
 import { prepareCover, setInputFile } from "@/components/admin/cover-upload";
+import {
+  KEEP,
+  type RemoveState,
+  afterTick,
+  afterUrlEdit,
+  isRemoving,
+} from "@/components/admin/cover-remove";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,6 +64,12 @@ type Draft = {
   author: string;
   publishedAt: string;
   coverAlt: string;
+  /**
+   * The "image link" field. Opens holding the current cover when that cover is
+   * a URL, so the editor can see and change it; `chooseCover` on the server
+   * only acts on it when it differs from what is stored.
+   */
+  coverUrl: string;
   /** The sanitised document as JSON: comparable, and exactly what is posted. */
   body: string;
   status: "draft" | "published";
@@ -87,6 +103,7 @@ function initialDraft(article: NewsArticle | null, echoed?: Record<string, strin
         author: article.author,
         publishedAt: article.publishedAt,
         coverAlt: article.coverAlt,
+        coverUrl: isUrlCoverKey(article.coverKey) ? article.coverKey : "",
         body: bodyJson(article.body),
         status: article.status,
         featured: article.featured,
@@ -98,6 +115,7 @@ function initialDraft(article: NewsArticle | null, echoed?: Record<string, strin
         author: "",
         publishedAt: today(),
         coverAlt: "",
+        coverUrl: "",
         body: bodyJson(null),
         status: "draft",
         featured: false,
@@ -113,6 +131,7 @@ function initialDraft(article: NewsArticle | null, echoed?: Record<string, strin
     author: echoed.author ?? base.author,
     publishedAt: echoed.publishedAt ?? base.publishedAt,
     coverAlt: echoed.coverAlt ?? base.coverAlt,
+    coverUrl: echoed.coverUrl ?? base.coverUrl,
     body: echoed.body === undefined ? base.body : bodyJson(bodyFromField(echoed.body)),
     status: echoed.status === "published" ? "published" : "draft",
     featured: echoed.featured === "on",
@@ -134,9 +153,14 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
   );
   const [pane, setPane] = React.useState<"edit" | "preview">("edit");
   const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
-  const [removeCover, setRemoveCover] = React.useState(false);
+  // Two reasons to remove, undone separately — see `cover-remove.ts`.
+  const [removal, setRemoval] = React.useState<RemoveState>(KEEP);
+  const removeCover = isRemoving(removal);
   const [coverError, setCoverError] = React.useState<string | null>(null);
   const [preparingCover, setPreparingCover] = React.useState(false);
+  // The URL field only complains once the editor has left it: "h" is not yet
+  // a wrong address, it is the start of one.
+  const [coverUrlTouched, setCoverUrlTouched] = React.useState(false);
   const coverInputRef = React.useRef<HTMLInputElement>(null);
   // The file the preview shows. Kept outside the input because React resets
   // the form after every action, a rejected save included, and an
@@ -189,8 +213,33 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
     return () => observer.disconnect();
   }, []);
 
-  const storedCover = coverUrl(article?.coverKey ?? null);
-  const shownCover = coverPreview ?? (removeCover ? null : storedCover);
+  const storedKey = article?.coverKey ?? null;
+  const storedCover = coverUrl(storedKey);
+
+  // The same precedence `chooseCover` applies on save, so the thumbnail and
+  // the preview never show a picture the save would not keep: a picked file,
+  // then a pasted URL that changes something, then "remove", then what is
+  // stored.
+  const typedUrl = draft.coverUrl.trim();
+  const typedCover = typedUrl ? coverUrlKey(typedUrl) : null;
+  const urlReplaces = typedCover !== null && typedCover !== storedKey;
+  const shownCover =
+    coverPreview ?? (urlReplaces ? typedCover : removeCover ? null : storedCover);
+  // A blob: URL from the file picker is not something the optimiser can
+  // fetch, and neither is a host outside `images.remotePatterns`.
+  const shownUnoptimized =
+    Boolean(coverPreview) || (shownCover !== null && !isOptimizableCover(shownCover));
+
+  const coverUrlError =
+    errors.coverUrl ??
+    (coverUrlTouched && typedUrl && !typedCover ? COVER_URL_ERROR : undefined);
+
+  const onCoverUrlChange = (value: string) => {
+    set("coverUrl", value);
+    // Emptying the field that held the current URL cover reads as "no cover";
+    // pasting an address back reads as "not that" again.
+    setRemoval((current) => afterUrlEdit(current, value, isUrlCoverKey(storedKey)));
+  };
 
   const showCover = (file: File | null) => {
     coverFileRef.current = file;
@@ -225,7 +274,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
     }
 
     showCover(prepared.file);
-    setRemoveCover(false);
+    setRemoval(KEEP);
   };
 
   return (
@@ -493,9 +542,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                     alt=""
                     fill
                     sizes="96px"
-                    // A blob: URL from the file picker is not a route the
-                    // image optimiser can fetch, so it is passed through.
-                    unoptimized={Boolean(coverPreview)}
+                    unoptimized={shownUnoptimized}
                     className="object-cover"
                   />
                 ) : (
@@ -525,12 +572,15 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                   JPEG, PNG, WebP, AVIF · 5MB хүртэл
                 </p>
 
-                {storedCover && !coverPreview && (
+                {storedCover && !coverPreview && !urlReplaces && (
                   <label className="flex w-fit items-center gap-2 text-[0.75rem] text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={removeCover}
-                      onChange={(event) => setRemoveCover(event.target.checked)}
+                      onChange={(event) => {
+                        const { checked } = event.target;
+                        setRemoval((current) => afterTick(current, checked));
+                      }}
                       className="size-3.5 accent-[var(--paper-accent)]"
                     />
                     Одоогийн зургийг хасах
@@ -549,6 +599,46 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                   </p>
                 )}
               </div>
+            </div>
+
+            {/* A hosted image (Cloudinary) instead of an upload. Secondary to
+                the file picker, so it is sized like one of its controls rather
+                than like the headline fields above. */}
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="coverUrl"
+                className="flex items-center gap-1.5 text-[0.6875rem] tracking-[0.14em] uppercase"
+              >
+                <Link2 aria-hidden className="size-3" />
+                Зургийн холбоос (URL)
+              </Label>
+              <Input
+                id="coverUrl"
+                name="coverUrl"
+                // Text, not `type="url"`: the browser's own check would block
+                // the save with an English bubble before the Mongolian error
+                // below could say what is wrong.
+                type="text"
+                inputMode="url"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="https://res.cloudinary.com/…"
+                value={draft.coverUrl}
+                onChange={(event) => onCoverUrlChange(event.target.value)}
+                onBlur={() => setCoverUrlTouched(true)}
+                aria-invalid={coverUrlError ? true : undefined}
+                aria-describedby={coverUrlError ? "coverUrl-error" : "coverUrl-hint"}
+                className="h-[38px] text-[0.8125rem] md:text-[0.8125rem]"
+              />
+              {coverUrlError ? (
+                <p id="coverUrl-error" role="alert" className="text-[0.8125rem] text-destructive">
+                  {coverUrlError}
+                </p>
+              ) : (
+                <p id="coverUrl-hint" className="text-[0.75rem] leading-snug text-muted-foreground">
+                  Файл сонгосон бол файл нь давуу эрхтэй.
+                </p>
+              )}
             </div>
 
             <FieldShell
@@ -650,7 +740,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                   alt={draft.coverAlt}
                   fill
                   sizes="(min-width: 1024px) 45vw, 90vw"
-                  unoptimized={Boolean(coverPreview)}
+                  unoptimized={shownUnoptimized}
                   className="object-cover"
                 />
               </div>

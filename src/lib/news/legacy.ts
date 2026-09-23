@@ -4,12 +4,13 @@ import type { NewsBlock } from "./types";
 /**
  * Reading the body format this newsroom used before rich text.
  *
- * Articles were stored as `NewsBlock[]` (paragraph, heading, quote, list) and
- * `.mock-data/news.json` on a developer's disk, and the seed, still hold that
- * shape. Rather than migrate files nobody can find, every read goes through
+ * Articles were stored as `NewsBlock[]` (paragraph, heading, quote, list), and
+ * the first rows laid into D1 and the owner's source file
+ * (`scripts/news/articles.source.json`) still hold that shape. Rather than
+ * migrate rows in a database production shares, every read goes through
  * `coerceBody`, which accepts either shape and always returns a `RichDoc`.
  *
- * Pure and never throws: it runs on whatever a file on disk contains.
+ * Pure and never throws: it runs on whatever a stored row contains.
  */
 
 function text(value: string): InlineNode[] {

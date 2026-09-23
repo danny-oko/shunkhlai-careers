@@ -7,7 +7,13 @@
  * data they format, so a component never reaches for `Intl` and guesses.
  */
 
-import { type RichDoc, docText, excerpt, readingMinutes as readingMinutesOf } from "./shared/rich-text";
+import {
+  type RichDoc,
+  docText,
+  excerpt,
+  readingMinutes as readingMinutesOf,
+  safeImageSrc,
+} from "./shared/rich-text";
 
 export type NewsCategory = "company" | "industry" | "society" | "people";
 
@@ -57,7 +63,10 @@ export type NewsArticle = {
   author: string;
   /** `YYYY-MM-DD` — the editorial date, not a timestamp. */
   publishedAt: string;
-  /** Served at `/api/news/media/<coverKey>`; null while a draft has no image. */
+  /**
+   * An absolute https URL (returned as-is by `coverUrl`), or a store key served
+   * at `/api/news/media/<coverKey>`; null while a draft has no image.
+   */
   coverKey: string | null;
   coverAlt: string;
   body: RichDoc;
@@ -160,15 +169,65 @@ export function bodyExcerpt(body: RichDoc, max = 180): string {
 }
 
 /**
+ * A cover key that is a whole URL rather than a store id.
+ *
+ * Any scheme counts here, not only https: the question is "is this an address
+ * or a key?", and an `http:` or `data:` value is an address this app refuses
+ * to show — it must not fall through to the media route as if it were an id.
+ * `seed:` is the one scheme-shaped prefix that is the store's own (see
+ * `store.ts`), so it is excluded by name.
+ */
+const URL_KEY = /^[a-z][\d+.a-z-]*:/iu;
+
+export function isUrlCoverKey(key: string | null | undefined): key is string {
+  return typeof key === "string" && URL_KEY.test(key.trim()) && !key.startsWith("seed:");
+}
+
+/**
+ * An https image address an editor may use as a cover, normalised — or null.
+ *
+ * `safeImageSrc` also accepts a path on this site, which is right for an image
+ * inside the body but wrong for a cover key: a bare path would be read back as
+ * a media id. So a cover URL is `safeImageSrc` *and* absolute https.
+ */
+export function coverUrlKey(raw: unknown): string | null {
+  const safe = safeImageSrc(raw);
+  return safe && safe.startsWith("https://") ? safe : null;
+}
+
+/**
  * Where a cover is served from.
  *
- * Covers do not live in `public/` — an uploaded one arrives at runtime — so
- * they go through a route handler keyed by the store's media id. Seeded
- * articles reuse the brand photographs already in `public/brand/` under a
- * `seed:` key, and those keys carry a colon and a slash: both have to be
- * percent-encoded or the path reads as extra segments and misses the route.
+ * Two kinds of key. A hosted image (Cloudinary, or any https address an editor
+ * pasted) is stored as its absolute URL and returned as-is, after the same
+ * `safeImageSrc` check the body's images pass — this app never fetches or
+ * proxies it. Everything else is a store id: uploaded covers live in D1 and go
+ * through a route handler. Seeded articles reuse the brand photographs in
+ * `public/brand/` under a `seed:` key, and those keys carry a colon and a
+ * slash: both have to be percent-encoded or the path reads as extra segments
+ * and misses the route.
  */
 export function coverUrl(coverKey: string | null): string | null {
   if (!coverKey) return null;
+  if (isUrlCoverKey(coverKey)) return coverUrlKey(coverKey);
   return `/api/news/media/${encodeURIComponent(coverKey)}`;
+}
+
+/**
+ * Whether `next/image` may optimise this cover.
+ *
+ * Site paths (the media route) always; a remote image only when it matches
+ * `images.remotePatterns` in `next.config.ts` — Cloudinary's delivery host,
+ * with no query string. Any other https host an editor pasted is rendered
+ * `unoptimized`, because the optimiser answers a host outside the allow-list
+ * with a 400 and the reader would see a broken frame.
+ */
+export function isOptimizableCover(src: string): boolean {
+  if (src.startsWith("/")) return true;
+  try {
+    const url = new URL(src);
+    return url.protocol === "https:" && url.hostname === "res.cloudinary.com" && !url.search;
+  } catch {
+    return false;
+  }
 }
