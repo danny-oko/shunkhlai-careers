@@ -16,8 +16,8 @@
  * carries its own salt and parameters, so `verifyPassword` keeps working for
  * hashes made before the parameters below were last raised.
  *
- * Nothing in the app calls this yet: this slice ships the table, this helper
- * and `scripts/users/create-user.ts`. `/admin` still uses ADMIN_PASSWORD.
+ * Callers: `scripts/users/create-user.ts`, the `/admin` sign-in
+ * (`src/server/admin/sign-in.ts`) and the password-change action.
  */
 import { hash, verify } from "@node-rs/argon2";
 

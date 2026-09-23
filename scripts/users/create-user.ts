@@ -8,9 +8,9 @@
  * in every CI log — and it is never printed, not even masked. What reaches the
  * database is the argon2id hash from `src/lib/auth/password.ts`.
  *
- * Nothing in the app reads this table yet: `/admin` still signs in with
- * ADMIN_PASSWORD. This script exists so the rows are there when that login is
- * moved onto the table.
+ * This is how staff accounts come to exist: `/admin/login` signs in against
+ * this table, and the ADMIN_PASSWORD fallback only applies while it is empty.
+ * Creating the first row here is what closes that fallback.
  *
  * Needs `DATABASE_URL`. Bun loads `.env.local` itself.
  */

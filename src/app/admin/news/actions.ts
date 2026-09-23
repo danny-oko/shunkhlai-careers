@@ -10,7 +10,7 @@ import {
   chooseCover,
   coverFileError,
 } from "@/lib/news/schema";
-import { requireAdmin } from "@/server/admin/guard";
+import { mayDeleteArticles, requireAdmin, requireAdminUser } from "@/server/admin/guard";
 import {
   deleteArticle,
   dropMedia,
@@ -202,7 +202,11 @@ export async function saveArticleAction(
 }
 
 export async function deleteArticleAction(formData: FormData): Promise<void> {
-  await requireAdmin();
+  // The one action that asks who, and not only whether: an `editor` may write
+  // and rewrite, but deleting a story is not recoverable. Checked here rather
+  // than only in the UI, because a POST does not come through the UI.
+  const user = await requireAdminUser();
+  if (!mayDeleteArticles(user)) redirect("/admin/news?error=forbidden");
 
   const id = String(formData.get("id") ?? "");
   let deleted: string | null = null;

@@ -403,7 +403,7 @@ describe("files", () => {
     expect((await rows("select count(*) as n from applicant_file"))[0].n).toBe(0);
   });
 
-  it("CV larger than one D1 chunk round-trips byte-exact, then deletes", async () => {
+  it("a multi-megabyte CV round-trips byte-exact, then deletes", async () => {
     as("u1");
     await ready();
     const bytes = new Uint8Array(1_200_000).map((_, i) => (i * 31) % 256); // ~1.6 MB base64
@@ -411,9 +411,18 @@ describe("files", () => {
     fd.set("file", new File([bytes], "cv.pdf", { type: "application/pdf" }));
     expect((await post("SaveAppCV", fd)).body.rettype).toBe(0);
 
-    const chunks = (await rows("select chunk_index, length(data) as n from applicant_file where kind = 'cv' order by chunk_index"));
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const c of chunks) expect(Number(c.n)).toBeLessThan(2_000_000);
+    // The bytes are a file now: nothing of them is in the database, and the
+    // row that replaced the chunks holds only the metadata. That is the whole
+    // point of the move — a 5 MB CV no longer costs 6.7 MB of base64 in
+    // Postgres and another copy in Node's heap on every read.
+    expect(Number((await rows("select count(*) as n from applicant_file"))[0].n)).toBe(0);
+    const stored = await rows(
+      "select sha256, content_type, byte_size, filename from stored_file where owner_kind = 'applicant_cv'",
+    );
+    expect(stored).toHaveLength(1);
+    expect(Number(stored[0].byte_size)).toBe(bytes.byteLength);
+    expect(stored[0].content_type).toBe("application/pdf");
+    expect(stored[0].filename).toBe("cv.pdf");
     // data_json stays small — the blob is not inlined.
     expect(String((await rows("select data_json from applicant_account"))[0].data_json).length).toBeLessThan(100_000);
 

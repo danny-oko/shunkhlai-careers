@@ -25,9 +25,10 @@
  * app's public types promise happens at the store boundary (see
  * `src/server/news/store.ts`), not by widening those types.
  *
- * The base64 file tables (`applicant_file`, `news_media`) stay chunked. D1's
- * 2 MB value cap is gone, but the chunking is harmless, and un-chunking would
- * be a data migration on top of a database migration.
+ * The base64 file tables (`applicant_file`, `news_media`) are being retired.
+ * Uploaded bytes now go to the filesystem (`stored_file` plus
+ * `src/server/files/store.ts`); these two tables are read-only legacy that the
+ * stores still fall back to for files the migration has not moved yet.
  */
 import {
   boolean,
@@ -231,12 +232,59 @@ export const newsMedia = pgTable(
 );
 
 /**
+ * Metadata for a file whose bytes live on the filesystem, not in here.
+ *
+ * The bytes are content-addressed under `UPLOAD_DIR` — see
+ * `src/server/files/store.ts` for the layout and why. This row is what turns
+ * an owner ("this applicant's CV", "cover med_ab12…") into a digest, and it
+ * carries everything a response needs without opening the file: the content
+ * type, the size, and the original filename for a CV download.
+ *
+ * `(owner_kind, owner_key)` is unique: an owner has at most one current file,
+ * and re-uploading replaces the row rather than accumulating versions. That is
+ * the same rule the chunked tables enforced with their own unique indexes.
+ *
+ * `sha256` is deliberately NOT unique. Two applicants who upload the same PDF
+ * get one file on disk and two rows here — the row is the reference, and a
+ * blob is only removed once no row names it.
+ *
+ * `applicant_file` and `news_media` stay in place while the move runs: a file
+ * that has no row here is still read from its chunks (see the fallbacks in
+ * `src/server/applicant/account-store.ts` and `src/server/news/store.ts`), so
+ * nothing 404s mid-migration. Dropping those tables is a later change, once
+ * `scripts/files/move-to-disk.ts` has been run and verified.
+ */
+export const storedFile = pgTable(
+  "stored_file",
+  {
+    id: text("id").primaryKey(),
+    sha256: text("sha256").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    // applicant_cv | applicant_picture | news_media — see src/server/files/records.ts
+    ownerKind: text("owner_kind").notNull(),
+    // The applicant's lowercased email, or the `med_<12 hex>` cover key.
+    ownerKey: text("owner_key").notNull(),
+    // The name the applicant uploaded the CV under; null for the other kinds.
+    filename: text("filename"),
+    createdAt: tstz("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byOwner: uniqueIndex("stored_file_owner_key").on(t.ownerKind, t.ownerKey),
+    // "Does anything still point at these bytes?" — asked on every delete.
+    bySha: index("stored_file_sha256_idx").on(t.sha256),
+  }),
+);
+
+/**
  * Staff who sign in to this app itself (the customer's guide, section 2).
  *
- * Nothing reads it yet: this slice ships the table, the argon2id helper
- * (`src/lib/auth/password.ts`) and the `scripts/users/create-user.ts` CLI, and
- * leaves `/admin`'s existing ADMIN_PASSWORD login alone. Wiring the login onto
- * this table is a separate change.
+ * This is what `/admin/login` checks: email and password, with the session in
+ * `admin_session` below. Rows are made by `scripts/users/create-user.ts`.
+ * `is_active = false` is the off switch — it refuses the next sign-in *and*
+ * ends the sessions the account already has (see `src/server/admin/store.ts`).
  *
  * `password_hash` holds an argon2id PHC string — never a plaintext password,
  * and never a hash this project invented.
@@ -259,6 +307,41 @@ export const appUser = pgTable(
   }),
 );
 
+/**
+ * A signed-in staff session — the server side of the `shunkhlai.admin` cookie.
+ *
+ * The cookie carries an opaque random token; this table holds only its SHA-256
+ * hash, so a leaked database dump cannot be replayed as a session. Lookup is
+ * by hash, which is why the unique index is on `token_hash` and not on `id`.
+ *
+ * `on delete cascade`: deactivating a user is `is_active = false`, but
+ * *deleting* one must not leave their sessions behind as rows that outlive the
+ * account they authorise.
+ *
+ * Expiry is a column rather than a signature, which is the point of moving off
+ * the HMAC cookie: a session can be ended by deleting the row (logout, a
+ * password change), and nobody holds a token the server cannot revoke.
+ */
+export const adminSession = pgTable(
+  "admin_session",
+  {
+    id: text("id").primaryKey(), // ses_<16 hex>
+    userId: text("user_id")
+      .notNull()
+      .references(() => appUser.id, { onDelete: "cascade" }),
+    /** SHA-256 (hex) of the cookie token. The token itself is never stored. */
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: tstz("expires_at").notNull(),
+    createdAt: tstz("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byTokenHash: uniqueIndex("admin_session_token_hash_key").on(t.tokenHash),
+    byUser: index("admin_session_user_id_idx").on(t.userId),
+  }),
+);
+
 export type ApplicantLink = typeof applicantLink.$inferSelect;
 export type NewApplicantLink = typeof applicantLink.$inferInsert;
 export type ApplicationLog = typeof applicationLog.$inferSelect;
@@ -267,4 +350,7 @@ export type ApplicantAccountRow = typeof applicantAccount.$inferSelect;
 export type ApplicantFileRow = typeof applicantFile.$inferSelect;
 export type NewsArticleRow = typeof newsArticle.$inferSelect;
 export type NewsMediaRow = typeof newsMedia.$inferSelect;
+export type StoredFileRow = typeof storedFile.$inferSelect;
+export type NewStoredFile = typeof storedFile.$inferInsert;
 export type AppUserRow = typeof appUser.$inferSelect;
+export type AdminSessionRow = typeof adminSession.$inferSelect;

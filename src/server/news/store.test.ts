@@ -325,19 +325,25 @@ describe("media", () => {
     expect([...(read?.bytes ?? [])]).toEqual([...bytes]);
   });
 
-  it("splits a large upload across rows and reads it back whole", async () => {
-    // 1.2 MB of bytes is ~1.6 MB of base64: four 500k-character chunks. The
-    // chunking came from D1's 2 MB value cap and is kept on Postgres, so the
-    // rows an old cover was written as still read back.
+  it("keeps a large upload out of the database and reads it back whole", async () => {
+    // 1.2 MB used to become four 500k-character base64 rows. It is now one
+    // file on disk and one metadata row — which is the point of the move: the
+    // database never carries the bytes, so a read does not pull them through
+    // Postgres into this process's heap.
     const bytes = new Uint8Array(1_200_000).map((_, index) => index % 251);
     const key = await putMedia(bytes, "image/jpeg");
 
-    const { rows } = await memory.db!.client.query<{ chunk_index: number; size: number }>(
-      "SELECT chunk_index, length(data) AS size FROM news_media WHERE key = $1 ORDER BY chunk_index",
+    const { rows } = await memory.db!.client.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM news_media WHERE key = $1",
       [key],
     );
-    expect(rows.map((row) => row.chunk_index)).toEqual([0, 1, 2, 3]);
-    expect(rows.every((row) => Number(row.size) <= 500_000)).toBe(true);
+    expect(Number(rows[0].n)).toBe(0);
+
+    const { rows: stored } = await memory.db!.client.query<{ byte_size: number }>(
+      "SELECT byte_size FROM stored_file WHERE owner_kind = 'news_media' AND owner_key = $1",
+      [key],
+    );
+    expect(Number(stored[0].byte_size)).toBe(bytes.byteLength);
 
     const read = await getMedia(key);
     expect(read?.contentType).toBe("image/jpeg");

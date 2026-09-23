@@ -8,6 +8,7 @@ import { getDb, newsArticle, newsMedia, type NewsArticleRow } from "@/lib/db";
 import { coerceBody } from "@/lib/news/legacy";
 import type { RichDoc } from "@/lib/news/shared/rich-text";
 import { uniqueSlug } from "@/lib/news/shared/slug";
+import { dropOwnedFile, putOwnedFile, readOwnedFile } from "@/server/files/records";
 import {
   NEWS_CATEGORIES,
   type NewsArticle,
@@ -17,8 +18,10 @@ import {
 } from "@/lib/news/types";
 
 /**
- * Storage for the newsroom: two tables in PostgreSQL (`news_article`,
- * `news_media`), through the same Drizzle client as the applicant account.
+ * Storage for the newsroom: `news_article` in PostgreSQL, through the same
+ * Drizzle client as the applicant account, and cover bytes on the filesystem
+ * (`src/server/files`). `news_media` is legacy — covers uploaded before that
+ * move are still read from it until the migration script has moved them.
  *
  * This is also the boundary where the database's types become the app's. The
  * row now has a real `jsonb` body, a real `boolean` and real timestamps;
@@ -46,11 +49,6 @@ export type ListQuery = {
   limit?: number;
 };
 
-/**
- * Covers stay chunked after the move off D1 (which capped a value at 2 MB),
- * exactly as `applicant_file` does — see the note in `src/lib/db/schema.ts`.
- */
-const MEDIA_CHUNK_CHARS = 500_000;
 
 /* --- ids ---------------------------------------------------------------- */
 
@@ -337,30 +335,18 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".avif": "image/avif",
 };
 
-/** Stores an uploaded cover as base64 chunks and returns its new key. */
+/**
+ * Stores an uploaded cover on disk and returns its new key.
+ *
+ * The key stays a `med_<12 hex>` handle rather than becoming the content
+ * digest: every article row, every cached URL and the route below already
+ * speak it, and an editor who re-uploads the same photograph to two stories
+ * should still be able to remove one cover without the other going blank. The
+ * digest does its deduplicating one level down, in `stored_file`.
+ */
 export async function putMedia(bytes: Uint8Array, contentType: string): Promise<string> {
   const key = newId("med_", 6);
-  const data = Buffer.from(bytes).toString("base64");
-  // `news_media.created_at` is a real timestamp now, and nothing outside the
-  // store reads it — unlike the article's, which `NewsArticle` hands out as an
-  // ISO string — so it stays a Date the whole way down.
-  const createdAt = new Date();
-
-  // At least one row, so even an empty file reads back rather than 404ing.
-  const count = Math.max(1, Math.ceil(data.length / MEDIA_CHUNK_CHARS));
-  for (let index = 0; index < count; index += 1) {
-    const offset = index * MEDIA_CHUNK_CHARS;
-    await getDb()
-      .insert(newsMedia)
-      .values({
-        key,
-        chunkIndex: index,
-        contentType,
-        data: data.slice(offset, offset + MEDIA_CHUNK_CHARS),
-        createdAt,
-      });
-  }
-
+  await putOwnedFile({ ownerKind: "news_media", ownerKey: key, bytes, contentType });
   return key;
 }
 
@@ -374,6 +360,10 @@ export async function putMedia(bytes: Uint8Array, contentType: string): Promise<
  */
 export async function dropMedia(key: string | null): Promise<void> {
   if (!key || key.startsWith(SEED_PREFIX) || isUrlCoverKey(key)) return;
+  await dropOwnedFile("news_media", key);
+  // Both places, because during the transition a cover may still be chunks:
+  // deleting only the new home would leave the old rows to answer the next
+  // read, and the cover would come back from the dead.
   await getDb().delete(newsMedia).where(eq(newsMedia.key, key));
 }
 
@@ -386,6 +376,13 @@ export async function getMedia(
   // would make this route an open proxy, so it is simply not a key.
   if (isUrlCoverKey(key)) return null;
 
+  // Where uploads go now: the bytes are a file, the row is only the label.
+  const stored = await readOwnedFile("news_media", key);
+  if (stored) return { bytes: stored.bytes, contentType: stored.contentType };
+
+  // Not moved yet (or written before this change). Reading the chunks keeps
+  // every cover on the site live while `scripts/files/move-to-disk.ts` works
+  // through them, instead of the front page going blank at deploy time.
   const chunks = await getDb()
     .select({ contentType: newsMedia.contentType, data: newsMedia.data })
     .from(newsMedia)
