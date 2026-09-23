@@ -108,7 +108,15 @@ export function CursorRing() {
   // are still empty when it runs, it gives up, and the state it was meant to
   // set never is. The marks never appeared at all.
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-100">
+    /* Top of the stack, deliberately: these two marks stand in for the native
+       arrow, and the arrow is drawn over everything a page can put on screen.
+       At `z-100` they were painted under anything higher - Clerk's sign-in
+       dialog sits at 10000 - and because `cursor: none` still applied there,
+       that left the pointer with no arrow and no ring at all over the card. */
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 z-[2147483647]"
+    >
       <div
         ref={ringRef}
         data-seen="no"

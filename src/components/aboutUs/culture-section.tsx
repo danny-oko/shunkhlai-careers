@@ -49,13 +49,16 @@ const FIGURES = { from: 0.5, span: 0.32 };
  * HR's own throughout: the Academy wall is their September write-up, the
  * benefits wall their "Шунхлайд ажиллахын давуу тал" package plus the two
  * days of paid leave from the earlier content plan, and the clubs wall their
- * roster. Where a tile has no `body` yet it shows a standing note rather
- * than invented copy; nothing on these three walls needs one now.
+ * roster. Where a tile has no `body` it shows a standing note rather than
+ * invented copy, and six of the courses below are waiting on one: the photo
+ * plan they came from is a plan for photographs and says nothing about what
+ * any course teaches, so there is nothing here to write them from.
  *
  * The pictures are HR's own too. The Academy wall carries the photographs
- * they sent of the training hall and its programmes, the benefits wall the
- * seventeen laid out through that package, and the clubs wall each club's
- * lockup - with the club's own photograph behind it where one was delivered.
+ * they sent of the training hall, and then the eighteen from their course
+ * photo plan; the benefits wall the seventeen laid out through that package;
+ * and the clubs wall each club's lockup - with the club's own photograph
+ * behind it where one was delivered.
  *
  * The keys are the hashes these used to be their own sections under, so every
  * link already written against them - the site footer - still arrives at the
@@ -70,9 +73,16 @@ const TABS = [
   {
     key: "academy",
     label: "Сургалт, хөгжил",
-    // Шунхлай Академи, as HR's own write-up tells it: the hall, the people who
-    // teach in it, the platform that carries it to everyone who is not in the
-    // room, and the figures the year closed on.
+    // Two things at once, and in that order: what the Academy is - the hall,
+    // the 68 people who teach in it, the two platforms that carry it to
+    // everyone who is not in the room, and the year's totals - and then the
+    // courses themselves, as HR's own September photo plan lists them.
+    //
+    // That plan is where the runs come from. It sets each course out as a
+    // cover, a picture of it happening and a detail, so a course opens as the
+    // strip those three make rather than as one framed shot, and the tile
+    // shows the cover. Where it asked for a photograph nobody has taken yet
+    // the course simply carries the ones it has.
     wall: [
       {
         title: "Шунхлай Академи",
@@ -98,51 +108,79 @@ const TABS = [
         image: "/academy/team.jpg",
       },
       {
-        title: "Хөгжлийн 70/20/10 зарчим",
-        // No "see below" any more: the principle is drawn at the end of
-        // <StatementBands>, which is above this section, so the tile says what
-        // it is and the reader meets the picture of it on the way in.
-        body: "Ажилтныг зөвхөн сургалтад хамруулах бус, ажлын бодит туршлага (70%), хамтын суралцах үйл явц (20%), системтэй сургалтыг (10%) хослуулан хөгжүүлдэг.",
-        image: "/academy/open-day.jpg",
-      },
-      {
-        title: "Manager's Development Program",
-        subtitle: "Дунд шатны менежерүүдийн хөтөлбөр",
-        body: "Удирдлага, манлайллын хөгжлийн хөтөлбөрүүдийн нэг. 2025 оны төгсөгчид хөтөлбөрөө амжилттай дүүргэж, гэрчилгээгээ гардан авлаа.",
-        image: "/academy/mdp-2025.jpg",
-      },
-      {
-        title: "AI & Innovation",
-        subtitle: "Ирээдүйн ур чадвар",
-        body: "Сургалтын агуулгыг технологийн өөрчлөлт, ирээдүйд шаардлагатай ур чадвартай нягт уялдуулж AI & Innovation, Lead with AI, Excel & Power BI зэрэг хөтөлбөрүүдийг хэрэгжүүлж байна. Энэ нь ажилтнуудаа өнөөдрийн ажлаас гадна ирээдүйн өөрчлөлтөд бэлтгэхэд чиглэдэг.",
-        image: "/academy/classroom.jpg",
-      },
-      {
-        title: "Шинэ ажилтны чиглүүлэх хөтөлбөр",
-        body: "Ажилтан компанид анх орсон үеэс эхлэн ажлын байрандаа мэргэших, ур чадвараа тасралтгүй хөгжүүлэх, цаашлаад менежер, манлайлагч болон өсөх замыг үе шаттайгаар дэмждэг.",
-        image: "/academy/new-joiners.jpg",
-      },
-      {
-        title: "Мэргэжлийн болон техникийн сургалт",
-        body: "Газрын тосны салбарын мэргэжлийн сургалт, ХАБЭА, ШТС-ын ур чадварын хөтөлбөрүүд. Төгсөгчид мэргэжлийн гэрчилгээгээ гардан авдаг.",
-        image: "/academy/station-skills.jpg",
-      },
-      {
-        title: "Coaching, mentoring",
-        body: "Business English, удирдлага ба манлайлал, дотоод сургагч багш бэлтгэх сургалт, coaching, mentoring зэрэг олон хэлбэрээр ажилтны хөгжлийг дэмждэг.",
-        image: "/academy/certificates.jpg",
-      },
-      {
         title: "Хөгжил тоон үзүүлэлтээр",
         subtitle: "2026",
         body: "10,029 сургалтын хамрагдалт, 13,883 цагийн сургалт, 4,197 зохион байгуулсан сургалт, сургалтын дараах дундаж үнэлгээ 90.7 хувь. Эдгээр тоо нь компанийн хэмжээнд суралцах боломж хэр өргөн хүрээнд бий болж, ажилтнууд хэр идэвхтэй оролцож байгааг харуулдаг.",
         image: "/academy/open-day.jpg",
       },
+
+      // The nine courses, in the order the photo plan sets them out.
       {
-        title: "BUILD → DEVELOP → IMPACT",
-        subtitle: "Дараагийн гурван жил",
-        body: "Байгууллага болон ажилтнуудад ирээдүйд шаардлагатай ур чадвар, чадамжийг тодорхойлж, зорилготойгоор хөгжүүлэхийн зэрэгцээ суралцах үйл ажиллагааг ажилтан, баг, байгууллагын түвшинд бодит өөрчлөлт, үнэ цэн бий болгохтой улам нягт уялдуулна.",
-        image: "/academy/hall.jpg",
+        title: "Manager's Development Program 2026",
+        subtitle: "Дунд шатны менежерүүдийн хөтөлбөр",
+        // The year is off the sentence rather than off the tile: the pictures
+        // are the 2026 class taking its certificates, and the write-up this
+        // came from was describing the 2025 one doing the same thing.
+        body: "Удирдлага, манлайллын хөгжлийн хөтөлбөрүүдийн нэг. Төгсөгчид хөтөлбөрөө амжилттай дүүргэж, гэрчилгээгээ гардан авлаа.",
+        images: [
+          "/academy/mdp-2026-graduates.jpg",
+          "/academy/mdp-2026-class.jpg",
+        ],
+      },
+      {
+        title: "Дотоод сургагч багш бэлтгэх хөтөлбөр 2026",
+        images: [
+          "/academy/trainers-2026-certificates.jpg",
+          "/academy/trainers-2026-session.jpg",
+          "/academy/trainers-2026-class.jpg",
+        ],
+      },
+      {
+        title: "Шинэ ажилтны чиглүүлэх сургалт 2026",
+        body: "Ажилтан компанид анх орсон үеэс эхлэн ажлын байрандаа мэргэших, ур чадвараа тасралтгүй хөгжүүлэх, цаашлаад менежер, манлайлагч болон өсөх замыг үе шаттайгаар дэмждэг.",
+        images: [
+          "/academy/induction-2026-group.jpg",
+          "/academy/induction-2026-visit.jpg",
+        ],
+      },
+      {
+        title: "AI сургалт 2026",
+        subtitle: "Ирээдүйн ур чадвар",
+        body: "Сургалтын агуулгыг технологийн өөрчлөлт, ирээдүйд шаардлагатай ур чадвартай нягт уялдуулж AI & Innovation, Lead with AI, Excel & Power BI зэрэг хөтөлбөрүүдийг хэрэгжүүлж байна. Энэ нь ажилтнуудаа өнөөдрийн ажлаас гадна ирээдүйн өөрчлөлтөд бэлтгэхэд чиглэдэг.",
+        image: "/academy/ai-2026-class.jpg",
+      },
+      {
+        title: "Эрхлэгч бэлтгэх хөтөлбөр",
+        images: [
+          "/academy/supervisor-program-group.jpg",
+          "/academy/supervisor-program-class.jpg",
+        ],
+      },
+      {
+        title: "Жолооч нарын сургалт",
+        images: [
+          "/academy/drivers-certificates.jpg",
+          "/academy/drivers-session.jpg",
+        ],
+      },
+      {
+        title: "Сэтгэл зүйн эрүүл мэндээ хамгаалах сургалт",
+        images: [
+          "/academy/mindcare-forum.jpg",
+          "/academy/mindcare-workshop.jpg",
+          "/academy/mindcare-gathering.jpg",
+        ],
+      },
+      {
+        title: "Power BI",
+        images: [
+          "/academy/power-bi-class.jpg",
+          "/academy/power-bi-session.jpg",
+        ],
+      },
+      {
+        title: "Тооллогын сургалт",
+        image: "/academy/stocktake-class.jpg",
       },
     ],
   },

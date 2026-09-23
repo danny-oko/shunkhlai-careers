@@ -61,21 +61,12 @@ const REVEAL_MS = SWEEP_MS + SCATTER_MS / 2 + TILE_MS;
  */
 const CLEAR_MS = SWEEP_MS + TILE_MS / 2;
 
-/** Turns the index's travel from a jump into a slide. */
-const MARK_MIN = 5;
-const MARK_MAX = 40;
-
 /** Degrees the rings turn over the whole run. */
 const RING_TURN = 120;
 
 /** Every record in reading order, carrying the span it belongs to. */
 const slides = eras.flatMap((era, eraIndex) =>
   era.entries.map((entry, entryIndex) => ({ era, eraIndex, entry, entryIndex })),
-);
-
-/** The first record of each span, so the rail can jump straight to one. */
-const eraStart = eras.map((_, eraIndex) =>
-  slides.findIndex((slide) => slide.eraIndex === eraIndex),
 );
 
 type Photo = {
@@ -98,8 +89,8 @@ type Photo = {
  * Every photograph the stage can show, and which one each record asks for.
  *
  * A record with its own picture shows that; the rest show their span's. The
- * list is deduplicated because the four span photographs are each asked for
- * by several records, and the frame holds one <img> per photograph.
+ * list is deduplicated because a span photograph can be asked for by more
+ * than one record, and the frame holds one <img> per photograph.
  */
 const { photos, photoOf } = (() => {
   const photos: Photo[] = [];
@@ -193,9 +184,8 @@ function useMedia(query: string) {
  * - The photograph opens a tile at a time, in a band sweeping down the frame.
  *   See `.history-tile` in globals.css for why each tile goes through the
  *   page's ground rather than straight from one photograph to the other.
- * - The index beside it is a thumb, not a set of states: the mark being read
- *   grows toward 40px as the one before it shrinks back to 5px, so it travels
- *   down the column with the scroll rather than jumping between marks.
+ * - The rail of years steps down to the year being read, which grows and
+ *   takes the brand orange while the rest stay small and faint.
  * - The rings behind the stage turn, slowly, across the whole run.
  *
  * Below the large breakpoint the row stacks into a column and the screen is
@@ -204,7 +194,7 @@ function useMedia(query: string) {
  * to, so the record under it stays on the screen the stage is held in. Only a
  * window without the room for one - a phone on its side, or one small enough
  * that the longest record fills it by itself - drops the pin and lets the
- * rail and the index set the record directly. Reduced motion takes that
+ * rail set the record directly. Reduced motion takes that
  * same path, for the reason it always does: nothing should need to be
  * scrolled through to be read.
  *
@@ -224,23 +214,17 @@ export function HistoryTimeline() {
   const isPinned = hasRoom && !isReduced;
   const step = isWide ? STEP_SVH : NARROW_STEP_SVH;
 
-  // Which record the scroll is on, and how far through it. Both come off the
-  // same number, so the index cannot travel past a record still being read.
+  // Which record the scroll is on. The whole stage - photograph, record and
+  // the year in the rail - changes on this one number, so the three of them
+  // cannot come apart.
   const reach = progress * slides.length;
   const reached = Math.min(slides.length - 1, Math.max(0, Math.floor(reach)));
-  const within = Math.min(1, Math.max(0, reach - reached));
 
   const active = isPinned ? reached : picked;
-  const current = slides[active];
 
   // How far through the whole run, for the rings. Off the pinned scroll where
   // there is one, and off the record otherwise, so they turn either way.
   const runProgress = isPinned ? progress : picked / (slides.length - 1);
-
-  // Where the index's thumb is, as a fraction of the open span's marks. It
-  // runs past the last mark at the end of a span, which is what hands the
-  // thumb over to the first mark of the next one.
-  const lead = current.entryIndex + (isPinned ? within : 0);
 
   const { shown, incoming } = usePhotographChange(photoOf[active], isReduced);
 
@@ -325,51 +309,56 @@ export function HistoryTimeline() {
                 "mt-6 min-h-0 flex-1 justify-center gap-5 sm:mt-8 sm:gap-7 lg:mt-14 lg:flex-none lg:gap-8",
             )}
           >
-            {/* The spans, right-aligned so their edge points at the
-                photograph rather than trailing off into the page gutter. */}
-            <ul className="flex w-full shrink-0 items-start justify-between gap-x-2 sm:justify-center sm:gap-x-8 lg:w-auto lg:flex-col lg:items-end lg:gap-7">
-              {eras.map((era, index) => {
-                const isCurrent = index === current.eraIndex;
+            {/* The years, right-aligned so their edge points at the
+                photograph rather than trailing off into the page gutter.
+
+                One year per record, and the run passes through all of them:
+                the rail used to carry the four spans instead, which moved
+                once every two or three records and so stood still through
+                most of the scroll. The year being read is what says where
+                the run is - it grows and takes the brand orange, the rest
+                stay small and faint - which is also why the record's
+                heading no longer repeats it. */}
+            <ul className="flex w-full shrink-0 items-center justify-between gap-x-1 tabular-nums sm:justify-center sm:gap-x-7 lg:w-auto lg:flex-col lg:items-end lg:gap-2">
+              {slides.map((slide, index) => {
+                const isCurrent = index === active;
                 return (
-                  <li key={era.period}>
+                  // The row is as tall as the largest year whichever one is
+                  // open, so the years around the one growing hold their
+                  // place instead of being pushed along by it.
+                  <li
+                    key={`${slide.era.period}-${slide.entry.title}`}
+                    className="flex h-7 items-center lg:h-10"
+                  >
                     <button
                       type="button"
-                      onClick={() => open(eraStart[index])}
+                      onClick={() => open(index)}
                       aria-current={isCurrent ? "true" : undefined}
                       className={cn(
-                        // Four spans in one row on a phone, with the mark
-                        // under the label rather than beside it: the column
-                        // has the height to spare and none of the width.
-                        "flex flex-col-reverse items-center gap-1.5 text-[0.75rem] font-medium tracking-[-0.01em] whitespace-nowrap transition-opacity duration-500 outline-none sm:text-[0.875rem] lg:flex-row lg:gap-2.5 lg:text-[0.9375rem] motion-reduce:transition-none",
-                        "focus-visible:underline focus-visible:underline-offset-[6px] focus-visible:opacity-100",
-                        isCurrent ? "opacity-100" : "opacity-30 hover:opacity-70",
+                        "block leading-none tracking-[-0.01em] whitespace-nowrap transition-all duration-500 outline-none motion-reduce:transition-none",
+                        "focus-visible:underline focus-visible:underline-offset-[6px]",
+                        isCurrent
+                          ? "text-[1.25rem] font-semibold text-brand sm:text-[1.5rem] lg:text-[1.75rem]"
+                          : "text-[0.8125rem] font-medium text-foreground/30 hover:text-foreground/70 sm:text-[0.9375rem]",
                       )}
                     >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "size-1.5 shrink-0 rounded-full bg-brand transition-opacity duration-500 motion-reduce:transition-none",
-                          isCurrent ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                      {era.period}
+                      {slide.entry.year}
                     </button>
                   </li>
                 );
               })}
             </ul>
 
-            {/* Photograph and index, bottom-aligned with each other. The
-                photograph is sized off the window's height as well as its
-                width, so the pinned screen holds it whole on a laptop. */}
+            {/* The photograph, sized off the window's height as well as
+                its width, so the pinned screen holds it whole on a laptop. */}
             <div
               className={cn(
-                "flex items-end gap-4 lg:shrink-0",
+                "flex items-end justify-center lg:shrink-0",
                 // Whatever the rail and the record leave of the screen, down
                 // to a floor and up to a ceiling, so the frame neither
                 // swallows a tall screen nor crushes a short one.
                 isPinned &&
-                  "max-h-96 min-h-36 w-full flex-1 justify-center gap-3 sm:gap-4 lg:max-h-none lg:min-h-0 lg:w-auto lg:flex-none",
+                  "max-h-96 min-h-36 w-full flex-1 lg:max-h-none lg:min-h-0 lg:w-auto lg:flex-none",
               )}
             >
               <div
@@ -449,41 +438,6 @@ export function HistoryTimeline() {
                 )}
               </div>
 
-              <ol className="flex shrink-0 flex-col items-center gap-5">
-                {current.era.entries.map((entry, index) => {
-                  // 1 on the mark being read, falling to 0 on its neighbours,
-                  // so the thumb is always between two of them rather than in
-                  // one or the other.
-                  const weight = Math.max(0, 1 - Math.abs(lead - index));
-                  return (
-                    <li key={entry.title}>
-                      {/* The mark is 5px wide; the padding is what the
-                          finger and the pointer actually get. */}
-                      <button
-                        type="button"
-                        onClick={() => open(eraStart[current.eraIndex] + index)}
-                        aria-current={
-                          index === current.entryIndex ? "true" : undefined
-                        }
-                        aria-label={`${current.era.period} - ${entry.title}`}
-                        className="group -m-2 block rounded-full p-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <span
-                          className="block w-[5px] overflow-hidden rounded-full bg-foreground/20 group-hover:bg-foreground/45"
-                          style={{
-                            height: `${MARK_MIN + (MARK_MAX - MARK_MIN) * weight}px`,
-                          }}
-                        >
-                          <span
-                            className="block size-full rounded-full bg-brand"
-                            style={{ opacity: weight }}
-                          />
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
             </div>
 
             {/* The record. All of them are here; one is shown. */}
@@ -504,19 +458,12 @@ export function HistoryTimeline() {
                     index === active ? "opacity-100" : "opacity-0",
                   )}
                 >
-                  {/* The year after the name, in the brand orange.
- 
-                      Inside the heading rather than over it, so a reader who
-                      cannot see the colour still gets "Жи Эс Би Капитал ББСБ
-                      2010" as one line and not a stray number beside it.
-                      `tabular-nums` because these change on the
-                      same spot as the panel cross-fades, and lining figures
-                      keep that spot still. */}
+                  {/* The year is not repeated here: the rail beside the
+                      photograph carries it, in the brand orange, and having
+                      it in both places put the same number on the screen
+                      twice. */}
                   <h3 className="text-lg leading-snug font-medium tracking-[-0.02em] text-balance sm:text-[1.375rem]">
                     {slide.entry.title}
-                    <span className="ml-3 font-semibold tabular-nums text-brand">
-                      {slide.entry.year}
-                    </span>
                   </h3>
                   <p className="mt-4 text-[0.875rem] leading-[1.7] text-foreground/65 hyphens-auto sm:mt-5 sm:text-[0.9375rem] sm:leading-[1.75] lg:text-justify">
                     {slide.entry.body}

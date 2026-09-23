@@ -288,7 +288,7 @@ export function FilterSection({
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
         aria-controls={contentId}
-        className="flex min-h-14 w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2"
+        className="flex min-h-14 w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:-outline-offset-2 lg:pl-10"
       >
         <span className="flex min-w-0 items-center gap-2">
           {isActive && (
@@ -327,7 +327,7 @@ export function FilterSection({
         )}
       >
         <div className="overflow-hidden">
-          <div className="px-3 pb-4">
+          <div className="px-3 pb-4 lg:pl-7">
             <OptionList
               title={title}
               options={options}

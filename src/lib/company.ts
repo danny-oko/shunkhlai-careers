@@ -78,29 +78,33 @@ export type Era = {
    * cropped to the frame it hangs in. The section changes photographs a tile
    * at a time and the tiles are cut from the frame, so a photograph that had
    * to be cover-cropped in the browser would not line up with them.
+   *
+   * Shown for a record that carries no archive photograph of its own, which
+   * since the section was cut to six records is 1993 alone. The other three
+   * spans keep theirs for the records HR may put back.
    */
   image: string;
   alt: string;
-  /** The three records the group tells that span through. */
+  /** The records kept for that span: one or two of them. */
   entries: EraEntry[];
 };
 
 /**
- * Түүхэн замнал, verbatim from the group's own history page at
- * sg.mn/group-introduction. That page is the source of record for the
- * group's dates, so the wording here is theirs and is not rewritten - only
- * the two entries that arrived as separate paragraphs are joined into one.
+ * Түүхэн замнал: six milestones, one for each year HR asked the section to
+ * stop at - 1993, 1998, 2003, 2011, 2014, 2023.
  *
- * This replaces the four-stop summary the section used to carry, which was
- * the fuel business only. The group's own account runs wider than that, and
- * the four spans below are how it divides itself.
+ * The spans below are the group's own division of its history, from
+ * sg.mn/group-introduction, and the records inside them are the fuel
+ * business's milestones off the group's history poster (doc/tuuh.pdf, HR's
+ * file). The poster and the history page are the source of record for these
+ * years, so their wording is kept and is not rewritten.
  *
- * Interleaved with it, and marked by their `image`, are the fuel business's
- * own milestones off the group's history poster (doc/tuuh.pdf, HR's file):
- * the first import, the first rural station, the laboratory, the academy, the
- * network reaching every province, ISO 9001, round-the-clock monitoring, the
- * ERP and the newest depots. The poster is the source of record for those
- * years and its wording is kept, as the history page's is above.
+ * The section used to run every record of both - the group's other
+ * businesses (АПУ, NTV, Скайтел, Хайнекен, GS25, the data centre) alongside
+ * the fuel milestones, twenty-one records in all. HR cut it to these six.
+ * The ones dropped are in the history of this file, and their photographs
+ * are still in `public/history`, so any of them can be put back by adding
+ * the entry again.
  */
 export const eras: Era[] = [
   {
@@ -112,18 +116,6 @@ export const eras: Era[] = [
         title: "Бизнесийн гараа",
         year: "1993",
         body: "1993 онд автомашины баталгаат засвар үйлчилгээний цомхон үйл ажиллагаагаар Шунхлай групп бизнесийн гараагаа эхэлж байсан нь тухайн үедээ Монголд байгаагүй хамгийн хэрэгцээтэй үйлчилгээний салбар, шинэхэн стандарт байсан юм.",
-      },
-      {
-        title: "Газрын тосны бизнесийн эхлэл",
-        year: "1996",
-        body: "1996 оноос газрын тосны бүтээгдэхүүний бөөний худалдааны бизнесийг эрхлэх болж, ширүүн өрсөлдөөн бүхий жижиглэнгийн зах зээлд нэвтрэн өдгөө бид энэхүү салбартаа Монгол улсын тэргүүлэх зэрэглэлийн үндэсний худалдааны компаниудын нэгт зүй ёсоор тооцогдож байна.",
-      },
-      {
-        title: "Шатахууны импорт",
-        year: "1997",
-        body: "1997 онд шатахуун импортлох, борлуулах үйл ажиллагаагаа эхлүүлэв. Энэ нь өдгөө аймаг бүрт хүрч буй түгээлтийн сүлжээний эхний холбоос болсон юм.",
-        image: "/history/archive-1997-import.webp",
-        imageAlt: "Төмөр замын дагуу эгнэн зогсох вагон цистернүүдээс шатахуун буулгаж байна.",
       },
       {
         title: "Анхны нефть бааз",
@@ -140,40 +132,11 @@ export const eras: Era[] = [
     alt: "АПУ-гийн үйлдвэрийн танхимд ажилтнууд хамтдаа гараа өргөн баяр хүргэж байна.",
     entries: [
       {
-        title: "АПУ ХК-н хувьчлал",
-        year: "2001",
-        body: "2001 онд олон нийтэд нээлттэй дуудлага худалдаанд оролцон, уналтад ороод байсан төрийн өмчийн “АПУ” компанийн төрийн эзэмшлийн хувийг худалдан авав.",
-      },
-      {
-        title: "Орон нутгийн анхны станц",
-        year: "2001",
-        body: "Эх орны өнцөг булан бүрт салбараа байгуулах анхны алхам хийгдэж, орон нутгийн шатахуун түгээх станц Булган аймагт ашиглалтад орлоо.",
-        image: "/history/archive-2001-rural-station.webp",
-        imageAlt: "Булган аймагт ашиглалтад орсон орон нутгийн анхны шатахуун түгээх станцын хуучин гэрэл зураг.",
-      },
-      {
         title: "Өөрийн лаборатори",
         year: "2003",
         body: "Бүтээгдэхүүнд шинжилгээ хийх, чанар стандартын шаардлагыг баталгаажуулах иж бүрэн лабораторийг ашиглалтад оруулав.",
         image: "/history/archive-2003-laboratory.webp",
         imageAlt: "Цагаан халаадтай шинжээгч лабораторийн багаж дээр түлшний дээж шинжилж байна.",
-      },
-      {
-        title: "Өөдрөг өнгө, өөр өнцөг",
-        year: "2006",
-        body: "Монголын тэргүүлэгч телевизүүдийн нэг NTV телевиз нь 2006 оноос үйл ажиллагаагаа явуулж эхлэв. Тус телевиз нь улс төр, нийгэм, эдийн засгийн цаг үеийн мэдээ мэдээллээс гадна түүх, соёл урлаг, боловсрол, цэнгээнт, шоу нэвтрүүлгүүд бэлтгэн хүргэдэг.",
-      },
-      {
-        title: "Жи Эс Би Капитал ББСБ",
-        year: "2010",
-        body: "Жи Эс Би Капитал ББСБ-г Шунхлай группийн хөрөнгө оруулалтаар 2010 оны 10-р сарын 5-ны өдөр үүсгэн байгуулав. Тус компани нь Улаанбаатар хотод 10, хөдөө орон нутагт 1 салбар нээж нийт 11 салбар нэгжээр дамжуулан тогтвортой, хүртээмжтэй зээлийн үйл ажиллагааг хүргэснээр өдгөө 30,000 гаруй харилцагчтай болсон байна.",
-      },
-      {
-        title: "Шунхлай академийн суурь",
-        year: "2010",
-        body: "Ажилтнуудад зориулсан сургалтуудыг үе шаттайгаар зохион байгуулж, “Шунхлай академи” сургалтын суурь тавигдлаа.",
-        image: "/history/archive-2010-academy.webp",
-        imageAlt: "Сургалтын танхимд ажилтнууд илтгэгчийг сонсож, дэлгэц рүү харж байна.",
       },
     ],
   },
@@ -183,11 +146,6 @@ export const eras: Era[] = [
     alt: "Харилцаа холбооны сүлжээний хяналтын төвд инженер олон дэлгэцийн өмнө ажиллаж байна.",
     entries: [
       {
-        title: "Бизнесийн тэлэлт",
-        year: "2011",
-        body: "2011 онд БНСУ-ын “Hyundai Motors Corporation”, “Kia Motors Corporation”-н авто машин, механизмын албан ёсны онцгой эрхийг авав. Үүрэн холбооны “Скайтел” компанид хувь эзэмшлээ нэмэгдүүлэн, голлох хувьцаа эзэмшигчдийн нэг болов.",
-      },
-      {
         title: "Аймаг бүрт салбартай",
         year: "2011",
         body: "Монгол орон даяар шатахуун түгээх станцын өргөн сүлжээг бий болгож, аймаг бүрт салбар нэгжтэй боллоо.",
@@ -195,30 +153,16 @@ export const eras: Era[] = [
         imageAlt: "Улбар шар, цэнхэр өнгийн Шунхлай шатахуун түгээх станц цэлмэг тэнгэрийн дор.",
       },
       {
-        title: "Тээвэр, ложистикийн салбар",
-        year: "2012",
-        body: "Олон улсын тээвэр зуучлалын “Сантранс Ложистикс” ХХК нь 2012 онд үүсгэн байгуулагдсан бөгөөд гаалийн зуучлал болоод олон улсын стандартад нийцсэн хамгийн хямд, түргэн шуурхай, аюулгүй, даатгагдсан ачаа тээврийн үйлчилгээг дэлхийн хаанаас ч зохион байгуулан мэргэжлийн өндөр түвшинд амжилттай гүйцэтгэж байна.",
-        image: "/history/archive-2012-tanker.webp",
-        imageAlt: "Агуулахын талбайд шатахуун ачсан хагас чиргүүлт автоцистерн, хажууд нь төмөр замын цистерн зогсож байна.",
-      },
-      {
-        title: "Чанарын удирдлагын тогтолцоо",
-        year: "2013",
-        body: "Чанарын удирдлагын тогтолцооны ISO 9001:2008 стандартыг үйл ажиллагаандаа нэвтрүүлэв.",
+        title: "Байгаль орчин, аюулгүй ажиллагаа",
+        year: "2014",
+        body: "Байгаль орчин, хөдөлмөрийн аюулгүй байдалд чиглэсэн цогц бодлогуудыг хэрэгжүүлж, олон улсын ISO14001, OHSAS18001 стандартуудыг үйл ажиллагаандаа нэвтрүүллээ.",
+        // The poster's own picture for 2014 is the two certification seals,
+        // which are logos rather than a photograph. This is the poster's
+        // photograph of the certificates themselves - it sat on the 2013
+        // ISO 9001 record, which is one of the ones HR cut - and it is what
+        // the standards this record is about are issued as.
         image: "/history/archive-2013-iso.webp",
         imageAlt: "Хүрээлсэн ISO гэрчилгээнүүд ширээн дээр эгнүүлэн тавиастай байна.",
-      },
-      {
-        title: "24 цагийн хяналт",
-        year: "2016",
-        body: "Газрын тосны бүтээгдэхүүний агуулах, шатахуун түгээх станцуудын 24 цагийн хяналт, шуурхай удирдлагыг нэвтрүүллээ.",
-        image: "/history/archive-2016-monitoring.webp",
-        imageAlt: "Хяналтын төвийн дэлгэцийн ханан дээр станцуудын камерын дүрс нэгэн зэрэг харагдаж байна.",
-      },
-      {
-        title: "Дэлхийн тоглогчтой хамтрав",
-        year: "2017",
-        body: "2017 онд Шунхлай групп нь Монголын хөрөнгийн зах зээлийн хамгийн том хэлцлийг хийж, Нидерландын Хайнекен компанитай Монгол дахь архи, шар айргийн бизнесээ нэгтгэлээ.",
       },
     ],
   },
@@ -227,28 +171,6 @@ export const eras: Era[] = [
     image: "/history/gs25-store.webp",
     alt: "GS25 дэлгүүрийн үүдэнд хоёр залуу CAFE25 кофе барин ярилцаж байна.",
     entries: [
-      {
-        title: "Ая тухтай дэлгүүр",
-        year: "2020",
-        body: "2020 онд БНСУ-ын GS25 сүлжээ дэлгүүрийн мастер франчайз эрхийг эзэмшигч Дижитал Концепт компанийг Монгол талаас Шунхлай Холдинг, АПУ ХК болон БНСУ талаас Жи Эс Ритэйл компани хамтран байгуулав.",
-      },
-      {
-        title: "ERP систем",
-        year: "2021",
-        body: "Байгууллагын удирдлага, санхүү, нягтлан бодох бүртгэл, хүний нөөц, борлуулалт, түгээлтийн нэгдсэн ERP буюу нөөц төлөвлөлтийн системийг үйл ажиллагаандаа нэвтрүүллээ.",
-        image: "/history/archive-2021-erp.webp",
-        imageAlt: "Хамгаалалтын малгайтай ажилтан хяналтын өрөөнд дэлгэцүүдийн өмнө радио холбоогоор ярьж байна.",
-      },
-      {
-        title: "Технологийн салбарт хөрөнгө оруулав",
-        year: "2022",
-        body: "2022 онд Монголын дата төвийн талбарт шинэчлэлт авчрах зорилго бүхий Эс системс ХХК-г байгуулж, хэмжээгээрээ хамгийн том, технологи шийдлээрээ хамгийн сүүлийн үеийнхэд тооцогдох дата төвийг бүтээн байгуулав.",
-      },
-      {
-        title: "Зеро технологи компани",
-        year: "2023",
-        body: "2023 оноос программ хангамж, мэдээллийн технологийн чиглэлээр үйлчилгээ үзүүлэх Зеро технологи ХХК-ны үйл ажиллагааг эхлүүлэв.",
-      },
       {
         title: "Шинэ агуулахууд",
         year: "2023",
