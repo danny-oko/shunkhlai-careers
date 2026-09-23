@@ -7,16 +7,21 @@ import { isIdentityComplete } from "@/lib/applicant-identity";
 import { ErpError, erpGet, erpLogin, erpPost, erpRegister, erpUpload, hasErp } from "./erp";
 import {
   CLAIM_TTL_MS,
-  MAX_ATTEMPTS,
   NEVER_BLANK,
   PROFILE_KEYS,
-  RETRY_FAILED_AFTER_MS,
   RETRY_PENDING_AFTER_MS,
   credentialKey,
   erpIdOfApplication,
   linkRefused,
   linkedRegno,
 } from "./erp-model";
+import {
+  MAX_ATTEMPTS,
+  type PushStatus,
+  classifyPushError,
+  isRetryableReason,
+  retryDelayMs,
+} from "./erp-retry";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
@@ -31,11 +36,21 @@ import type { ApplicantDoc, Row } from "./handlers";
  * replaces other ERP rows and never touches education/experience/family.
  */
 
-export type ErpPushStatus = "pending" | "sent" | "failed" | "skipped";
+/**
+ * The push state machine lives in `erp-retry.ts`; this is the name the rest of
+ * the file has always used for it.
+ */
+export type ErpPushStatus = PushStatus;
 
-/** Stored on each D1 application row as `erp`. */
+/** Stored on each application row as `erp`. */
 export type ApplicationErp = {
   status: ErpPushStatus;
+  /**
+   * A classified short reason (`FailureReason`, or one of the login/flush
+   * codes). Never an upstream message: an ERP `retmsg` can echo the
+   * applicant's own details back, and this field is written to the database
+   * and rendered to the applicant.
+   */
   error?: string;
   attempts: number;
   /** ISO timestamp. */
@@ -43,11 +58,24 @@ export type ApplicationErp = {
   erpEntryId?: number;
   /** A sync task is pushing this row (ISO); others leave it alone for a while. */
   claimedAt?: string;
+  /**
+   * The row is done being retried — the ERP refused the payload, or the
+   * attempts ran out. Set explicitly rather than inferred from `attempts`, so
+   * "needs attention" is a fact on the row that the admin list can select on
+   * and the applicant's card can read without knowing the policy.
+   */
+  terminal?: true;
+  /** `idempotencyKey(email, recruitmentorderid)` — stable across retries. */
+  key?: string;
+  /** ISO timestamp of the first durable save. The applicant's "submitted at". */
+  submittedAt?: string;
 };
 
 export type PushResult = {
   status: "sent" | "failed" | "skipped";
   error?: string;
+  /** False only when the ERP refused the payload; see `classifyPushError`. */
+  retryable?: boolean;
   erpEntryId?: number;
   /** Set when the CV was sent; persist as `doc.erp.cvHash`. */
   cvHash?: string;
@@ -424,9 +452,13 @@ export async function pushApplication(
       await erpPost<unknown>("SaveHrRecruitmentOrderApp", token, applicationPayload(app)),
     );
   } catch (error) {
+    // A repeat of an application the ERP already holds is the idempotent
+    // outcome we want, not a failure: fall through and read the list below to
+    // learn the id it was given the first time.
     if (!isDuplicateApplication(error)) {
-      logFailure("erp_apply_failed", error);
-      return { status: "failed", error: "erp_apply_failed", cvHash };
+      const { reason, retryable } = classifyPushError(error);
+      logFailure(reason, error);
+      return { status: "failed", error: reason, retryable, cvHash };
     }
   }
 
@@ -454,14 +486,38 @@ export async function pushApplication(
 
 export { MAX_ATTEMPTS };
 
-/** Rows due another push: pending/failed, under the cap, and old enough. */
+/**
+ * A row has been given up on: the ERP refused the payload, or the attempts ran
+ * out. `terminal` is what the sync writes; the two fallbacks read a row saved
+ * by an older build (or restored from the D1 import), where it was implied.
+ */
+export function isTerminal(erp: ApplicationErp | undefined): boolean {
+  if (!erp) return false;
+  if (erp.terminal) return true;
+  if (!isRetryableReason(erp.error)) return true;
+  return (erp.attempts ?? 0) >= MAX_ATTEMPTS;
+}
+
+/**
+ * Rows due another push: pending or failed, not given up on, not claimed by
+ * another run, and past their backoff.
+ *
+ * A `pending` row waits a flat minute — it has never been refused, so there is
+ * nothing to back off from; the wait only stops a submit and the visit that
+ * follows it from pushing twice. A `failed` row waits `retryDelayMs`, which
+ * grows with the attempt and is offset per row, so an outage that failed a
+ * hundred pushes does not send a hundred retries in the same second.
+ */
 export function isDue(app: Row, now = Date.now()): boolean {
   const erp = app.erp as ApplicationErp | undefined;
   if (!erp || (erp.status !== "pending" && erp.status !== "failed")) return false;
-  if ((erp.attempts ?? 0) >= MAX_ATTEMPTS) return false;
+  if (isTerminal(erp)) return false;
   const claimed = Date.parse(erp.claimedAt ?? "");
   if (Number.isFinite(claimed) && now - claimed < CLAIM_TTL_MS) return false;
   const last = Date.parse(erp.lastAttemptAt ?? "");
-  const wait = erp.status === "pending" ? RETRY_PENDING_AFTER_MS : RETRY_FAILED_AFTER_MS;
+  const wait =
+    erp.status === "pending"
+      ? RETRY_PENDING_AFTER_MS
+      : retryDelayMs(erp.attempts ?? 1, erp.key ?? String(app.entryid));
   return !Number.isFinite(last) || now - last >= wait;
 }
