@@ -133,6 +133,7 @@ export async function GET(request: Request, ctx: Ctx) {
       jobList({
         jobName: url.searchParams.get("jobName") ?? "",
         locationid: num(url.searchParams.get("locationid")),
+        salaryLevelID: url.searchParams.get("salaryLevelID") ?? "",
       }),
     );
   }

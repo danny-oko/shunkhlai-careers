@@ -15,10 +15,12 @@ const opts = (pairs: [string, string][]) => [
 
 const base: ActiveFilterInput = {
   facets: defaultFacets,
+  jobName: "",
   locationId: "",
   salaryLevelId: "",
   groups: opts([["g1", "Санхүү"]]),
-  companies: opts([["c1", "Шунхлай"]]),
+  companies: opts([["SHUNKHLAI", "Шунхлай ХХК"]]),
+  positionTypes: opts([["4", "Үндсэн"]]),
   workTypes: opts([["w1", "Бүтэн цагийн"]]),
   locations: opts([["12", "Улаанбаатар"]]),
   salaryLevels: opts([["3", "1-2 сая"]]),
@@ -43,24 +45,37 @@ describe("buildActiveFilters", () => {
   it("lists every active filter in section order", () => {
     const active = buildActiveFilters({
       ...base,
-      facets: { group: "g1", company: "c1", workType: "w1" },
+      facets: {
+        group: "g1",
+        company: "SHUNKHLAI",
+        positionType: "4",
+        workType: "w1",
+      },
+      jobName: "  инженер  ",
       locationId: "12",
       salaryLevelId: "3",
     });
     expect(active.map((a) => a.key)).toEqual([
+      "search",
       "group",
       "location",
       "salary",
       "company",
+      "positionType",
       "workType",
     ]);
     expect(active.map((a) => a.label)).toEqual([
+      "«инженер»",
       "Санхүү",
       "Улаанбаатар",
       "1-2 сая",
-      "Шунхлай",
+      "Шунхлай ХХК",
+      "Үндсэн",
       "Бүтэн цагийн",
     ]);
+  });
+  it("ignores a blank search", () => {
+    expect(buildActiveFilters({ ...base, jobName: "   " })).toEqual([]);
   });
   it("keeps a stale URL id removable via the section title", () => {
     const active = buildActiveFilters({ ...base, locationId: "999" });

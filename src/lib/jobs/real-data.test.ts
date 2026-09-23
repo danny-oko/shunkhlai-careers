@@ -26,10 +26,19 @@ describe("live list payload", () => {
     }
   });
 
-  it("treats null closing date as open", () => {
-    const open = jobs.find((j) => j.remainingDays === null);
-    expect(open?.isOpen).toBe(true);
-    expect(open?.closesAt).toBe("");
+  it("opens exactly the rows whose status accepts applications", () => {
+    const rows = list.retdata as unknown as JobListRow[];
+    const accepting = rows.filter((r) => r.status === 5).map((r) => String(r.entryid));
+
+    expect(jobs.filter((job) => job.isOpen).map((job) => job.id)).toEqual(accepting);
+    // Not all of them have a closing date: an open-ended advert counts too.
+    expect(jobs.some((job) => job.isOpen && job.remainingDays === null)).toBe(true);
+  });
+
+  it("never shows a negative countdown", () => {
+    for (const job of jobs) {
+      if (job.remainingDays !== null) expect(job.remainingDays).toBeGreaterThanOrEqual(0);
+    }
   });
 });
 
@@ -44,18 +53,21 @@ describe("live detail payload", () => {
   });
 });
 
-describe("live detail payload, expired posting 923", () => {
+describe("live detail payload, posting 923", () => {
   // Captured from the live get-one endpoint: it drops `advenddate` and sends
-  // `remainingdays` -114, so the closed state can only come from that count.
+  // `remainingdays` -114 — while the status, here and in the list, is 5
+  // "Анкет хүлээн авах". The count was read as "closed 114 days ago"; it is
+  // not, and the advert is one of the eight production counts as open.
   const detail = toJobDetail(itemExpired.retdata as unknown as JobDetailDto, 923);
 
-  it("carries no closing date and a negative count", () => {
+  it("carries no closing date and no countdown", () => {
     expect(detail?.closesAt).toBe("");
-    expect(detail?.remainingDays).toBe(-114);
+    expect(detail?.remainingDays).toBeNull();
   });
 
-  it("is closed", () => {
-    expect(detail?.isOpen).toBe(false);
+  it("is open, because its status accepts applications", () => {
+    expect(detail?.status).toBe("Анкет хүлээн авах");
+    expect(detail?.isOpen).toBe(true);
   });
 
   it("leaves the open-ended 1022 detail open", () => {

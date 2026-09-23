@@ -5,20 +5,20 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
 
-import { useDropdown } from "@/components/account/use-dropdown";
-import { FilterSection } from "@/components/job-filters";
+import { FilterSection, JobSearch } from "@/components/job-filters";
 import {
   applyFacets,
   companyOptions,
+  companyRows,
   defaultFacets,
   groupOptions,
   locationOptions,
+  positionTypeOptions,
   salaryOptions,
   workTypeOptions,
   type JobFacets,
 } from "@/lib/jobs/filters";
 import { ALL, type Job } from "@/lib/jobs/types";
-import { reference } from "@/lib/api";
 import type { JobFilterData } from "@/lib/api/jobs";
 import { SectionRule } from "@/components/brand/section-rule";
 import { ActiveFilterChips } from "@/components/job-filter-chips";
@@ -40,8 +40,8 @@ import {
  *
  * Position name, location and salary band go back to
  * `getRecruitmentOrderList` through the URL, so results stay linkable and
- * server-rendered. Position group, company and work type are refined over the
- * rows already on the page.
+ * server-rendered. Position group, company, position type and work type are
+ * refined over the rows already on the page.
  *
  * Which side of that line a filter falls on is an implementation detail to the
  * candidate, so both layers are the same pills in the same rail.
@@ -59,13 +59,28 @@ export function JobBrowser({
   const [facets, setFacets] = React.useState<JobFacets>(defaultFacets);
   const [isPanelOpen, setIsPanelOpen] = React.useState(false);
 
+  const jobName = params.get("jobName") ?? "";
   const locationId = params.get("locationid") ?? "";
   const salaryLevelId = params.get("salaryLevelID") ?? "";
 
-  const visibleJobs = React.useMemo(() => applyFacets(jobs, facets), [jobs, facets]);
-  const { options: groupRows } = useDropdown(() => reference.positionGroups(), []);
-  const groups = React.useMemo(() => groupOptions(groupRows), [groupRows]);
-  const companies = React.useMemo(() => companyOptions(jobs), [jobs]);
+  // All the refined lists come from `getDropDownData`, which the page already
+  // fetched: the same call that feeds the location and salary rails.
+  const companyList = React.useMemo(() => companyRows(filterData), [filterData]);
+  const visibleJobs = React.useMemo(
+    () => applyFacets(jobs, facets, companyList),
+    [jobs, facets, companyList],
+  );
+  // The selected value is passed in so a facet that has fallen to zero — after
+  // a search, say — keeps its row and stays clearable.
+  const groups = React.useMemo(
+    () => groupOptions(filterData, jobs, facets.group),
+    [filterData, jobs, facets.group],
+  );
+  const companies = React.useMemo(() => companyOptions(filterData, jobs), [filterData, jobs]);
+  const positionTypes = React.useMemo(
+    () => positionTypeOptions(filterData, jobs, facets.positionType),
+    [filterData, jobs, facets.positionType],
+  );
   const workTypes = React.useMemo(() => workTypeOptions(jobs), [jobs]);
   const locations = React.useMemo(() => locationOptions(filterData), [filterData]);
   const salaryLevels = React.useMemo(() => salaryOptions(filterData), [filterData]);
@@ -88,10 +103,12 @@ export function JobBrowser({
 
   const activeFilters = buildActiveFilters({
     facets,
+    jobName,
     locationId,
     salaryLevelId,
     groups,
     companies,
+    positionTypes,
     workTypes,
     locations,
     salaryLevels,
@@ -101,7 +118,8 @@ export function JobBrowser({
 
   /** Chips remove exactly one filter through the same handlers as the rows. */
   function removeFilter(key: FilterKey) {
-    if (key === "location") pushQuery({ locationid: "" });
+    if (key === "search") pushQuery({ jobName: "" });
+    else if (key === "location") pushQuery({ locationid: "" });
     else if (key === "salary") pushQuery({ salaryLevelID: "" });
     else setFacets((current) => ({ ...current, [key]: ALL }));
   }
@@ -145,6 +163,14 @@ export function JobBrowser({
         onChange={(value) => setFacets((current) => ({ ...current, company: value }))}
       />
       <FilterSection
+        title="Ажиллах хэлбэр"
+        options={positionTypes}
+        value={facets.positionType}
+        onChange={(value) =>
+          setFacets((current) => ({ ...current, positionType: value }))
+        }
+      />
+      <FilterSection
         title="Ажлын төрөл"
         options={workTypes}
         value={facets.workType}
@@ -156,6 +182,17 @@ export function JobBrowser({
   return (
     <div className="relative">
       <SectionRule />
+
+      {/* The one filter the API searches on by text, above both layouts: on a
+          phone it must not be hidden behind the drawer. */}
+      <div className="border-b border-border/70 px-6 py-3 sm:px-10 lg:px-5">
+        <div className="max-w-md">
+          <JobSearch
+            value={jobName}
+            onChange={(value) => pushQuery({ jobName: value })}
+          />
+        </div>
+      </div>
 
       {/* Mobile: filters open in a bottom drawer. Its open state lives here,
           and the Sheet sits outside the keyed results list, so the router.push
@@ -266,7 +303,9 @@ export function JobBrowser({
           ) : (
             /* Keyed on the active facets so the entrance replays whenever the
                result set changes. */
-            <ul key={`${facets.group}-${facets.company}-${facets.workType}`}>
+            <ul
+              key={`${facets.group}-${facets.company}-${facets.positionType}-${facets.workType}`}
+            >
               {visibleJobs.map((job, index) => (
                 <li
                   key={job.id}
@@ -296,7 +335,10 @@ export function JobBrowser({
                       </p>
                     </div>
                     {/* "үлдсэн" is dropped under `sm`: at 390px the full phrase
-                        takes enough width to wrap the job title beside it. */}
+                        takes enough width to wrap the job title beside it. A
+                        closed advert says so plainly — its own status (in
+                        selection, selection finished) is the tooltip, since
+                        the column is too narrow for the sentence. */}
                     <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
                       {job.isOpen ? (
                         job.remainingDays != null ? (
@@ -308,9 +350,7 @@ export function JobBrowser({
                           </>
                         ) : null
                       ) : (
-                        <>
-                          <span className="hidden sm:inline">Хугацаа </span>дууссан
-                        </>
+                        <span title={job.status}>Хаагдсан</span>
                       )}
                     </span>
                   </Link>
