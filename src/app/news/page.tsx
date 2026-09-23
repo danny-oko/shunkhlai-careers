@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+import { Rise } from "@/components/brand/rise";
 import { BriefList } from "@/components/news/brief-list";
 import { CategoryRail } from "@/components/news/category-rail";
 import { LeadStory } from "@/components/news/lead-story";
@@ -60,7 +61,16 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
       className="flex-1 bg-background pt-16 text-foreground"
     >
       <Masthead />
-      <CategoryRail active={category} counts={counts} total={everything.length} />
+      {/* Carrying on the masthead's stagger, which ends at 260: the desks,
+          then the lead. Only these two - everything under them is below the
+          fold. */}
+      <Rise delay={340}>
+        <CategoryRail
+          active={category}
+          counts={counts}
+          total={everything.length}
+        />
+      </Rise>
 
       <div className="mx-auto max-w-6xl px-6 pb-20 lg:px-10">
         {lead ? (
@@ -69,7 +79,9 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
               <h2 id="lead-heading" className="sr-only">
                 {deskName ? `${deskName} — гол мэдээ` : "Гол мэдээ"}
               </h2>
-              <LeadStory article={lead} />
+              <Rise delay={420}>
+                <LeadStory article={lead} />
+              </Rise>
             </section>
 
             {columns.length > 0 && (

@@ -284,42 +284,76 @@ const HAND_OVER = 0.22;
  * has, so the two read as one movement - the word coming forward and the
  * picture coming up behind it - rather than as a word and then a slide.
  */
-const GROUND = { from: 0.06, span: 0.5 };
+const GROUND = { from: 0.12, span: 0.46 };
 
 /**
- * And where it stops being the subject.
- *
- * From the break onward the picture is what the principle is read on, so it
- * softens exactly as the panel arrives: it blurs, takes more ink, and drifts
- * a little further in. Left sharp, the four faces and the logo sit in the
- * copy's measure and are read before it.
+ * And where it stops being the subject: exactly as the panel opens, which is
+ * why it takes the panel's own beat rather than one of its own. Until then it
+ * is the picture and nothing is done to it; from there it blurs back into a
+ * ground for the principle to be read on. Softened any earlier and the word
+ * scatters over a picture that is already going.
  */
-const SOFTEN = { from: BREAK.from, span: 1 - BREAK.from };
+const SOFTEN = REVEAL;
 
 /**
  * How far out of focus, standing behind the word and standing under the panel.
  *
- * Never quite zero: at full sharpness the picture and the display word are two
- * subjects on one screen, and a hair of blur is what puts one behind the other.
+ * Zero at rest. The picture is the client's own key visual and it arrives as
+ * it was delivered - the second number is for the state where it has stopped
+ * being looked at and has copy over it.
  */
-const HAZE = { rest: 2, under: 18 };
+const HAZE = { rest: 0, under: 18 };
 
 /**
- * And how much ink it carries at each of those, which is a contrast figure
- * rather than a taste: the picture is mostly white, and white type over it
- * has to hold 3:1 at display size and the muted copy 4.5:1 at reading size.
- * Over the brightest part of the photograph - the white wall the lockup is on,
- * which is where the word crosses it on a wide screen - these two give 5.4:1
- * for the word and 5.3:1 for `--ink-muted` under the panel.
+ * And how much ink it carries at each of those. None while it is the picture;
+ * under the panel it is a contrast figure rather than a taste, because the
+ * brightest part of the photograph is a white wall and the panel's muted copy
+ * has to hold 4.5:1 over it. 85% gives that copy 5.3:1 and the heading 10.5:1.
  */
-const VEIL = { rest: 0.66, under: 0.85 };
+const VEIL = { rest: 0, under: 0.85 };
 
 /**
- * Drawn wider than the screen throughout, because a blur has soft edges: at 18px
- * the picture fades out over about 27px of its own border, and at 1:1 that
- * border is the screen's. The overhang keeps it outside.
+ * The picture's own proportion, which is how the band at its foot is found on
+ * a screen of any shape: it is drawn whole, so its box is as tall as the
+ * screen or as wide, whichever runs out first, and the band is a fraction of
+ * that box rather than of the window.
  */
-const OVERSCAN = 1.16;
+const RATIO = 3 / 2;
+
+/**
+ * And the bar it is drawn under: `h-16` on <SiteHeader>, which is fixed over
+ * every page and therefore over this one.
+ *
+ * Drawn to the top of the window instead, the picture is whole and the top of
+ * it is still not visible - the bar sits on the head of the man at the back of
+ * the group. So the box the picture is fitted into is the window less the bar,
+ * and the strip behind the bar is left as ink, which is the ground the bar is
+ * over everywhere else in this section anyway.
+ */
+const BAR = 64;
+
+/**
+ * Where the word lands in it: the empty orange band along the foot of the
+ * ramp, left of the man walking up it.
+ *
+ * Measured off the file rather than judged by eye. Over the box this centres
+ * on - a fifth of the picture, clear of every figure in it - the flattest
+ * orange is #fd6702, and that is what the word's colour is picked against
+ * below.
+ */
+const SPOT = { x: 0.29, y: 0.845 };
+
+/**
+ * And the word's colour once it is there.
+ *
+ * White on that orange is 2.95:1, which is under the 3:1 display type has to
+ * hold - the word would be a glare rather than a word. The brandbook's own
+ * navy on it is 5.55:1, and it is the pairing the lockup in the corner of the
+ * same picture is already drawn in. So the word arrives white, off the ink
+ * screen it leaves, and is navy by the time it is standing on the orange;
+ * `PAINT` is the share of the ground's own arrival it changes over.
+ */
+const PAINT = { from: 0.25, span: 0.5 };
 
 /**
  * Where each letter of "Бидний" goes when the word breaks up.
@@ -357,7 +391,16 @@ function useWordOrigin(
   labelRef: React.RefObject<HTMLElement | null>,
   wordRef: React.RefObject<HTMLElement | null>,
 ) {
-  const [origin, setOrigin] = React.useState({ x: 0, y: 0, scale: 0.2 });
+  // The screen is measured here too, because the word's destination is a
+  // place in the picture rather than the middle of the window, and the picture
+  // is drawn whole inside that window - so where it lands can only be worked
+  // out from the window's own shape. See SPOT.
+  const [origin, setOrigin] = React.useState({
+    x: 0,
+    y: 0,
+    scale: 0.2,
+    stage: { width: 0, height: 0 },
+  });
 
   React.useLayoutEffect(() => {
     const screen = screenRef.current;
@@ -374,6 +417,7 @@ function useWordOrigin(
         x: box.left + box.width / 2 - (stage.left + stage.width / 2),
         y: box.top + box.height / 2 - (stage.top + stage.height / 2),
         scale: Math.min(box.height / word.offsetHeight, 1),
+        stage: { width: stage.width, height: stage.height },
       });
     };
 
@@ -500,6 +544,23 @@ export function StatementBands() {
   const ground = ease(clamp((outro - GROUND.from) / GROUND.span));
   const soften = ease(clamp((outro - SOFTEN.from) / SOFTEN.span));
 
+  // The picture is drawn whole in the window below the bar, so its box is that
+  // height times its own proportion, or the window's width, whichever fits -
+  // and the band the word lands in is a fraction of that box. The landing is
+  // given against the middle of the window, which the box's own middle sits
+  // half a bar below.
+  const below = Math.max(origin.stage.height - BAR, 0);
+  const frame = {
+    width: Math.min(origin.stage.width, below * RATIO),
+    height: Math.min(below, origin.stage.width / RATIO),
+  };
+  const landing = {
+    x: frame.width * (SPOT.x - 0.5),
+    y: BAR / 2 + frame.height * (SPOT.y - 0.5),
+  };
+  // White off the ink screen, navy on the orange. See PAINT.
+  const paint = clamp((ground - PAINT.from) / PAINT.span);
+
   /** Lifted as it arrives, so the panel enters rather than switches on. */
   const rise = (shown: number) => ({
     opacity: shown,
@@ -557,7 +618,7 @@ export function StatementBands() {
             aria-hidden
             fill
             sizes="100vw"
-            className="-z-20 scale-[1.12] object-cover blur-[18px]"
+            className="-z-20 scale-[1.06] object-contain blur-[18px]"
           />
           <div
             aria-hidden
@@ -633,19 +694,29 @@ export function StatementBands() {
           className="absolute inset-0 -z-10 overflow-hidden"
           style={{ opacity: ground }}
         >
-          <Image
-            src={PRINCIPLE_GROUND}
-            alt=""
-            fill
-            sizes="100vw"
-            className="object-cover"
-            style={{
-              // Eased in from further out and pushed on again as it softens,
-              // so it is still moving when the panel lands on it.
-              transform: `scale(${(OVERSCAN - 0.08 * ground + 0.04 * soften).toFixed(3)})`,
-              filter: `blur(${(HAZE.rest + (HAZE.under - HAZE.rest) * soften).toFixed(2)}px)`,
-            }}
-          />
+          {/* The picture's own box: the window less the bar over it. The veil
+              below is not inset with it - it is what the panel is read on and
+              has to cover the whole screen. */}
+          <div className="absolute inset-x-0 bottom-0" style={{ top: BAR }}>
+            <Image
+              src={PRINCIPLE_GROUND}
+              alt=""
+              fill
+              sizes="100vw"
+              // Whole, not cropped to the box. It is a composed picture - the
+              // lockup in one corner, the four of them walking out of the
+              // other, the band along the foot the word lands in - and a
+              // window that crops it takes a different piece at every size.
+              className="object-contain"
+              style={{
+                // Still while it is the picture; pushed on only as it softens,
+                // so it is moving when the panel lands on it.
+                transform: `scale(${(1 + 0.06 * soften).toFixed(3)})`,
+                filter: `blur(${(HAZE.rest + (HAZE.under - HAZE.rest) * soften).toFixed(2)}px)`,
+              }}
+            />
+          </div>
+          {/* Nothing over it until the panel wants it. */}
           <div
             className="absolute inset-0"
             style={{
@@ -821,10 +892,14 @@ export function StatementBands() {
         >
           <p
             ref={wordRef}
-            className="type-display font-semibold tracking-[-0.04em] whitespace-nowrap text-white uppercase"
+            className="type-display font-semibold tracking-[-0.04em] whitespace-nowrap uppercase"
             style={{
               opacity: word,
-              transform: `translate3d(${(origin.x * (1 - grown)).toFixed(2)}px, ${(origin.y * (1 - grown)).toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
+              // From the label it steps out of to the band at the foot of the
+              // picture. Both ends are places on the screen, so the travel is
+              // one interpolation between them and the scale rides on top.
+              transform: `translate3d(${(origin.x * (1 - grown) + landing.x * grown).toFixed(2)}px, ${(origin.y * (1 - grown) + landing.y * grown).toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
+              color: `color-mix(in oklab, var(--ink) ${(paint * 100).toFixed(1)}%, white)`,
             }}
           >
             {/* Letters rather than a word, because they have to leave in six

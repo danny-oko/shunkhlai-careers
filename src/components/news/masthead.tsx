@@ -1,55 +1,62 @@
-import { FeatherOrnament } from "@/components/news/feather-ornament";
+import { FeatherLattice } from "@/components/brand/feather-lattice";
+import { GradientRule } from "@/components/brand/gradient-rule";
+import { Rise } from "@/components/brand/rise";
+import { WingFacets } from "@/components/brand/wing-facets";
 
 /**
- * The newsroom's page header.
+ * The newsroom's page header, built to <CareersHero>'s pattern.
  *
- * It was a broadsheet nameplate: a folio line of small caps, the paper's name
- * set across the full measure, a strapline between two printer's ornaments and
- * a thick-over-hairline rule closing it off. Every one of those is a thing a
- * newspaper does and a company does not, and together they were most of why
- * the page read as a paper rather than as part of this site.
+ * It was a broadsheet nameplate once, then a plain heading on the page's own
+ * white. Neither looked like the rest of the site: the careers screen opens on
+ * the wing facets with a kicker, a heading, the brandbook's кант and one line
+ * saying what the page is, and that is the shape a top-level section of this
+ * site has. This is that shape with the newsroom's own words in it.
  *
- * What replaces them is what a corporate newsroom actually puts at the top of
- * its index: who is speaking, what the page is, one sentence saying what is on
- * it. Left-aligned on the site's own measure, so the heading starts on the
- * line the stories under it start on.
+ * Two grounds, as there: the facets are the picture and the lattice is the
+ * texture over them. The feather watermark that used to sit in the right
+ * margin went with the change - the facets are already the brand mark on this
+ * header, and two of them in one corner read as clutter.
  *
- * The date went with the folio line. A newspaper prints today's date because
- * the edition is of a day; an index that is rebuilt on every request is not,
- * and each story carries its own dateline anyway.
- *
- * The feather survives the cut, enlarged and dropped to a watermark. As a
- * pair flanking the strapline it was a printer's fleuron and read as one more
- * newspaper habit; at this size it is what the rest of the site does with the
- * motif - a quiet brand mark on a header, not an ornament on a line.
+ * The date went long ago. A newspaper prints today's date because the edition
+ * is of a day; an index rebuilt on every request is not, and each story
+ * carries its own dateline anyway.
  */
 export function Masthead() {
   return (
-    <header className="relative overflow-hidden border-b border-border">
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-[3px]"
-        style={{ backgroundImage: "var(--brand-gradient)" }}
+    <header className="relative isolate overflow-hidden border-b border-border">
+      <WingFacets className="-z-20" />
+
+      <FeatherLattice
+        className="-z-10 opacity-40 [mask-image:radial-gradient(ellipse_70%_60%_at_50%_35%,black_20%,transparent_100%)]"
+        tone="brand"
       />
 
-      {/* Hidden below `lg`: the mark sits in the margin beside the heading,
-          and on a narrower window the container runs the full width and there
-          is no margin for it to sit in. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 hidden lg:block"
-      >
-        <FeatherOrnament className="news-ornament absolute -top-8 right-[5%] size-44 opacity-[0.07]" />
-      </div>
+      {/* The careers screen's measure and rhythm to the pixel, so the two
+          headers are the same piece of furniture with different words. */}
+      <div className="mx-auto max-w-6xl px-6 pt-20 pb-16 sm:pt-28 lg:px-10">
+        <Rise delay={90}>
+          {/* The careers heading's own class list, not the newsroom's
+              `news-headline`. Both set the site's sans - `[data-newsroom]`
+              changes two colour tokens and no type - but `news-headline` is
+              700 where the careers heading is 600, and it carried an `mt-5`
+              from the kicker that used to sit over it. Twenty pixels lower
+              and a weight heavier is exactly how far apart the two headers
+              read. Shared classes cannot drift again. */}
+          <h1 className="max-w-3xl text-4xl leading-[1.02] font-semibold tracking-[-0.04em] text-balance sm:text-6xl">
+            Мэдээ, мэдээлэл
+          </h1>
+        </Rise>
 
-      <div className="relative mx-auto max-w-6xl px-6 py-14 sm:py-20 lg:px-10">
-        <p className="news-kicker">Шунхлай ХХК</p>
+        <Rise delay={180} className="mt-10">
+          <GradientRule className="max-w-[7rem] rounded-full" />
+        </Rise>
 
-        <h1 className="news-headline mt-3 type-figure">Мэдээ</h1>
-
-        <p className="mt-4 max-w-xl type-lead text-muted-foreground">
-          Компанийн сурвалжилга, салбарын мэдээ, хүний нөөцийн шинэчлэл.
-        </p>
+        <Rise delay={260}>
+          <p className="mt-8 max-w-xl text-lg leading-relaxed text-muted-foreground text-pretty">
+            Компанийн салбар нэгжүүдийн мэдээ, мэдээлэл болон хүний нөөцийн
+            шинэчлэл.
+          </p>
+        </Rise>
       </div>
     </header>
   );

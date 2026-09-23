@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { PaletteProvider } from "@/components/palette-provider";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { CursorRing } from "@/components/cursor-ring";
+import { ChromeSlot } from "@/components/chrome-slot";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";

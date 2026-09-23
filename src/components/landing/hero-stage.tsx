@@ -131,8 +131,16 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
             </div>
           ))}
 
-          {/* Holds the headline legible over all three photographs. */}
-          <div className="absolute inset-x-0 bottom-0 h-3/5 bg-linear-to-t from-black/80 via-black/45 to-transparent" />
+          {/* Holds the headline legible over all three photographs.
+
+              Both this and the overlay under it are lifted above the slides
+              rather than left to DOM order. The slides carry their own
+              z-index - which is what keeps the arriving one over the one it
+              replaces - and a positioned element with a z-index paints above
+              every `auto` one on the layer whatever the order in the markup.
+              Left at `auto`, the photograph covered the headline, both
+              buttons and the slide dots. */}
+          <div className="absolute inset-x-0 bottom-0 z-30 h-3/5 bg-linear-to-t from-black/80 via-black/45 to-transparent" />
 
           <HeroOverlay
             slide={heroSlides[active]}

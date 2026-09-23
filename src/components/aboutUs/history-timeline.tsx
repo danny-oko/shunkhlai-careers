@@ -41,6 +41,26 @@ const SCATTER_MS = 170;
 /** The whole change, to the last tile settling. */
 const REVEAL_MS = SWEEP_MS + SCATTER_MS / 2 + TILE_MS;
 
+/**
+ * And how long the photograph being replaced takes to clear, where the one
+ * arriving will not cover it.
+ *
+ * A tile carries the arriving photograph and nothing else, so where that
+ * photograph is not - the band an archive picture leaves at the top and
+ * bottom of the frame, or down its sides - an opened tile is transparent and
+ * what shows through it is the photograph underneath. Against a span
+ * photograph, which fills the frame, that left the old picture standing
+ * around the new one for the length of the sweep: two photographs in one
+ * frame, which is the one thing this change is supposed to avoid.
+ *
+ * So it is faded out under the sweep rather than dropped at the end of it,
+ * and it is gone before the last tiles open. Only against an arriving picture
+ * that does not cover the frame: where the next one does, the tiles wipe it
+ * themselves, and holding it intact underneath is what makes the change read
+ * as one photograph being drawn over another.
+ */
+const CLEAR_MS = SWEEP_MS + TILE_MS / 2;
+
 /** Turns the index's travel from a jump into a slide. */
 const MARK_MIN = 5;
 const MARK_MAX = 40;
@@ -224,6 +244,11 @@ export function HistoryTimeline() {
 
   const { shown, incoming } = usePhotographChange(photoOf[active], isReduced);
 
+  // Whether the arriving photograph leaves a band of the frame uncovered, and
+  // therefore whether the one it replaces has to clear rather than be wiped.
+  // See CLEAR_MS.
+  const clearing = incoming !== null && photos[incoming].fit !== "cover";
+
   /**
    * Take the reader to a record. While the stage is pinned the scroll owns
    * which one is open, so the rail cannot set it directly - it has to move
@@ -386,6 +411,14 @@ export function HistoryTimeline() {
                       photo.fit === "cover" ? "object-cover" : "object-contain",
                       index === shown ? "opacity-100" : "opacity-0",
                     )}
+                    style={
+                      clearing && index === shown
+                        ? {
+                            opacity: 0,
+                            transition: `opacity ${CLEAR_MS}ms cubic-bezier(0.33, 1, 0.68, 1)`,
+                          }
+                        : undefined
+                    }
                   />
                 ))}
 
