@@ -10,10 +10,10 @@
       "breakpoints": true
     },
     {
-      "idx": 2,
-      "version": "6",
-      "when": 1789974753962,
-      "tag": "0002_news",
+      "idx": 1,
+      "version": "7",
+      "when": 1790173617243,
+      "tag": "0001_complete_patriot",
       "breakpoints": true
     }
   ]
