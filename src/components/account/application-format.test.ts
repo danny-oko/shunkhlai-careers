@@ -101,16 +101,37 @@ describe("erpRequestNumber", () => {
 });
 
 describe("syncState", () => {
-  it("names each push state in Mongolian", () => {
-    expect(syncState({ erp: { status: "pending" } })).toEqual({ tone: "pending", label: "ERP-д илгээгдэж байна" });
+  it("names each push state in Mongolian, and never says the application was lost", () => {
+    expect(syncState({ erp: { status: "pending" } })).toEqual({
+      tone: "pending",
+      label: "Хадгалагдсан — ERP-д илгээгдэж байна",
+    });
     expect(syncState({ erp: { status: "sent" } })).toEqual({ tone: "positive", label: "Илгээгдсэн" });
-    expect(syncState({ erp: { status: "failed" } })).toEqual({ tone: "negative", label: "Илгээж чадсангүй — дахин оролдоно" });
+    // Still being retried: pending tone, and the word "хадгалагдсан" stays,
+    // because the row is durable here whatever the ERP is doing.
+    expect(syncState({ erp: { status: "failed", attempts: 1 } })).toEqual({
+      tone: "pending",
+      label: "Хадгалагдсан — дахин илгээхийг оролдож байна",
+    });
   });
-  it("at the retry cap: no promise of another try, a hint instead", () => {
-    const state = syncState({ erp: { status: "failed", attempts: PUSH_ATTEMPTS, error: "erp_apply_failed" } });
-    expect(state?.label).toBe("Илгээж чадсангүй");
-    expect(state?.hint).toBeTruthy();
+  it("terminal rows ask for attention; retried ones do not", () => {
+    const capped = syncState({ erp: { status: "failed", attempts: PUSH_ATTEMPTS, error: "erp_unavailable" } });
+    expect(capped).toMatchObject({ tone: "negative", label: "Анхаарал шаардлагатай" });
+    expect(capped?.hint).toBeTruthy();
+
+    // The flag the server writes is enough on its own — one attempt, refused.
+    const refused = syncState({ erp: { status: "failed", attempts: 1, error: "erp_apply_rejected", terminal: true } });
+    expect(refused).toMatchObject({ tone: "negative", label: "Анхаарал шаардлагатай" });
+    expect(refused?.hint).toContain("хүлээж авсангүй");
+
+    expect(syncState({ erp: { status: "failed", attempts: 2, error: "erp_unavailable" } })?.tone).toBe("pending");
     expect(PUSH_ATTEMPTS).toBe(MAX_ATTEMPTS);
+  });
+  it("no classified reason ever carries an upstream message to the applicant", () => {
+    const state = syncState({
+      erp: { status: "failed", attempts: 5, error: "erp_apply_rejected", terminal: true },
+    });
+    expect(`${state?.label} ${state?.hint}`).not.toMatch(/ORA-|http_|retmsg/);
   });
   it("waiting on the profile or on a cancel is not a failure", () => {
     expect(syncState({ erp: { status: "failed", attempts: 5, error: "profile_incomplete" } })).toEqual({

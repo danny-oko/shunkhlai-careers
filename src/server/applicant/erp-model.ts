@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { MaritalOption } from "@/lib/api/profile";
 import { isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
+import { MAX_ATTEMPTS } from "./erp-retry";
 import type { ApplicantDoc, DocErp, HandlerDeps, PendingDelete, Row, WithdrawnApplication } from "./handlers";
 
 /**
@@ -438,6 +439,10 @@ type AppErp = {
   erpEntryId?: number;
   error?: string;
   claimedAt?: string;
+  terminal?: true;
+  /** `idempotencyKey` — see `erp-push.ts`'s `ApplicationErp`, of which this is the read-only view. */
+  key?: string;
+  submittedAt?: string;
 };
 
 const appErp = (row: Row) =>
@@ -484,6 +489,16 @@ export function mergeApplications(
       if (!target) continue;
       for (const [key, value] of Object.entries(row)) {
         if (key !== "entryid" && key !== "erp" && target[key] === undefined) target[key] = value;
+      }
+      // The ERP list is the truth about the push from here on, so the local
+      // bookkeeping (attempts, last error) goes. Two fields survive it, because
+      // the ERP never knew them and nothing else can recover them: when the
+      // applicant submitted, and the idempotency key that ties this row to the
+      // push that created it.
+      const marker = target.erp as Row | undefined;
+      if (marker) {
+        if (erp.submittedAt) marker.submittedAt = erp.submittedAt;
+        if (erp.key) marker.key = erp.key;
       }
       continue;
     }
@@ -934,7 +949,22 @@ export function hasLocalWork(doc: ApplicantDoc): boolean {
 
 /* --- retry policy ------------------------------------------------------- */
 
-export const MAX_ATTEMPTS = 5;
+/**
+ * One attempt cap for every kind of ERP work — applications and the
+ * non-application flush alike — so "it stopped trying" means the same thing
+ * wherever it is read. It is defined in `erp-retry.ts` with the rest of the
+ * application push policy and re-exported here for the callers that had it.
+ */
+export { MAX_ATTEMPTS };
+
+/**
+ * The flush's flat backoff. Applications do not use this any more: their wait
+ * is exponential with jitter (`retryDelayMs`), because a failed push is
+ * retried by every instance that sees the row and a fixed interval has them
+ * all come back at the same moment. The flush is claimed per account by a
+ * request that is already serving that one applicant, so it does not have
+ * that problem and keeps the simpler rule.
+ */
 export const RETRY_FAILED_AFTER_MS = 10 * 60_000;
 export const RETRY_PENDING_AFTER_MS = 60_000;
 export const PULL_EVERY_MS = 10 * 60_000;

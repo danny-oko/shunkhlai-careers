@@ -214,7 +214,11 @@ async function handle(request: Request, ctx: Ctx, method: "GET" | "POST") {
         : null;
     if (submitted) {
       submitted.sourcetype = (body as { sourcetype?: unknown } | null)?.sourcetype ?? "WEB";
-      submitted.erp = pendingErp();
+      // The reply below is sent from the row that `saveAccount` commits a few
+      // lines on — the ERP has not been called yet and may not be for minutes.
+      // So the confirmation the applicant sees is the durable write, and this
+      // marker is what turns into the honest "syncing" on their card.
+      submitted.erp = pendingErp(identity!.email, submitted.recruitmentorderid);
     }
 
     // Local work for the ERP; one scheduled sync per account at a time.

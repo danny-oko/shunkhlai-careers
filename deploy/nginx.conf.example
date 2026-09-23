@@ -1,0 +1,142 @@
+# nginx in front of the careers site.
+#
+# Copy to /etc/nginx/sites-available/shunhlai, edit the server_name, then:
+#   sudo ln -s /etc/nginx/sites-available/shunhlai /etc/nginx/sites-enabled/
+#   sudo rm -f /etc/nginx/sites-enabled/default   # or it wins on port 80
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# Why nginx at all, when `next start` can serve port 80 itself: TLS termination
+# and certbot's renewal hook, a body-size limit enforced before the request
+# reaches Node, and a reload that does not drop connections during a release.
+#
+# UNVERIFIED: written without access to the customer's server. `nginx -t` has
+# not been run against it. Run that before reloading — a reload with a bad
+# config leaves the old one serving, but `restart` would not.
+
+# The app listens on 127.0.0.1:3000 (set in deploy/shunhlai.service). Naming it
+# once here keeps the two proxy_pass lines and the health check in step.
+upstream shunhlai_app {
+    server 127.0.0.1:3000;
+    # Reuse connections to Node instead of a new TCP handshake per request.
+    keepalive 16;
+}
+
+# ── Real client IP ───────────────────────────────────────────────────────────
+# Everything behind this proxy sees 127.0.0.1 unless the original address is
+# forwarded. X-Forwarded-For is *set*, not appended: this nginx is the edge, so
+# any X-Forwarded-For already on the request was written by the client and is a
+# forgery. $proxy_add_x_forwarded_for would preserve it and let a caller
+# dictate what the app logs.
+#
+# If a corporate proxy or load balancer is ever put in front of this one, that
+# changes: add `set_real_ip_from <its address>;` and `real_ip_header
+# X-Forwarded-For;` here, and switch the header below to append.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name careers.shunkhlai.mn;   # <-- the customer's hostname
+
+    # ── TLS ──────────────────────────────────────────────────────────────────
+    # Certbot writes the redirect and the 443 server block itself:
+    #
+    #   sudo apt install certbot python3-certbot-nginx
+    #   sudo certbot --nginx -d careers.shunkhlai.mn
+    #
+    # It edits this file in place, adds `listen 443 ssl` with the certificate
+    # paths, and installs a systemd timer that renews twice a day. Run it only
+    # once this block answers on port 80 for that name from outside: the HTTP-01
+    # challenge is Let's Encrypt fetching a file over plain HTTP.
+    #
+    # NOTE, honestly: this host is on a private network (192.168.2.23), reachable
+    # from outside only over SSH. Let's Encrypt cannot reach it, so `--nginx`
+    # will fail as things stand. The options are a DNS-01 challenge (certbot
+    # with the DNS provider's plugin, no inbound access needed) or a certificate
+    # the customer's IT issues from their own CA, dropped in and referenced with
+    # ssl_certificate / ssl_certificate_key. Decide which with their IT before
+    # promising HTTPS.
+    #
+    # Leave this location in place afterwards: certbot renews through it.
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    # ── Upload size ──────────────────────────────────────────────────────────
+    # The app's own ceiling is 5 MB for a CV (MAX_CV_BYTES in
+    # src/lib/apply-schema.ts), and the route allows 64 KB on top for multipart
+    # framing (MAX_UPLOAD_REQUEST_BYTES in src/app/api/me/[...path]/route.ts).
+    # 6m sits just above that deliberately: nginx should not be the thing that
+    # rejects a legitimate 5 MB CV, because its 413 is a bare HTML page, while
+    # the app answers the same request with the message the applicant can act
+    # on. nginx is only the backstop against a body far too large to buffer on
+    # a machine with 1.9 GB of RAM.
+    #
+    # If MAX_CV_BYTES changes, change this with it.
+    client_max_body_size 6m;
+    client_body_timeout 60s;
+
+    # ── Proxying ─────────────────────────────────────────────────────────────
+    location / {
+        proxy_pass http://shunhlai_app;
+        proxy_http_version 1.1;
+
+        # The client's address, for the app's logs and any future rate limit.
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        # So the app builds absolute URLs (Clerk redirects, og:url) against the
+        # scheme and host the browser used, not against 127.0.0.1:3000.
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Host $host;
+
+        # WebSocket/upgrade passthrough. `next start` does not need it today;
+        # it costs nothing and its absence is an obscure failure later.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Stream the response instead of buffering it to disk: the filesystem
+        # is read-only to nginx's cache paths under a hardened setup, and
+        # buffering delays the first byte of a streamed React render.
+        proxy_buffering off;
+        proxy_read_timeout 60s;
+
+        # A restart during a release should be a brief wait, not a 502. With
+        # `next start` the window is a second or two.
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_connect_timeout 5s;
+    }
+
+    # Immutable build assets: hashed filenames, so a stale copy can never be
+    # served and there is no reason to log every one of them.
+    #
+    # No `add_header Cache-Control` here on purpose: Next already sends
+    # `public, max-age=31536000, immutable` for these, and add_header appends
+    # rather than replaces — two Cache-Control headers is a worse answer than
+    # one, and browsers are entitled to take the stricter.
+    location /_next/static/ {
+        proxy_pass http://shunhlai_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        access_log off;
+    }
+
+    # The health endpoint, kept out of the access log so a monitor polling
+    # every 30 seconds does not bury the real traffic. It still answers
+    # normally — see docs/deploy.md for what its 503 means.
+    location = /api/health {
+        proxy_pass http://shunhlai_app;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        access_log off;
+    }
+}
+
+# `Connection: upgrade` only when the client asked for it; plain `close`
+# otherwise, which is what lets `keepalive` on the upstream work. Belongs in
+# the http{} block — put it in /etc/nginx/conf.d/upgrade.conf rather than here
+# if this file is included from within a server context.
+#
+# map $http_upgrade $connection_upgrade {
+#     default upgrade;
+#     ''      close;
+# }

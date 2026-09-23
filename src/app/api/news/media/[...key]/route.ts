@@ -14,8 +14,9 @@ import { getMedia } from "@/server/news/store";
  * Containment is enforced in the store, which is the only thing that turns a
  * key into a filesystem read; the `..` check here is a second, cheaper no.
  *
- * Read per request: uploaded bytes live in D1, which production and localhost
- * share, so a build-time answer would miss every cover uploaded since. The
+ * Read per request: uploaded bytes live in the database, which every host
+ * pointed at the same DATABASE_URL shares, so a build-time answer would miss
+ * every cover uploaded since. The
  * long `immutable` cache below is still right — a key is never reused.
  *
  * A cover stored as a URL (Cloudinary) never reaches this route — `coverUrl`
@@ -42,7 +43,7 @@ export async function GET(
   try {
     media = await getMedia(joined);
   } catch (error) {
-    // D1 unreachable. Not a 404 — that would be cached as "no such image" —
+    // The database is unreachable. Not a 404 — that would be cached as "no such image" —
     // and not a 500 either; the image is simply unavailable for now.
     console.error("[news] media read failed:", error instanceof Error ? error.message : error);
     return new Response("Unavailable", {
