@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, FileText, Newspaper, Plus } from "lucide-react";
 
 import { ArticleRow } from "@/components/admin/article-row";
+import { mayDeleteArticles, requireAdminUser } from "@/server/admin/guard";
 import { Button } from "@/components/ui/button";
 import { getAdminArticles } from "@/lib/news/service";
 import { NEWS_DB_ERROR } from "@/lib/news/schema";
@@ -39,6 +40,19 @@ async function loadDesk(
     );
     return null;
   }
+}
+
+/** A story an editor tried to delete. The action refused; this says why. */
+function ForbiddenError() {
+  return (
+    <p
+      role="alert"
+      className="mb-6 flex items-center gap-2 border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-[0.8125rem] text-destructive"
+    >
+      <AlertTriangle aria-hidden className="size-4 shrink-0" />
+      Мэдээ хасах эрх байхгүй байна. Админ эрхтэй хүнээр хасуулна уу.
+    </p>
+  );
 }
 
 function DbError() {
@@ -127,6 +141,12 @@ export default async function AdminNewsPage({
   const saved = read(params.saved);
   const deleted = read(params.deleted);
   const failed = read(params.error) === "db";
+  const forbidden = read(params.error) === "forbidden";
+
+  // The role decides whether the delete control is drawn at all. The action
+  // refuses on its own regardless — this only keeps an editor from being
+  // offered a button that would bounce them.
+  const canDelete = mayDeleteArticles(await requireAdminUser());
 
   // Looked up rather than taken from the query string: the banner needs the
   // story's status to know whether it has a public URL yet, and a hand-typed
@@ -137,6 +157,7 @@ export default async function AdminNewsPage({
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 lg:px-8">
       {failed && <DbError />}
+      {forbidden && <ForbiddenError />}
       <ActionNotice saved={savedArticle} deleted={Boolean(deleted)} />
 
       <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-b-[var(--rule-strong)] pb-4">
@@ -200,7 +221,7 @@ export default async function AdminNewsPage({
       {articles.length > 0 ? (
         <ul className="divide-y divide-border">
           {articles.map((article) => (
-            <ArticleRow key={article.id} article={article} />
+            <ArticleRow key={article.id} article={article} canDelete={canDelete} />
           ))}
         </ul>
       ) : (

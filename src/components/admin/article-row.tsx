@@ -27,7 +27,14 @@ import { cn } from "@/lib/utils";
  * event handler, and a handler cannot cross into a server component — so it
  * lives in `<DeleteArticleButton>` on the client.
  */
-export function ArticleRow({ article }: { article: NewsArticle }) {
+export function ArticleRow({
+  article,
+  canDelete,
+}: {
+  article: NewsArticle;
+  /** `editor` accounts do not get the control; the action refuses them too. */
+  canDelete: boolean;
+}) {
   const isPublished = article.status === "published";
 
   return (
@@ -132,7 +139,7 @@ export function ArticleRow({ article }: { article: NewsArticle }) {
           </Link>
         </Button>
 
-        <DeleteArticleButton id={article.id} title={article.title} />
+        {canDelete && <DeleteArticleButton id={article.id} title={article.title} />}
       </div>
     </li>
   );

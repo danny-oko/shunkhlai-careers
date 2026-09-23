@@ -1,11 +1,19 @@
 import Link from "next/link";
-import { ExternalLink, LogOut, Plus } from "lucide-react";
+import { ExternalLink, LogOut, Plus, UserRound } from "lucide-react";
 
 import { logoutAction } from "@/app/admin/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { currentAdmin } from "@/server/admin/guard";
 
-export function AdminBar() {
+/**
+ * Async because the bar now says who is signed in — staff have accounts, and
+ * on a shared desk the name is the difference between "someone is logged in
+ * here" and "I am". It is read through the guard rather than passed down, so
+ * every screen that mounts the bar gets it without threading a prop.
+ */
+export async function AdminBar() {
+  const user = await currentAdmin();
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-md">
       <div
@@ -28,6 +36,15 @@ export function AdminBar() {
         </Link>
 
         <div className="flex items-center gap-1.5">
+          {user && (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/account" aria-label="Миний бүртгэл">
+                <UserRound aria-hidden />
+                <span className="hidden max-w-36 truncate md:inline">{user.name}</span>
+              </Link>
+            </Button>
+          )}
+
           <ThemeToggle />
 
           <Button

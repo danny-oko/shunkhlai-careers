@@ -102,9 +102,14 @@ never an argument (argv is in the shell history and in `ps`) and never logged.
 which wraps `@node-rs/argon2` — chosen over `argon2` because it ships prebuilt
 binaries for macOS arm64 and Linux x64, so it installs without a compiler.
 
-**Nothing reads this table yet.** `/admin` still signs in with
-`ADMIN_PASSWORD` (see `docs/newsroom.md`). Moving that login onto `app_user` is
-a separate change; this slice ships the table, the hashing helper and the CLI.
+`/admin` signs in against this table: email and password, argon2id, with the
+session in `admin_session` (see `docs/newsroom.md`). `is_active = false` both
+refuses the next sign-in and ends any session the account already has.
+
+`ADMIN_PASSWORD` remains only as a fallback for a deployment where `app_user`
+is still **completely empty** — otherwise a fresh install would have no way in
+to create the first account. It warns on every use and closes for good the
+moment one row exists.
 
 ## Production (10.16.9.51)
 
@@ -160,7 +165,7 @@ without `--update-env` keeps the old one.
 
 ### Checks before handing it over
 
-- `psql "$DATABASE_URL" -c '\dt'` lists the eight tables.
+- `psql "$DATABASE_URL" -c '\dt'` lists the nine tables.
 - `bun run db:import -- --dry-run` shows the same counts on both sides.
 - The site's `/news` renders, and `/admin/news` can save a story.
 - `max_connections` on the server is comfortably above
