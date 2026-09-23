@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { INTEREST_DUPLICATE_MESSAGE, INTEREST_GROUP_REQUIRED_MESSAGE } from "@/lib/interested-job";
+
+import { labelSources } from "./erp-model";
 import {
+  EXPERIENCE_JOB_REQUIRED_MESSAGE,
+  EXPERIENCE_ORG_REQUIRED_MESSAGE,
+  FAMILY_REQUIRED_MESSAGE,
   type ApplicantDoc,
   type HandlerDeps,
   type Row,
@@ -30,7 +36,9 @@ function recordingLabel() {
     if (dropdown === "GetForLanguageDropDown") return String(key) === "15" ? "Англи" : "";
     if (dropdown === "GetJobDropDown") return String(key) === "100" ? "Нягтлан бодогч" : "";
     if (dropdown === "GetRelativeDropDown") return String(key) === "1" ? "Эх" : "";
-    if (dropdown === "getPosGroupDropdown") return String(key) === "142" ? "Инженер" : "";
+    // getPosGroupDropdown / getPositionsDropdown as live answers them (2026-09-23): codes kept.
+    if (dropdown === "getPosGroupDropdown") return String(key) === "142" ? "/16/ Инженер, техник" : "";
+    if (dropdown === "getPositionsDropdown") return String(key) === "12384" ? "/02-007/ Tехник бүтээгдэхүүн хөгжүүлэлтийн менежер" : "";
     return "";
   };
   return { label, calls };
@@ -145,14 +153,14 @@ describe("a section edit replaces the stored row (omitted = cleared)", () => {
   it("an unknown entryid inserts a new row rather than touching another", async () => {
     const doc = emptyDoc();
     doc.experience.push({ entryid: 44, orgname: "Шунхлай", erp: "synced" });
-    await post(doc, "SaveAppExperience", { entryid: 77, orgname: "Шинэ" });
+    await post(doc, "SaveAppExperience", { entryid: 77, orgname: "Шинэ", jobid: 100 });
     expect(doc.experience).toHaveLength(2);
     expect(doc.experience[0]).toEqual({ entryid: 44, orgname: "Шунхлай", erp: "synced" });
   });
 
   it("a new row never takes the marker the body carries", async () => {
     const doc = emptyDoc();
-    await post(doc, "SaveAppExperience", { entryid: 0, orgname: "Шинэ", erp: "synced" });
+    await post(doc, "SaveAppExperience", { entryid: 0, orgname: "Шинэ", jobid: 100, erp: "synced" });
     expect(doc.experience[0]).not.toHaveProperty("erp");
   });
 });
@@ -203,5 +211,123 @@ describe("SaveAppSkillComp", () => {
     await post(doc, "SaveAppSkillComp", [{ entryid, skillcompid: 3, compnametext: "", levelid: 2 }]);
     expect(doc.skills).toHaveLength(1);
     expect(doc.skills[0]).toMatchObject({ skillcompid: 3, skillcompname: "Word", compnametext: "" });
+  });
+});
+
+describe("required fields the forms ask for, refused on the server too", () => {
+  it("SaveAppExperience: Байгууллагын нэр and the job (a list id — there is no typed-job column)", async () => {
+    const doc = emptyDoc();
+    for (const [body, message] of [
+      [{ entryid: 0, jobid: 100 }, EXPERIENCE_ORG_REQUIRED_MESSAGE],
+      [{ entryid: 0, orgname: "  ", jobid: 100 }, EXPERIENCE_ORG_REQUIRED_MESSAGE],
+      [{ entryid: 0, orgname: "Шунхлай" }, EXPERIENCE_JOB_REQUIRED_MESSAGE],
+      [{ entryid: 0, orgname: "Шунхлай", jobid: 0 }, EXPERIENCE_JOB_REQUIRED_MESSAGE],
+    ] as const) {
+      const result = await post(doc, "SaveAppExperience", body);
+      expect(result?.envelope).toMatchObject({ rettype: 1, retmsg: message });
+      expect(result?.mutated).toBe(false);
+    }
+    expect(doc.experience).toEqual([]);
+    const ok = await post(doc, "SaveAppExperience", { entryid: 0, orgname: "Шунхлай", jobid: 100 });
+    expect(ok?.envelope.rettype).toBe(0);
+    expect(doc.experience[0]).toMatchObject({ orgname: "Шунхлай", jobid: 100, jobname: "Нягтлан бодогч" });
+  });
+
+  it("SaveAppFamily: every row names the relation and the first name; one bad row refuses the array", async () => {
+    const doc = emptyDoc();
+    for (const body of [
+      [{ entryid: 0, firstname: "Дорж" }],
+      [{ entryid: 0, relativeid: 1, firstname: " " }],
+      [{ entryid: 0, relativeid: 1, firstname: "Дорж" }, { entryid: 0, relativeid: 0, firstname: "Сараа" }],
+      [],
+    ]) {
+      const result = await post(doc, "SaveAppFamily", body);
+      expect(result?.envelope).toMatchObject({ rettype: 1, retmsg: FAMILY_REQUIRED_MESSAGE });
+      expect(result?.mutated).toBe(false);
+    }
+    expect(doc.family).toEqual([]);
+    const ok = await post(doc, "SaveAppFamily", [{ entryid: 0, relativeid: 1, firstname: "Дорж" }]);
+    expect(ok?.envelope.rettype).toBe(0);
+    expect(doc.family[0]).toMatchObject({ relativeid: 1, relativename: "Эх", firstname: "Дорж" });
+  });
+});
+
+describe("SaveInterestedJobItem", () => {
+  it("needs the group; the position may be left empty (group-only interest)", async () => {
+    const doc = emptyDoc();
+    for (const body of [{ entryid: 0 }, { entryid: 0, posgroupid: null, positionid: 12384 }, { entryid: 0, posgroupid: 0 }]) {
+      const result = await post(doc, "SaveInterestedJobItem", body);
+      expect(result?.envelope).toMatchObject({ rettype: 1, retmsg: INTEREST_GROUP_REQUIRED_MESSAGE });
+      expect(result?.mutated).toBe(false);
+    }
+    const ok = await post(doc, "SaveInterestedJobItem", { entryid: 0, posgroupid: 142, positionid: null, depid: null });
+    expect(ok?.envelope.rettype).toBe(0);
+    expect(doc.interests[0]).toMatchObject({ posgroupid: 142, positionid: null, posgroupname: "/16/ Инженер, техник", positionname: "" });
+  });
+
+  it("names the group and the position; depid is stored as sent (the dropdown's text)", async () => {
+    const doc = emptyDoc();
+    await post(doc, "SaveInterestedJobItem", { entryid: 0, posgroupid: 142, positionid: 12384, depid: "100868" });
+    expect(doc.interests[0]).toMatchObject({
+      posgroupid: 142,
+      positionid: 12384,
+      depid: "100868",
+      posgroupname: "/16/ Инженер, техник",
+      positionname: "/02-007/ Tехник бүтээгдэхүүн хөгжүүлэлтийн менежер",
+    });
+  });
+
+  it("the same group + position twice is refused (a pulled row counts, ids as text or numbers alike)", async () => {
+    const doc = emptyDoc();
+    doc.interests.push(
+      { entryid: 5, posgroupid: "142", positionid: 12384, depid: "100868", erp: "synced" },
+      { entryid: 6, posgroupid: 142, positionid: null, erp: "synced" },
+    );
+    for (const body of [
+      { entryid: 0, posgroupid: 142, positionid: "12384", depid: "100868" },
+      { entryid: 0, posgroupid: 142 },
+      { entryid: 0, posgroupid: 142, positionid: 0 },
+    ]) {
+      const result = await post(doc, "SaveInterestedJobItem", body);
+      expect(result?.envelope).toMatchObject({ rettype: 1, retmsg: INTEREST_DUPLICATE_MESSAGE });
+      expect(result?.mutated).toBe(false);
+    }
+    // Moving one row onto the other's pair is the same duplicate.
+    const clash = await post(doc, "SaveInterestedJobItem", { entryid: 6, posgroupid: 142, positionid: 12384 });
+    expect(clash?.envelope.retmsg).toBe(INTEREST_DUPLICATE_MESSAGE);
+    expect(doc.interests).toHaveLength(2);
+  });
+
+  it("an edit (entryid > 0) may keep its own pair, and replaces the row in place", async () => {
+    const doc = emptyDoc();
+    doc.interests.push({ entryid: 5, posgroupid: 142, positionid: null, depid: null, erp: "synced" });
+    const same = await post(doc, "SaveInterestedJobItem", { entryid: 5, posgroupid: 142, positionid: null, depid: null });
+    expect(same?.envelope.rettype).toBe(0);
+    const moved = await post(doc, "SaveInterestedJobItem", { entryid: 5, posgroupid: 142, positionid: 12384, depid: "100868" });
+    expect(moved?.envelope.rettype).toBe(0);
+    expect(doc.interests).toHaveLength(1);
+    expect(doc.interests[0]).toMatchObject({ entryid: 5, positionid: 12384, positionname: "/02-007/ Tехник бүтээгдэхүүн хөгжүүлэлтийн менежер" });
+  });
+
+  it("a pull labels the ERP's id-only rows (getInterestedJobsList: entryid, posgroupid, positionid, depid)", async () => {
+    const { label } = recordingLabel();
+    const sources: Record<string, unknown> = {
+      getInterestedJobsList: [
+        { entryid: 5, posgroupid: 142, positionid: 12384, depid: "100868" },
+        { entryid: 6, posgroupid: 142, positionid: null, depid: null },
+      ],
+    };
+    await labelSources(sources, label);
+    expect(sources.getInterestedJobsList).toEqual([
+      {
+        entryid: 5,
+        posgroupid: 142,
+        positionid: 12384,
+        depid: "100868",
+        posgroupname: "/16/ Инженер, техник",
+        positionname: "/02-007/ Tехник бүтээгдэхүүн хөгжүүлэлтийн менежер",
+      },
+      { entryid: 6, posgroupid: 142, positionid: null, depid: null, posgroupname: "/16/ Инженер, техник" },
+    ]);
   });
 });

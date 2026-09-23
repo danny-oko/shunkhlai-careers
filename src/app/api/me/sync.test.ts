@@ -331,7 +331,7 @@ describe("pull (ERP → D1)", () => {
   it("existing D1 rows (entered here before sync) survive the first pull and are pushed", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "");
     await post("SaveHrApplicant", { regno: REGNO, mobilephone: PHONE });
-    await post("SaveAppExperience", { entryid: 0, orgname: "Local LLC" });
+    await post("SaveAppExperience", { entryid: 0, orgname: "Local LLC", jobid: 100 });
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://erp.test");
     state.after = [];
 
@@ -342,7 +342,7 @@ describe("pull (ERP → D1)", () => {
 
     await runAfter();
     const saved = erp.calls.find((c) => c.endpoint === "SaveAppExperience")!;
-    expect(saved.body).toMatchObject({ entryid: 0, orgname: "Local LLC" });
+    expect(saved.body).toMatchObject({ entryid: 0, orgname: "Local LLC", jobid: 100 });
     const after = ((await get("GetHrAppExperienceData")).retdata as Record<string, Row[]>).hrappexplist;
     expect(after.map((r) => [r.orgname, r.erp])).toEqual([
       ["Шунхлай", "synced"],
@@ -378,11 +378,11 @@ describe("write-through (D1 → ERP)", () => {
 
   it("editing a synced row sends the ERP id", async () => {
     await pulled();
-    await post("SaveAppExperience", { entryid: 13, orgname: "Шунхлай ХХК" });
+    await post("SaveAppExperience", { entryid: 13, orgname: "Шунхлай ХХК", jobid: 100 });
     await runAfter();
     const saved = erp.calls.find((c) => c.endpoint === "SaveAppExperience")!;
-    expect(saved.body).toMatchObject({ entryid: 13, orgname: "Шунхлай ХХК" });
-    expect(erp.lists.hrappexplist).toEqual([{ entryid: 13, orgname: "Шунхлай ХХК" }]);
+    expect(saved.body).toMatchObject({ entryid: 13, orgname: "Шунхлай ХХК", jobid: 100 });
+    expect(erp.lists.hrappexplist).toEqual([{ entryid: 13, orgname: "Шунхлай ХХК", jobid: 100 }]);
     expect(saved.body).not.toHaveProperty("erp");
   });
 
@@ -425,7 +425,7 @@ describe("write-through (D1 → ERP)", () => {
   it("deleting a local-only row makes no ERP call", async () => {
     await pulled();
     erp.down = true;
-    const saved = (await post("SaveAppExperience", { entryid: 0, orgname: "Temp" })).retdata as Row;
+    const saved = (await post("SaveAppExperience", { entryid: 0, orgname: "Temp", jobid: 100 })).retdata as Row;
     await runAfter();
     erp.down = false;
     erp.calls = [];

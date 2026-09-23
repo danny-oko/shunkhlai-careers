@@ -14,6 +14,11 @@
 
 import { RETRY_LINK_FLAG, isIdentityComplete, normalizePhone, normalizeRegno } from "@/lib/applicant-identity";
 import type { MaritalOption } from "@/lib/api/profile";
+import {
+  INTEREST_DUPLICATE_MESSAGE,
+  INTEREST_GROUP_REQUIRED_MESSAGE,
+  sameInterest,
+} from "@/lib/interested-job";
 import { CLEARABLE_KEYS, type Unadopted, labelRow, linkRefused, linkedRegno } from "./erp-model";
 
 export type Row = Record<string, unknown>;
@@ -189,6 +194,12 @@ export const SCHOOL_REQUIRED_MESSAGE = "Сургуулиа жагсаалтаа�
 export const LANGUAGE_REQUIRED_MESSAGE = "«Гадаад хэл» талбарыг бөглөнө үү.";
 
 export const SKILL_REQUIRED_MESSAGE = "Программаа жагсаалтаас сонгох эсвэл нэрийг нь бичнэ үү.";
+
+export const EXPERIENCE_ORG_REQUIRED_MESSAGE = "«Байгууллагын нэр» талбарыг бөглөнө үү.";
+
+export const EXPERIENCE_JOB_REQUIRED_MESSAGE = "«Албан тушаал» талбарыг бөглөнө үү.";
+
+export const FAMILY_REQUIRED_MESSAGE = "Гэр бүлийн гишүүн бүрийн «Таны хэн болох», «Нэр» талбарыг бөглөнө үү.";
 
 const ok = (retdata: unknown, mutated = false): HandlerResult => ({
   envelope: envelopeOk(retdata),
@@ -507,25 +518,35 @@ async function handlePost(
 
     case "SaveAppExperience": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
+      // The form requires both. The job is a list id: there is no typed-job
+      // column in the Postman body (only the business type has one).
+      if (blank(body.orgname)) return fail(EXPERIENCE_ORG_REQUIRED_MESSAGE);
+      if (!(Number(body.jobid) > 0)) return fail(EXPERIENCE_JOB_REQUIRED_MESSAGE);
       return ok(upsert(doc.experience, await labelRow("experience", body, label)), true);
     }
 
     case "SaveAppFamily": {
+      const rows = asRows(rawBody);
+      // Who the member is and their name, on every row; one row without them
+      // refuses the whole array (nothing half-saved), as skills do.
+      if (rows.length === 0 || rows.some((row) => !(Number(row.relativeid) > 0) || blank(row.firstname))) {
+        return fail(FAMILY_REQUIRED_MESSAGE);
+      }
       const saved: Row[] = [];
-      for (const row of asRows(rawBody)) saved.push(upsert(doc.family, await labelRow("family", row, label)));
+      for (const row of rows) saved.push(upsert(doc.family, await labelRow("family", row, label)));
       return ok(saved, true);
     }
 
     case "SaveInterestedJobItem": {
       if (!body) return fail("Мэдээлэл дутуу байна.");
-      return ok(
-        upsert(doc.interests, {
-          ...body,
-          posgroupname: await label("getPosGroupDropdown", body.posgroupid),
-          positionname: await label("getPositionsDropdown", body.positionid),
-        }),
-        true,
-      );
+      // The group is заавал (Postman: only `positionid` may be left empty).
+      if (!(Number(body.posgroupid) > 0)) return fail(INTEREST_GROUP_REQUIRED_MESSAGE);
+      // The same group + position twice is one request; an edit may keep its own.
+      const entryid = Number(body.entryid);
+      if (doc.interests.some((row) => Number(row.entryid) !== entryid && sameInterest(row, body))) {
+        return fail(INTEREST_DUPLICATE_MESSAGE);
+      }
+      return ok(upsert(doc.interests, await labelRow("interests", body, label)), true);
     }
 
     case "SaveHrRecruitmentOrderApp": {

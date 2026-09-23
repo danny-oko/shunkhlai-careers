@@ -359,13 +359,16 @@ const listOf = (endpoint: string, key?: string) => async () => {
   return (key ? data[key] : data) as Array<Record<string, unknown>>;
 };
 
+/** Each interest body names another position: the same group + position twice is refused. */
+let interestSeq = 3700;
+
 const sections: Section[] = [
   { name: "education", save: "SaveHrAppEducation", body: (id) => ({ entryid: id, universitynametext: "MUST" }), list: listOf("GetHrAppEducationData", "hrappedulist"), del: "DeleteHrAppEducation", marker: "universitynametext" },
   { name: "language", save: "SaveAppForLanguage", body: (id) => ({ entryid: id, forlanguageid: 1, note: "MUST" }), list: listOf("GetHrAppEducationData", "hrapplanglist"), del: "DeleteAppForLanguage", marker: "note" },
   { name: "skill", save: "SaveAppSkillComp", body: (id) => [{ entryid: id, skillcompid: 1, note: "MUST" }], list: listOf("GetHrAppEducationData", "hrappcomplist"), del: "DeleteAppSkillComp", marker: "note" },
-  { name: "experience", save: "SaveAppExperience", body: (id) => ({ entryid: id, companyname: "MUST" }), list: listOf("GetHrAppExperienceData", "hrappexplist"), del: "DeleteAppExperience", marker: "companyname" },
-  { name: "family", save: "SaveAppFamily", body: (id) => [{ entryid: id, firstname: "MUST" }], list: listOf("GetHrAppFamilyData", "hrappfamilylist"), del: "DeleteAppFamily", marker: "firstname" },
-  { name: "interests", save: "SaveInterestedJobItem", body: (id) => ({ entryid: id, posgroupid: 142, note: "MUST" }), list: listOf("getInterestedJobsList"), del: "deleteInterestedJob", marker: "note" },
+  { name: "experience", save: "SaveAppExperience", body: (id) => ({ entryid: id, orgname: "Шунхлай", jobid: 100, companyname: "MUST" }), list: listOf("GetHrAppExperienceData", "hrappexplist"), del: "DeleteAppExperience", marker: "companyname" },
+  { name: "family", save: "SaveAppFamily", body: (id) => [{ entryid: id, relativeid: 1, firstname: "MUST" }], list: listOf("GetHrAppFamilyData", "hrappfamilylist"), del: "DeleteAppFamily", marker: "firstname" },
+  { name: "interests", save: "SaveInterestedJobItem", body: (id) => ({ entryid: id, posgroupid: 142, positionid: (interestSeq += 1), note: "MUST" }), list: listOf("getInterestedJobsList"), del: "deleteInterestedJob", marker: "note" },
 ];
 
 describe.each(sections)("section $name", (s) => {

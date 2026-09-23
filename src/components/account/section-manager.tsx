@@ -267,13 +267,6 @@ function EntryForm({
       if (field.hidden?.(values)) sent[field.name] = "";
     }
 
-    // A typed name only counts in typed mode; a picked id drops it.
-    const sent = { ...values };
-    for (const field of fields) {
-      if (field.freeText && !manual[field.name]) sent[field.freeText.name] = "";
-      if (field.hidden?.(values)) sent[field.name] = "";
-    }
-
     setError(null);
     setIsSaving(true);
     try {

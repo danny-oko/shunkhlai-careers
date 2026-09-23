@@ -377,6 +377,13 @@ export const SECTION_LABELS: Partial<Record<SectionKey, LabelSpec[]>> = {
     { name: "professionname", id: "professionid", dropdown: "GetProfessionDropDown" },
     { name: "jobname", id: "jobid", dropdown: "GetJobDropDown" },
   ],
+  // Postman `getInterestedJobsList` is ids only as well (entryid, posgroupid,
+  // positionid, depid). Both lists take `search` only, so each is read whole.
+  // A group-only interest has no position (null) and so no position label.
+  interests: [
+    { name: "posgroupname", id: "posgroupid", dropdown: "getPosGroupDropdown" },
+    { name: "positionname", id: "positionid", dropdown: "getPositionsDropdown" },
+  ],
 };
 
 const noId = (value: unknown) => value === null || value === undefined || value === "" || Number(value) === 0;
