@@ -281,10 +281,10 @@ export const storedFile = pgTable(
 /**
  * Staff who sign in to this app itself (the customer's guide, section 2).
  *
- * Nothing reads it yet: this slice ships the table, the argon2id helper
- * (`src/lib/auth/password.ts`) and the `scripts/users/create-user.ts` CLI, and
- * leaves `/admin`'s existing ADMIN_PASSWORD login alone. Wiring the login onto
- * this table is a separate change.
+ * This is what `/admin/login` checks: email and password, with the session in
+ * `admin_session` below. Rows are made by `scripts/users/create-user.ts`.
+ * `is_active = false` is the off switch — it refuses the next sign-in *and*
+ * ends the sessions the account already has (see `src/server/admin/store.ts`).
  *
  * `password_hash` holds an argon2id PHC string — never a plaintext password,
  * and never a hash this project invented.
@@ -307,6 +307,41 @@ export const appUser = pgTable(
   }),
 );
 
+/**
+ * A signed-in staff session — the server side of the `shunkhlai.admin` cookie.
+ *
+ * The cookie carries an opaque random token; this table holds only its SHA-256
+ * hash, so a leaked database dump cannot be replayed as a session. Lookup is
+ * by hash, which is why the unique index is on `token_hash` and not on `id`.
+ *
+ * `on delete cascade`: deactivating a user is `is_active = false`, but
+ * *deleting* one must not leave their sessions behind as rows that outlive the
+ * account they authorise.
+ *
+ * Expiry is a column rather than a signature, which is the point of moving off
+ * the HMAC cookie: a session can be ended by deleting the row (logout, a
+ * password change), and nobody holds a token the server cannot revoke.
+ */
+export const adminSession = pgTable(
+  "admin_session",
+  {
+    id: text("id").primaryKey(), // ses_<16 hex>
+    userId: text("user_id")
+      .notNull()
+      .references(() => appUser.id, { onDelete: "cascade" }),
+    /** SHA-256 (hex) of the cookie token. The token itself is never stored. */
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: tstz("expires_at").notNull(),
+    createdAt: tstz("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (t) => ({
+    byTokenHash: uniqueIndex("admin_session_token_hash_key").on(t.tokenHash),
+    byUser: index("admin_session_user_id_idx").on(t.userId),
+  }),
+);
+
 export type ApplicantLink = typeof applicantLink.$inferSelect;
 export type NewApplicantLink = typeof applicantLink.$inferInsert;
 export type ApplicationLog = typeof applicationLog.$inferSelect;
@@ -318,3 +353,4 @@ export type NewsMediaRow = typeof newsMedia.$inferSelect;
 export type StoredFileRow = typeof storedFile.$inferSelect;
 export type NewStoredFile = typeof storedFile.$inferInsert;
 export type AppUserRow = typeof appUser.$inferSelect;
+export type AdminSessionRow = typeof adminSession.$inferSelect;

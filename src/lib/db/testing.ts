@@ -28,6 +28,7 @@ const MIGRATIONS_DIR = join(process.cwd(), "drizzle");
 
 /** Every table the migration creates, in the order the files create them. */
 const TABLES = [
+  "admin_session",
   "app_user",
   "applicant_account",
   "applicant_file",
@@ -81,6 +82,31 @@ export async function createTestDatabase(hooks: TestDatabaseHooks = {}): Promise
     },
     { schema },
   );
+
+  /**
+   * `drizzle-orm/pg-proxy` refuses `db.transaction()` outright — the proxy
+   * hands over one statement at a time and the driver will not guess at a
+   * transaction on top of that. PGlite is a real Postgres with a real session,
+   * though, so BEGIN / COMMIT / ROLLBACK around the callback is the genuine
+   * article and not a stub: a throw inside really does roll the statements
+   * back. Assigned as an own property, which shadows the driver's refusal.
+   *
+   * Every statement in this file runs against one connection, in order, so
+   * there is no question of a concurrent transaction interleaving.
+   */
+  (db as unknown as { transaction: unknown }).transaction = async <T>(
+    fn: (tx: typeof db) => Promise<T>,
+  ): Promise<T> => {
+    await client.exec("BEGIN");
+    try {
+      const result = await fn(db);
+      await client.exec("COMMIT");
+      return result;
+    } catch (error) {
+      await client.exec("ROLLBACK");
+      throw error;
+    }
+  };
 
   const reset = async () => {
     await client.exec(`TRUNCATE ${TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`);
