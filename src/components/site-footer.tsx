@@ -47,14 +47,6 @@ const columns = [
   },
 ];
 
-/**
- * Content plan 8 — Холбоо барих.
- *
- * The plan gave the social handles but no addresses. The Facebook page is the
- * one whose own listing gives the Capital House address printed at the foot of
- * this page, so it is the company's and not a namesake's; the Instagram address
- * is the handle itself, which is all an instagram.com/<handle> URL is.
- */
 const contact: Array<{ label: string; value: string; href?: string }> = [
   { label: "Утас", value: "9669-6229", href: "tel:+97696696229" },
   {
