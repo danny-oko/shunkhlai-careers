@@ -21,10 +21,11 @@ export const metadata: Metadata = {
 /**
  * The front page is always current.
  *
- * Two reasons it cannot be cached: the store is in this process, so a cached
- * render would keep showing the front page as it was before the editor's last
- * save; and the masthead prints today's date, which a cached page would freeze
- * on the day it was built.
+ * Two reasons it cannot be cached: the stories live in D1, which every host
+ * writes to — an edit made from another host cannot revalidate this one's
+ * cache, so only a per-request read is guaranteed to show it; and the masthead
+ * prints today's date, which a cached page would freeze on the day it was
+ * built.
  */
 export const dynamic = "force-dynamic";
 

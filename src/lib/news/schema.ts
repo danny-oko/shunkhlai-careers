@@ -3,7 +3,7 @@ import { z } from "zod";
 import { bodyFromField } from "./legacy";
 import { LIMITS } from "./shared/limits";
 import { docText, isDocBlank } from "./shared/rich-text";
-import { NEWS_CATEGORIES, type NewsCategory } from "./types";
+import { NEWS_CATEGORIES, type NewsCategory, coverUrlKey } from "./types";
 
 /**
  * Validation for the newsroom editor.
@@ -30,6 +30,13 @@ export const ARTICLE_LIMITS = {
   /** One photograph off a phone, give or take. Beyond this it is a mistake. */
   coverBytes: 5 * 1024 * 1024,
 } as const;
+
+/**
+ * What the desk says when D1 cannot be reached — network, token, missing env.
+ * One string so the list page, the edit page and the actions never disagree.
+ */
+export const NEWS_DB_ERROR =
+  "Мэдээний сантай холбогдож чадсангүй. Түр хүлээгээд дахин оролдоно уу.";
 
 export const COVER_TYPES = [
   "image/jpeg",
@@ -148,4 +155,52 @@ export function coverFileError(file: File): string | null {
     return "Зураг 5MB-аас хөнгөн байна.";
   }
   return null;
+}
+
+/* --- cover ---------------------------------------------------------------- */
+
+/** Shown under the URL field when what was pasted cannot be a cover. */
+export const COVER_URL_ERROR =
+  "Зургийн холбоос https://-ээр эхэлсэн зөв хаяг байх ёстой.";
+
+/**
+ * What a save does to the cover, decided before anything is written.
+ *
+ * The editor has three ways to say something about the picture — a file, a
+ * pasted URL, the "remove" tick — and they can all be set at once, so the
+ * order is fixed here rather than left to whichever branch runs first:
+ *
+ * 1. an uploaded file wins: it is the most deliberate act, and the only one
+ *    that cost the editor a wait;
+ * 2. then a URL, but only one that *changes* something — the field opens
+ *    pre-filled with the current URL cover, and that echo must not outvote a
+ *    ticked "remove";
+ * 3. then "remove";
+ * 4. otherwise the cover is left alone (`keep`), which the store reads as
+ *    "`coverKey` absent".
+ *
+ * A URL that is not https is an error even when a file outranks it: a field
+ * showing a bad address after a "successful" save would read as saved.
+ */
+export type CoverChoice =
+  | { kind: "upload" }
+  | { kind: "url"; key: string }
+  | { kind: "remove" }
+  | { kind: "keep" }
+  | { kind: "error"; message: string };
+
+export function chooseCover(input: {
+  hasUpload: boolean;
+  url: string;
+  remove: boolean;
+  currentKey: string | null;
+}): CoverChoice {
+  const raw = (input.url ?? "").trim();
+  const url = raw ? coverUrlKey(raw) : null;
+  if (raw && !url) return { kind: "error", message: COVER_URL_ERROR };
+
+  if (input.hasUpload) return { kind: "upload" };
+  if (url && url !== input.currentKey) return { kind: "url", key: url };
+  if (input.remove) return { kind: "remove" };
+  return { kind: "keep" };
 }

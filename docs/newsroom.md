@@ -16,7 +16,7 @@ both are meant to be replaced:
 
 | Today | When the backend grows one |
 |---|---|
-| `src/server/news/store.ts` — JSON on disk in development, memory in production | a table, or a CMS |
+| `src/server/news/store.ts` — two tables in Cloudflare D1 (`news_article`, `news_media`) | a CMS, if one is ever wanted |
 | `src/server/admin/session.ts` — one password, one signed cookie | `/auth/adminUserLogin` and the admin JWT tier already described in `src/lib/api/core/tokens.ts` |
 
 Each is behind one seam. Pages never touch the store — they go through
@@ -79,28 +79,45 @@ Three checks, and they are not redundant:
 
 ## Storage
 
-`.mock-data/news.json` (articles) and `.mock-data/news-media.json` (uploaded
-covers, base64). Both gitignored. Development only — production is memory,
-because the filesystem there is read-only.
+Cloudflare D1, through the same Drizzle client (`getDb()` in `src/lib/db`) as
+the applicant account. **The database is shared: localhost and production
+read and write the same rows**, so saving from `bun run dev` is a production
+edit.
 
-Two files rather than one because a 4MB photograph is ~5.5MB of base64, and
-`news.json` is rewritten on every single edit.
+- `news_article` — one row per story. `body_json` is a `RichDoc`; rows written
+  before rich text hold a `NewsBlock[]`, which `coerceBody` reads on the way
+  out, so no migration is needed.
+- `news_media` — uploaded covers as base64, chunked at 500k characters per row
+  because D1 caps a value at 2 MB.
 
-`{ seeded, articles }`, not a bare array. `seeded` is tracked separately from
-`articles.length` on purpose: an editor who deletes every story has an empty
-newsroom deliberately, and keying the seed off emptiness would resurrect all
-seven on the next restart.
+The DDL is `drizzle/0002_news.sql` (`CREATE … IF NOT EXISTS`); the tables
+already exist in D1 and `schema.ts` mirrors them exactly.
 
-**To reset the desk:** delete `.mock-data/news.json` and restart. The seed is
-re-laid on the next load.
+Nothing in the store caches or seeds. The public pages and the desk are
+`force-dynamic` and query D1 on every request, which is the only way an edit
+made from another host (localhost) shows up on production; the admin actions
+also call `revalidatePath` for `/news`, the story's old and new URL, and
+`/admin/news`, which clears the editor's own client router cache.
+
+**Content:** `bun scripts/news/sync.ts [--dry-run] [--force]` writes the
+owner's articles (`scripts/news/articles.source.json`, pictures mapped in
+`scripts/news/images.json`) and sets the seven placeholder rows to draft.
+It never deletes; existing rows are only overwritten with `--force`.
 
 ## Covers
 
-Served by `/api/news/media/[...key]`, never from `public/`:
+`coverKey` is one of:
 
-- `med_<12 hex>` — uploaded through the editor, bytes in the store.
-- `seed:brand/<file>` — a seeded story borrowing a file already in `public/`.
-  Read-only; `public/brand/*` is a fenced path and is never written.
+- an absolute `https://` URL — normally Cloudinary. `coverUrl()` returns it
+  unchanged and the page links to it directly; the media route never fetches
+  or proxies a URL. `next/image` optimises `res.cloudinary.com` (see
+  `images.remotePatterns`); any other https host is rendered `unoptimized`.
+  Editors can paste one in the "Зургийн холбоос (URL)" field; an uploaded
+  file wins over a URL, a URL over "remove".
+- `med_<12 hex>` — uploaded through the editor, bytes in `news_media`, served
+  by `/api/news/media/[...key]`.
+- `seed:brand/<file>` — an old placeholder borrowing a file already in
+  `public/`. Read-only; `public/brand/*` is a fenced path and is never written.
 
 A catch-all route, not `[key]`, because `seed:` keys contain a slash and
 servers disagree about whether `%2F` inside one dynamic segment is an escaped
@@ -147,10 +164,8 @@ a second representation to keep in sync with the first.
 
 **TODO(HR): everything below is placeholder, pending review.**
 
-- All seven seeded articles in `src/server/news/seed.ts` — headlines,
-  standfirsts, bodies, bylines and image descriptions. Every figure in them
-  traces to `src/lib/company.ts`; no external partner, government body or
-  financial figure appears anywhere. Speakers are unnamed internal roles.
+- The `alt` text on gallery pictures in `scripts/news/images.json` (the
+  captions are the owner's; the alt descriptions were written for this sync).
 - The masthead line "Компанийн сурвалжилга · Салбарын мэдээ · Хүний нөөц" and
   the nameplate "Шунхлай Мэдээ" (`src/components/news/masthead.tsx`).
 - The four desk names — Компани, Салбар, Нийгэм, Хүний нөөц

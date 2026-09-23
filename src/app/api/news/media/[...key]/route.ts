@@ -1,3 +1,4 @@
+import { isUrlCoverKey } from "@/lib/news/types";
 import { getMedia } from "@/server/news/store";
 
 /**
@@ -12,7 +13,19 @@ import { getMedia } from "@/server/news/store";
  *
  * Containment is enforced in the store, which is the only thing that turns a
  * key into a filesystem read; the `..` check here is a second, cheaper no.
+ *
+ * Read per request: uploaded bytes live in D1, which production and localhost
+ * share, so a build-time answer would miss every cover uploaded since. The
+ * long `immutable` cache below is still right — a key is never reused.
+ *
+ * A cover stored as a URL (Cloudinary) never reaches this route — `coverUrl`
+ * hands the page the URL itself. If one is asked for anyway it is a 404, never
+ * a fetch: a route that retrieved whatever address it was given would be an
+ * open proxy on this site's origin. The store refuses it too; this is the
+ * cheaper, earlier no.
  */
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _request: Request,
@@ -21,11 +34,22 @@ export async function GET(
   const { key } = await ctx.params;
   const joined = (key ?? []).join("/");
 
-  if (!joined || joined.includes("..")) {
+  if (!joined || joined.includes("..") || isUrlCoverKey(joined)) {
     return new Response("Not found", { status: 404 });
   }
 
-  const media = getMedia(joined);
+  let media: Awaited<ReturnType<typeof getMedia>>;
+  try {
+    media = await getMedia(joined);
+  } catch (error) {
+    // D1 unreachable. Not a 404 — that would be cached as "no such image" —
+    // and not a 500 either; the image is simply unavailable for now.
+    console.error("[news] media read failed:", error instanceof Error ? error.message : error);
+    return new Response("Unavailable", {
+      status: 503,
+      headers: { "Cache-Control": "no-store", "Retry-After": "30" },
+    });
+  }
   if (!media) return new Response("Not found", { status: 404 });
 
   return new Response(new Uint8Array(media.bytes), {

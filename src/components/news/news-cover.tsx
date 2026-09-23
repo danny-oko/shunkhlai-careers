@@ -1,13 +1,14 @@
 import Image from "next/image";
 
-import { coverUrl } from "@/lib/news/types";
+import { coverUrl, isOptimizableCover } from "@/lib/news/types";
 import { cn } from "@/lib/utils";
 
 /**
  * A story's photograph.
  *
- * Covers are served by a route handler rather than sitting in `public/`, so
- * their intrinsic size is unknown at build time — hence `fill` inside a box
+ * Covers are either served by a route handler or hosted elsewhere (Cloudinary)
+ * rather than sitting in `public/`, so their intrinsic size is unknown at build
+ * time — hence `fill` inside a box
  * whose aspect ratio the caller decides. The hairline around the frame is the
  * print convention: a photograph on newsprint is always ruled, which also
  * stops a light sky from bleeding into the paper ground.
@@ -18,6 +19,10 @@ import { cn } from "@/lib/utils";
  * type across the lower third — a centred crop of a tall one lands on the type
  * instead of on the picture. See `docs/newsroom.md` on replacing these with
  * real editorial photographs.
+ *
+ * A hosted cover goes through the optimiser when its host is in
+ * `images.remotePatterns` (Cloudinary) and straight to the browser otherwise,
+ * so an https address an editor pasted from any other host still shows.
  */
 export function NewsCover({
   coverKey,
@@ -54,6 +59,7 @@ export function NewsCover({
           fill
           sizes={sizes}
           priority={priority}
+          unoptimized={!isOptimizableCover(src)}
           style={{ objectPosition }}
           className="object-cover"
         />

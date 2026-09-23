@@ -4,6 +4,8 @@ import {
   ARTICLE_LIMITS,
   articleFieldErrors,
   articleFormSchema,
+  COVER_URL_ERROR,
+  chooseCover,
   coverFileError,
 } from "./schema";
 
@@ -221,5 +223,44 @@ describe("body (rich text)", () => {
   it("refuses a body over the visible-text limit or the byte limit", () => {
     expect(errorsFor({ body: doc(para("б".repeat(ARTICLE_LIMITS.body + 1))) })).toHaveProperty("body");
     expect(errorsFor({ body: "x".repeat(600_000) })).toHaveProperty("body");
+  });
+});
+
+describe("chooseCover", () => {
+  const URL_A = "https://res.cloudinary.com/doxmbmqjm/image/upload/v1/a.jpg";
+  const URL_B = "https://res.cloudinary.com/doxmbmqjm/image/upload/v1/b.jpg";
+  const base = { hasUpload: false, url: "", remove: false, currentKey: null as string | null };
+
+  it("lets an uploaded file win over a URL and over remove", () => {
+    expect(chooseCover({ ...base, hasUpload: true, url: URL_A, remove: true })).toEqual({
+      kind: "upload",
+    });
+  });
+
+  it("takes a URL over remove and over the stored cover", () => {
+    expect(chooseCover({ ...base, url: ` ${URL_A} `, remove: true, currentKey: "med_aaaabbbbcccc" })).toEqual({
+      kind: "url",
+      key: URL_A,
+    });
+    expect(chooseCover({ ...base, url: URL_B, currentKey: URL_A })).toEqual({ kind: "url", key: URL_B });
+  });
+
+  it("does not let the pre-filled current URL outvote remove", () => {
+    expect(chooseCover({ ...base, url: URL_A, remove: true, currentKey: URL_A })).toEqual({
+      kind: "remove",
+    });
+    expect(chooseCover({ ...base, url: URL_A, currentKey: URL_A })).toEqual({ kind: "keep" });
+  });
+
+  it("keeps the existing cover when nothing is said about it", () => {
+    expect(chooseCover({ ...base, currentKey: "med_aaaabbbbcccc" })).toEqual({ kind: "keep" });
+  });
+
+  it("refuses an address that is not https, in Mongolian", () => {
+    for (const url of ["http://res.cloudinary.com/a.jpg", "res.cloudinary.com/a.jpg", "/brand/a.jpg", "javascript:alert(1)"]) {
+      expect(chooseCover({ ...base, url }), url).toEqual({ kind: "error", message: COVER_URL_ERROR });
+    }
+    // Even under an upload: a bad address left in the field would read as saved.
+    expect(chooseCover({ ...base, hasUpload: true, url: "ftp://x/a.jpg" }).kind).toBe("error");
   });
 });
