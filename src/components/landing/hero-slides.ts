@@ -8,7 +8,6 @@
 export type HeroSlide = {
   src: string;
   caption: string;
-  captionEn: string;
   alt: string;
 };
 
@@ -16,19 +15,16 @@ export const heroSlides: HeroSlide[] = [
   {
     src: "/brand/kv-amjilt.jpg",
     caption: "Тээвэр, логистик",
-    captionEn: "Transport & logistics",
     alt: "Шунхлайн ажилтан тал хээр дундуур явж буй автоцистерн машины ард",
   },
   {
     src: "/brand/kv-amidral.jpg",
     caption: "Ажилтан, гэр бүл",
-    captionEn: "People & family",
     alt: "Шунхлайн ажилтан ногоон талбай дээрх айлын гэрийг гартаа барьж байна",
   },
   {
     src: "/brand/kv-hogjil.jpg",
     caption: "Дэд бүтэц, хангамж",
-    captionEn: "Infrastructure & supply",
     alt: "Шунхлайн ажилтан нисэх буудлын дэргэд онгоцыг алган дээрээ тэнцвэрлүүлж байна",
   },
 ];

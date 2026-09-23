@@ -110,8 +110,6 @@ export const benefits: Benefit[] = [
 
 export type Club = {
   name: string;
-  /** The wordmark on the lockup, for the caption under the Mongolian name. */
-  nameEn: string;
   /** The club's own lockup: the Shunkhlai mark beside its wordmark. */
   logo: string;
   /**
@@ -132,9 +130,9 @@ export type Club = {
  *
  * Each logo is a wide transparent lockup - the eagle beside the club's
  * wordmark - so these are drawn whole on a light plate rather than cropped
- * like the photographs elsewhere on the wall. The wordmark already says the
- * club's name, and `name` repeats it in Mongolian for the caption and for a
- * reader who never sees the picture.
+ * like the photographs elsewhere on the wall. The lockup carries the club's
+ * English wordmark as artwork; `name` is what is written under it, and it is
+ * the only name said in words, for a reader who never sees the picture.
  *
  * Three names follow the photo folders rather than the older list: HR's own
  * folders say "Алхалтын клуб Hiking", "Гоо зүйн клуб VOGUE" and "Шагай
@@ -152,27 +150,23 @@ export type Club = {
 export const clubs: Club[] = [
   {
     name: "Шагай харвааны клуб",
-    nameEn: "Shagai club",
     logo: "/clubs/shagai.png",
     photos: ["/clubs/photos/shagai.jpg", "/clubs/photos/shagai-2.jpg"],
     body: "Үндэсний шагай харваагаар баг бүрдүүлэн тогтмол бэлтгэл хийж, улсын болон салбарын тэмцээнд Шунхлай ХХК-ийг төлөөлөн оролцдог.",
   },
   {
     name: "Спорт клуб",
-    nameEn: "Sport club",
     logo: "/clubs/sport.png",
     body: "Сагсан бөмбөг, волейбол, ширээний теннис зэрэг төрлөөр тогтмол бэлтгэл хийж, компанийн дотоод болон салбар хоорондын тэмцээнд оролцдог.",
   },
   {
     name: "И-спорт клуб",
-    nameEn: "E-sport club",
     logo: "/clubs/e-sport.png",
     photos: ["/clubs/photos/e-sport.jpg"],
     body: "Онлайн тоглоомын төрлүүдээр дотоод тэмцээн зохион байгуулж, багаар ажиллах, стратеги төлөвлөх чадварыг чөлөөт цагаараа хөгжүүлдэг.",
   },
   {
     name: "Алхалтын клуб",
-    nameEn: "Hiking club",
     logo: "/clubs/hiking.png",
     photos: [
       "/clubs/photos/hiking.jpg",
@@ -183,26 +177,22 @@ export const clubs: Club[] = [
   },
   {
     name: "Бүжгийн клуб",
-    nameEn: "Dance club",
     logo: "/clubs/dance.png",
     body: "Долоо хоног бүр бэлтгэл хийж, компанийн баяр ёслол, арга хэмжээнд тоглолтоо бэлддэг.",
   },
   {
     name: "Шинжлэх ухааны клуб",
-    nameEn: "Science club",
     logo: "/clubs/science.png",
     body: "Шинэ технологи, салбарын судалгаа, сонирхолтой нээлтүүдийг хамтдаа судалж, хамт олондоо танилцуулдаг.",
   },
   {
     name: "Англи хэлний клуб",
-    nameEn: "English club",
     logo: "/clubs/english.png",
     photos: ["/clubs/photos/english.jpg", "/clubs/photos/english-2.jpg"],
     body: "Долоо хоног бүрийн уулзалтаар ярианы дадлага хийж, ажлын байранд хэрэгтэй Business English-ийн мэдлэгээ хөгжүүлдэг.",
   },
   {
     name: "Гоо зүйн клуб",
-    nameEn: "Vogue",
     logo: "/clubs/vogue.png",
     photos: [
       "/clubs/photos/vogue.jpg",
@@ -213,7 +203,6 @@ export const clubs: Club[] = [
   },
   {
     name: "Инновацийн клуб",
-    nameEn: "Innovation club",
     logo: "/brand/logo-lockup.png",
     body: "Ажлын байрны шинэ санаа, сайжруулалтыг дэвшүүлж, туршилтын төслүүдийг хамт олонтойгоо хамтран хэрэгжүүлдэг.",
   },
