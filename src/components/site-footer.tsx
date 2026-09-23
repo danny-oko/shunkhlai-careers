@@ -6,7 +6,6 @@ import { GradientRule } from "@/components/brand/gradient-rule";
 import { SectionRule } from "@/components/brand/section-rule";
 import { cn } from "@/lib/utils";
 
-/** The label over each column of the footer. */
 const HEADING =
   "type-eyebrow font-medium tracking-[0.12em] text-muted-foreground uppercase";
 
