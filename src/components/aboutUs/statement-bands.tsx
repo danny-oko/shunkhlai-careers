@@ -55,6 +55,17 @@ const STEPS: Step[] = [
   },
 ];
 
+/**
+ * The ground the closing two beats stand on: HR's own key visual, the four of
+ * them walking up the ramp - which is the principle the panel is about to
+ * state, as a picture, and the one real photograph on this screen.
+ *
+ * Not a fourth STEP. The three above arrive on the line, one per beat, and
+ * hand over to each other; this one arrives behind the word once the line is
+ * finished with, and it is still there when the word has gone.
+ */
+const PRINCIPLE_GROUND = "/academy/principle-ground.jpg";
+
 /** Height of one word in the roller. The slack keeps descenders off the line. */
 const SLOT = "1.25em";
 
@@ -267,6 +278,84 @@ const REVEAL = { from: 0.82, span: 0.18 };
 const HAND_OVER = 0.22;
 
 /**
+ * The ground's own arrival, in shares of the word's beat.
+ *
+ * It opens just after the word does and has finished by the time the word
+ * has, so the two read as one movement - the word coming forward and the
+ * picture coming up behind it - rather than as a word and then a slide.
+ */
+const GROUND = { from: 0.12, span: 0.46 };
+
+/**
+ * And where it stops being the subject: exactly as the panel opens, which is
+ * why it takes the panel's own beat rather than one of its own. Until then it
+ * is the picture and nothing is done to it; from there it blurs back into a
+ * ground for the principle to be read on. Softened any earlier and the word
+ * scatters over a picture that is already going.
+ */
+const SOFTEN = REVEAL;
+
+/**
+ * How far out of focus, standing behind the word and standing under the panel.
+ *
+ * Zero at rest. The picture is the client's own key visual and it arrives as
+ * it was delivered - the second number is for the state where it has stopped
+ * being looked at and has copy over it.
+ */
+const HAZE = { rest: 0, under: 18 };
+
+/**
+ * And how much ink it carries at each of those. None while it is the picture;
+ * under the panel it is a contrast figure rather than a taste, because the
+ * brightest part of the photograph is a white wall and the panel's muted copy
+ * has to hold 4.5:1 over it. 85% gives that copy 5.3:1 and the heading 10.5:1.
+ */
+const VEIL = { rest: 0, under: 0.85 };
+
+/**
+ * The picture's own proportion, which is how the band at its foot is found on
+ * a screen of any shape: it is drawn whole, so its box is as tall as the
+ * screen or as wide, whichever runs out first, and the band is a fraction of
+ * that box rather than of the window.
+ */
+const RATIO = 3 / 2;
+
+/**
+ * And the bar it is drawn under: `h-16` on <SiteHeader>, which is fixed over
+ * every page and therefore over this one.
+ *
+ * Drawn to the top of the window instead, the picture is whole and the top of
+ * it is still not visible - the bar sits on the head of the man at the back of
+ * the group. So the box the picture is fitted into is the window less the bar,
+ * and the strip behind the bar is left as ink, which is the ground the bar is
+ * over everywhere else in this section anyway.
+ */
+const BAR = 64;
+
+/**
+ * Where the word lands in it: the empty orange band along the foot of the
+ * ramp, left of the man walking up it.
+ *
+ * Measured off the file rather than judged by eye. Over the box this centres
+ * on - a fifth of the picture, clear of every figure in it - the flattest
+ * orange is #fd6702, and that is what the word's colour is picked against
+ * below.
+ */
+const SPOT = { x: 0.29, y: 0.845 };
+
+/**
+ * And the word's colour once it is there.
+ *
+ * White on that orange is 2.95:1, which is under the 3:1 display type has to
+ * hold - the word would be a glare rather than a word. The brandbook's own
+ * navy on it is 5.55:1, and it is the pairing the lockup in the corner of the
+ * same picture is already drawn in. So the word arrives white, off the ink
+ * screen it leaves, and is navy by the time it is standing on the orange;
+ * `PAINT` is the share of the ground's own arrival it changes over.
+ */
+const PAINT = { from: 0.25, span: 0.5 };
+
+/**
  * Where each letter of "Бидний" goes when the word breaks up.
  *
  * In ems of the word's own size rather than pixels, and applied inside the
@@ -302,7 +391,16 @@ function useWordOrigin(
   labelRef: React.RefObject<HTMLElement | null>,
   wordRef: React.RefObject<HTMLElement | null>,
 ) {
-  const [origin, setOrigin] = React.useState({ x: 0, y: 0, scale: 0.2 });
+  // The screen is measured here too, because the word's destination is a
+  // place in the picture rather than the middle of the window, and the picture
+  // is drawn whole inside that window - so where it lands can only be worked
+  // out from the window's own shape. See SPOT.
+  const [origin, setOrigin] = React.useState({
+    x: 0,
+    y: 0,
+    scale: 0.2,
+    stage: { width: 0, height: 0 },
+  });
 
   React.useLayoutEffect(() => {
     const screen = screenRef.current;
@@ -319,6 +417,7 @@ function useWordOrigin(
         x: box.left + box.width / 2 - (stage.left + stage.width / 2),
         y: box.top + box.height / 2 - (stage.top + stage.height / 2),
         scale: Math.min(box.height / word.offsetHeight, 1),
+        stage: { width: stage.width, height: stage.height },
       });
     };
 
@@ -360,7 +459,9 @@ function useWordOrigin(
  *
  * The last two beats are the Academy's: the label steps out of the row, takes
  * the middle of the screen, and breaks apart, and the 70/20/10 principle is
- * standing behind it. That principle had a section of its own
+ * standing behind it. The ground changes with it - the three placeholder
+ * fields give way to HR's key visual, which comes up behind the word and is
+ * then blurred back into a ground for the panel to be read on. That principle had a section of its own
  * under this one and no longer does — arriving out of the thing that was
  * saying "Бидний" all along is what makes it the company's own account of how
  * its people grow rather than a chart further down the page.
@@ -439,6 +540,27 @@ export function StatementBands() {
   // then stands for the rest of the run.
   const principle = ease(clamp((outro - REVEAL.from) / REVEAL.span));
 
+  // The ground behind both: up with the word, out of focus under the panel.
+  const ground = ease(clamp((outro - GROUND.from) / GROUND.span));
+  const soften = ease(clamp((outro - SOFTEN.from) / SOFTEN.span));
+
+  // The picture is drawn whole in the window below the bar, so its box is that
+  // height times its own proportion, or the window's width, whichever fits -
+  // and the band the word lands in is a fraction of that box. The landing is
+  // given against the middle of the window, which the box's own middle sits
+  // half a bar below.
+  const below = Math.max(origin.stage.height - BAR, 0);
+  const frame = {
+    width: Math.min(origin.stage.width, below * RATIO),
+    height: Math.min(below, origin.stage.width / RATIO),
+  };
+  const landing = {
+    x: frame.width * (SPOT.x - 0.5),
+    y: BAR / 2 + frame.height * (SPOT.y - 0.5),
+  };
+  // White off the ink screen, navy on the orange. See PAINT.
+  const paint = clamp((ground - PAINT.from) / PAINT.span);
+
   /** Lifted as it arrives, so the panel enters rather than switches on. */
   const rise = (shown: number) => ({
     opacity: shown,
@@ -488,6 +610,21 @@ export function StatementBands() {
             There is no word to break apart here because there is no movement
             to break it with. */}
         <article className="relative isolate overflow-hidden bg-ink py-section">
+          {/* The ground the panel is read on there too, at the state the
+              runway leaves it in - there is no beat here to bring it in on. */}
+          <Image
+            src={PRINCIPLE_GROUND}
+            alt=""
+            aria-hidden
+            fill
+            sizes="100vw"
+            className="-z-20 scale-[1.06] object-contain blur-[18px]"
+          />
+          <div
+            aria-hidden
+            className="absolute inset-0 -z-10"
+            style={{ backgroundColor: "var(--ink)", opacity: VEIL.under }}
+          />
           <FeatherLattice className="opacity-[0.18]" tone="brand" />
           <PrinciplePanel />
         </article>
@@ -538,10 +675,56 @@ export function StatementBands() {
             priority={index === 0}
             sizes="100vw"
             className="-z-20 object-cover"
-            style={{ opacity: near(position, index) }}
+            style={{ opacity: near(position, index) * (1 - ground) }}
           />
         ))}
-        <div aria-hidden className="absolute inset-0 -z-10 bg-ink/55" />
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 bg-ink/55"
+          style={{ opacity: 1 - ground }}
+        />
+
+        {/* The closing ground, over the three it replaces and under everything
+            that is read. It carries its own veil rather than borrowing the one
+            above: that one is a fixed 55% over flat placeholder fields, and
+            this is a photograph that has to go from being looked at to being
+            read over. */}
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 overflow-hidden"
+          style={{ opacity: ground }}
+        >
+          {/* The picture's own box: the window less the bar over it. The veil
+              below is not inset with it - it is what the panel is read on and
+              has to cover the whole screen. */}
+          <div className="absolute inset-x-0 bottom-0" style={{ top: BAR }}>
+            <Image
+              src={PRINCIPLE_GROUND}
+              alt=""
+              fill
+              sizes="100vw"
+              // Whole, not cropped to the box. It is a composed picture - the
+              // lockup in one corner, the four of them walking out of the
+              // other, the band along the foot the word lands in - and a
+              // window that crops it takes a different piece at every size.
+              className="object-contain"
+              style={{
+                // Still while it is the picture; pushed on only as it softens,
+                // so it is moving when the panel lands on it.
+                transform: `scale(${(1 + 0.06 * soften).toFixed(3)})`,
+                filter: `blur(${(HAZE.rest + (HAZE.under - HAZE.rest) * soften).toFixed(2)}px)`,
+              }}
+            />
+          </div>
+          {/* Nothing over it until the panel wants it. */}
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundColor: "var(--ink)",
+              opacity: VEIL.rest + (VEIL.under - VEIL.rest) * soften,
+            }}
+          />
+        </div>
         {/* The brandbook's feather ground. The placeholder photographs are flat
             fields of colour, and over a flat field flat type reads as a slide
             rather than a screen. */}
@@ -709,10 +892,14 @@ export function StatementBands() {
         >
           <p
             ref={wordRef}
-            className="type-display font-semibold tracking-[-0.04em] whitespace-nowrap text-white uppercase"
+            className="type-display font-semibold tracking-[-0.04em] whitespace-nowrap uppercase"
             style={{
               opacity: word,
-              transform: `translate3d(${(origin.x * (1 - grown)).toFixed(2)}px, ${(origin.y * (1 - grown)).toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
+              // From the label it steps out of to the band at the foot of the
+              // picture. Both ends are places on the screen, so the travel is
+              // one interpolation between them and the scale rides on top.
+              transform: `translate3d(${(origin.x * (1 - grown) + landing.x * grown).toFixed(2)}px, ${(origin.y * (1 - grown) + landing.y * grown).toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
+              color: `color-mix(in oklab, var(--ink) ${(paint * 100).toFixed(1)}%, white)`,
             }}
           >
             {/* Letters rather than a word, because they have to leave in six

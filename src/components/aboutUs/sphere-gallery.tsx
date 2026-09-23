@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Image from "next/image";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,14 @@ export type WallItem = {
   body?: string;
   /** A real photograph, where there is one. Otherwise a placeholder is used. */
   image?: string;
+  /**
+   * Every photograph the item came with, where HR sent more than one - a club
+   * with three pictures of itself, a benefit laid out beside four.
+   *
+   * The first is the one the wall shows; the dialog gives the whole run as a
+   * strip you push sideways. Use it instead of `image`, not beside it.
+   */
+  images?: string[];
   /**
    * A wide transparent lockup — a club's logo — instead of a photograph.
    *
@@ -66,8 +75,17 @@ export type WallItem = {
 const SPREAD = { x: 0.36, y: 0.2, z: 0.36 };
 const BOUNDS = { x: [130, 540], y: [60, 200], z: [130, 540] } as const;
 
-/** Tile width as a share of the sphere's own radius, after the reference. */
-const TILE = 0.16;
+/**
+ * Tile width as a share of the sphere's own radius.
+ *
+ * The reference's own figure was 0.16, and on this page that drew a wall of
+ * pictures too small to see what they were of: at the widest stage the sphere
+ * is held to a 540 radius, so every photograph sat at 86px across the middle
+ * of the turn before the perspective took the back ones down to sixty. Raised
+ * so a tile is read as a photograph rather than a swatch. The spread is
+ * untouched - the sphere is the same size, the things on it are bigger.
+ */
+const TILE = 0.22;
 
 /**
  * And never narrower than this, for the same reason the lockups have a floor.
@@ -75,17 +93,17 @@ const TILE = 0.16;
  * The share above is the reference's, and the reference is a desktop: it is
  * taken of a radius that is itself already held at `BOUNDS.x`, so on a phone
  * the two floors compound. A 390 screen gives the stage 342, the radius comes
- * out at 123 and is held up to 130, and 16% of that is a picture of a person
- * 21 pixels across - front tiles about 42, back ones 14. What the wall reads
+ * out at 123 and is held up to 130, and 22% of that is a picture of a person
+ * 29 pixels across - front tiles about 58, back ones 19. What the wall reads
  * as at that size is not a wall of photographs, it is confetti: twelve specks
  * scattered over an empty screen, which is what a phone had been showing.
  *
  * The note under LOGO_MIN says a photograph survives being small because it is
- * still a picture of someone. That holds down to a point, and 21px is well
+ * still a picture of someone. That holds down to a point, and 29px is well
  * under it. At the floor below, the same phone draws the front of the sphere
- * at about 96px and the back at 32, which is a wall.
+ * at about 128px and the back at 43, which is a wall.
  */
-const TILE_MIN = 48;
+const TILE_MIN = 64;
 
 /**
  * What a lockup tile takes of that instead.
@@ -107,7 +125,7 @@ const LOGO_TILE = 1.8;
  * never needed a floor. A name that cannot be read is not a small name, it is
  * a blank, so these have one.
  */
-const LOGO_MIN = 92;
+const LOGO_MIN = 116;
 
 const PERSPECTIVE = 1100;
 /** How far it tips as it turns. Small: it is what swings tiles off the top. */
@@ -200,7 +218,12 @@ const VARY = [0.95, 1.07, 0.86, 1.03, 0.9, 1.11, 0.99, 0.82, 1.05, 0.93];
 const mock = (index: number) =>
   `/brand/mock-${String((index % 12) + 1).padStart(2, "0")}.jpg`;
 
-const picture = (item: WallItem, index: number) => item.image ?? mock(index);
+/** An item's photographs, in order. Empty when it has none of its own. */
+const photos = (item: WallItem) =>
+  item.images ?? (item.image ? [item.image] : []);
+
+/** The one the wall shows, standing in with a placeholder where there is none. */
+const picture = (item: WallItem, index: number) => photos(item)[0] ?? mock(index);
 
 const PENDING = "Дэлгэрэнгүй мэдээлэл удахгүй нэмэгдэнэ.";
 
@@ -268,6 +291,131 @@ const Visual = ({
 );
 
 /**
+ * One photograph in the dialog, whole.
+ *
+ * A run can hold a portrait poster and a wide group shot one after the other,
+ * so the frame cannot be the shape of either and cropping to it took the head
+ * off the portraits. The picture is contained instead, and a blurred, enlarged
+ * copy of itself fills whatever the contain leaves over, so nothing is cut and
+ * the panel still has a ground rather than two grey bars.
+ *
+ * Both draw the same file, so the second costs a paint and not a download.
+ */
+const Photo = ({ src, sizes }: { src: string; sizes: string }) => (
+  <>
+    <div aria-hidden className="absolute inset-0 overflow-hidden">
+      <Image
+        src={src}
+        alt=""
+        fill
+        sizes={sizes}
+        // Over-scaled so the blur's own soft edge stays outside the frame.
+        className="scale-125 object-cover blur-2xl"
+      />
+    </div>
+    <Image src={src} alt="" aria-hidden fill sizes={sizes} className="object-contain" />
+  </>
+);
+
+/**
+ * The item's photographs, as a strip you push sideways.
+ *
+ * A native scroll container with snap points rather than a carousel library:
+ * a swipe on a phone, a two-finger push on a trackpad and the arrow keys all
+ * already do the right thing to one, and what is under the middle is read
+ * back off `scrollLeft` instead of being state the gestures have to report.
+ * The arrows are for a mouse, which is the one pointer that cannot push.
+ *
+ * The pictures stay `aria-hidden` as they are everywhere else on the wall -
+ * the title and the words beside them carry the meaning - so what a screen
+ * reader gets here is the count, not five unlabelled images.
+ */
+function PhotoRun({ shots, sizes }: { shots: string[]; sizes: string }) {
+  const stripRef = React.useRef<HTMLDivElement>(null);
+  const [at, setAt] = React.useState(0);
+
+  const go = (to: number) => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const target = Math.min(Math.max(to, 0), shots.length - 1);
+    strip.scrollTo({ left: target * strip.clientWidth, behavior: "smooth" });
+  };
+
+  return (
+    <div
+      role="group"
+      aria-label={`${shots.length} зураг`}
+      className="absolute inset-0"
+    >
+      <div
+        ref={stripRef}
+        tabIndex={0}
+        // Read the position off the scroll rather than tracking the gesture,
+        // so a flick that lands between two snap points still reports the one
+        // it settles on.
+        onScroll={(event) => {
+          const strip = event.currentTarget;
+          setAt(Math.round(strip.scrollLeft / strip.clientWidth));
+        }}
+        className="flex size-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain outline-none [-ms-overflow-style:none] [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset [&::-webkit-scrollbar]:hidden"
+      >
+        {shots.map((src) => (
+          <div
+            key={src}
+            className="relative size-full shrink-0 snap-center overflow-hidden"
+          >
+            <Photo src={src} sizes={sizes} />
+          </div>
+        ))}
+      </div>
+
+      {/* Held off the picture by a scrim rather than a plate: these sit over
+          photographs we do not choose, so a bare glyph can land on anything. */}
+      {[
+        { at: 0, to: at - 1, Icon: ChevronLeft, label: "Өмнөх зураг", side: "left-2" },
+        { at: shots.length - 1, to: at + 1, Icon: ChevronRight, label: "Дараах зураг", side: "right-2" },
+      ].map(({ at: edge, to, Icon, label, side }) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => go(to)}
+          aria-label={label}
+          disabled={at === edge}
+          className={cn(
+            "absolute top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-opacity duration-200 outline-none hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white disabled:pointer-events-none disabled:opacity-0 motion-reduce:transition-none",
+            side,
+          )}
+        >
+          <Icon className="size-4" />
+        </button>
+      ))}
+
+      <ol className="absolute inset-x-0 bottom-2 flex justify-center gap-1.5">
+        {shots.map((src, index) => (
+          <li key={src}>
+            <button
+              type="button"
+              onClick={() => go(index)}
+              aria-label={`${index + 1}-р зураг`}
+              aria-current={index === at ? "true" : undefined}
+              // 6px of mark, with the finger's worth of padding around it.
+              className="group -m-1 block rounded-full p-1 outline-none"
+            >
+              <span
+                className={cn(
+                  "block size-1.5 rounded-full ring-1 ring-black/20 transition-colors duration-200 group-focus-visible:ring-2 group-focus-visible:ring-white motion-reduce:transition-none",
+                  index === at ? "bg-white" : "bg-white/45 group-hover:bg-white/75",
+                )}
+              />
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
  * What opens when a picture is picked.
  *
  * A voice — one of the Academy posters, which comes with a portrait, a job and
@@ -296,7 +444,11 @@ function Details({
   // picture does, because the name has already been read on the way in and is
   // set again in the title beside it. Dropping `logo` is what says so: the
   // panel then frames and plates a photograph exactly as the other walls do.
-  const art = item?.image ? { ...item, logo: undefined } : item;
+  //
+  // Where HR sent more than one, all of them are here rather than only the
+  // one the wall had room for - see <PhotoRun>.
+  const shots = item ? photos(item) : [];
+  const art = item && shots.length ? { ...item, logo: undefined } : item;
 
   return (
     <Dialog open={!!item} onOpenChange={(next) => !next && onClose()}>
@@ -310,19 +462,36 @@ function Details({
           <div className={cn(voice && "sm:grid sm:grid-cols-[minmax(0,17rem)_1fr]")}>
             <div
               className={cn(
-                "relative",
+                "relative overflow-hidden",
                 voice
                   ? "aspect-4/5 max-h-[42vh] sm:max-h-none"
-                  : "aspect-16/10",
-                art.logo && PLATE,
+                  : // A lockup is drawn to its own shallow plate. A photograph
+                    // gets a square, which is the one frame that treats a
+                    // portrait and a wide group shot about equally - a run can
+                    // hold both, and 16/10 left the portraits tiny.
+                    art.logo
+                    ? `aspect-16/10 ${PLATE}`
+                    : "aspect-square",
               )}
             >
-              <Visual
-                item={art}
-                index={index}
-                sizes="(max-width: 640px) 100vw, 272px"
-                pad="p-8"
-              />
+              {art.logo ? (
+                <Visual
+                  item={art}
+                  index={index}
+                  sizes="(max-width: 640px) 100vw, 448px"
+                  pad="p-8"
+                />
+              ) : shots.length > 1 ? (
+                <PhotoRun
+                  shots={shots}
+                  sizes="(max-width: 640px) 100vw, 448px"
+                />
+              ) : (
+                <Photo
+                  src={shots[0] ?? mock(index)}
+                  sizes="(max-width: 640px) 100vw, 448px"
+                />
+              )}
             </div>
 
             <DialogHeader

@@ -28,13 +28,35 @@ async function d1Query(sql: string, params: unknown[]): Promise<Record<string, u
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ sql, params }),
   });
-  const body = (await res.json()) as {
-    success: boolean;
-    errors?: unknown;
-    result?: { results?: Record<string, unknown>[] }[];
-  };
-  if (!body.success) {
-    throw new Error(`D1 query failed: ${JSON.stringify(body.errors ?? body)}`);
+  return readD1Response(res);
+}
+
+type D1Body = {
+  success: boolean;
+  errors?: unknown;
+  result?: { results?: Record<string, unknown>[] }[];
+};
+
+/**
+ * The rows out of a D1 HTTP response, or an error that says what happened.
+ *
+ * Read as text first: a gateway error or a rate limit comes back as HTML or
+ * plain text, and `res.json()` on that threw "Unexpected token '<'", which
+ * hid the HTTP status the caller needed to see.
+ */
+export async function readD1Response(res: Response): Promise<Record<string, unknown>[]> {
+  const text = await res.text();
+  let body: D1Body | null = null;
+  try {
+    body = JSON.parse(text) as D1Body;
+  } catch {
+    body = null;
+  }
+  if (!body || typeof body !== "object") {
+    throw new Error(`D1 query failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
+  if (!body.success || !res.ok) {
+    throw new Error(`D1 query failed: HTTP ${res.status} ${JSON.stringify(body.errors ?? body)}`);
   }
   return body.result?.[0]?.results ?? [];
 }

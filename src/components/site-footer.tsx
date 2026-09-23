@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MapPin } from "lucide-react";
 
 import { BrandLockup } from "@/components/brand/brand-logo";
 import { DotWordmark } from "@/components/brand/dot-wordmark";
@@ -34,7 +35,7 @@ const columns = [
   {
     title: "Компани",
     links: [
-      { href: "/news", label: "Мэдээ, сурвалжилга" },
+      { href: "/news", label: "Мэдээ мэдээлэл" },
       { href: "/about#history", label: "Бидний түүх" },
       // The statements, not the top of the page. "Бидний тухай" is the name of
       // the whole page, so it had been pointing at all of it and landing on
@@ -56,7 +57,7 @@ const columns = [
  * is the handle itself, which is all an instagram.com/<handle> URL is.
  */
 const contact: Array<{ label: string; value: string; href?: string }> = [
-  { label: "Утас", value: "+976 7007-3003", href: "tel:+97670073003" },
+  { label: "Утас", value: "9669-6229", href: "tel:+97696696229" },
   {
     label: "Facebook",
     value: "Shunkhlai HR",
@@ -132,8 +133,8 @@ export function SiteFooter() {
               &nbsp;
             </p>
             <p className="max-w-xs text-sm leading-relaxed text-muted-foreground sm:mt-4">
-              Хөдөлмөр - хөгжлийн хөдөлгүүр. 1993 оноос хойш Монгол улсын эрчим
-              хүч, логистикийн дэд бүтцийг бүтээж байна.
+              Хүчирхэг монголын хөгжлийн хүрд. 1993 оноос хойш Монгол улсын
+              эрчим хүч, логистикийн дэд бүтцийг бүтээж байна.
             </p>
           </div>
 
@@ -190,12 +191,19 @@ export function SiteFooter() {
             © {new Date().getFullYear()} Шунхлай ХХК. Бүх эрх хуулиар
             хамгаалагдсан.
           </p>
+          {/* `items-start`, not `items-center`: the address wraps to two
+              lines on a narrow window, and centred the pin would float in the
+              middle of the block instead of marking where it begins. The
+              nudge down is half the difference between the 16px icon and the
+              20px line it sits on, which puts it on the first line's middle
+              rather than its top. */}
           <a
             href={OFFICE_MAP}
             target="_blank"
             rel="noreferrer noopener"
-            className="text-sm text-muted-foreground transition-colors hover:text-brand"
+            className="inline-flex items-start gap-1.5 text-sm text-muted-foreground transition-colors hover:text-brand"
           >
+            <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
             {OFFICE}
           </a>
         </div>

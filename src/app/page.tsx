@@ -15,7 +15,7 @@ import { getFilterData, listJobsSafe } from "@/lib/jobs";
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "Шунхлай ХХК - Хөдөлмөр хөгжлийн хөдөлгүүр",
+  title: "Шунхлай ХХК - Хүчирхэг монголын хөгжлийн хүрд",
   description:
     "Шунхлай ХХК-ийн карьерын сайт. 21 аймагт 99 гаруй ШТС, 8 агуулах, итгэмжлэгдсэн лаборатори - хүний нөөцөөс мэдээллийн технологи хүртэл олон салбарын нээлттэй ажлын байр.",
   openGraph: {
@@ -31,16 +31,16 @@ export default async function LandingPage() {
   const [jobs, filters] = await Promise.all([listJobsSafe(), getFilterData()]);
   const roleCount = jobs.length;
 
-  // Both lists are the recruitment system's own, so anything added there
-  // shows up in the opening screen without a code change.
-  const groups = (filters?.hrposgroup ?? []).map((group) => group.name);
+  // The province list is the recruitment system's own, so anything added
+  // there shows up in the opening screen without a code change. The loader's
+  // division names are fixed copy and live with the component.
   const provinces = [
     ...new Set((filters?.location ?? []).map((site) => site.divisionname)),
   ];
 
   return (
     <main className="flex-1">
-      <SiteLoader provinces={provinces} groups={groups} />
+      <SiteLoader provinces={provinces} />
       <HeroStage roleCount={roleCount} />
       <HeroJourney />
     </main>

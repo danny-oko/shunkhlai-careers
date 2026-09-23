@@ -120,7 +120,7 @@ export function ArticleRow({ article }: { article: NewsArticle }) {
           <Button asChild variant="ghost" size="sm">
             <Link href={`/news/${article.slug}`} target="_blank" rel="noreferrer">
               <ExternalLink aria-hidden />
-              Нийтлэг харах
+              Нийтлэл харах
             </Link>
           </Button>
         )}
