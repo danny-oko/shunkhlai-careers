@@ -113,6 +113,13 @@ moment one row exists.
 
 ## Production (10.16.9.51)
 
+> **`docs/deploy.md` is the runbook** — the release layout, the systemd unit in
+> `deploy/`, nginx, backups and rollback, written for someone deploying this
+> for the first time. What follows is the database-shaped summary; where the
+> two disagree, deploy.md is the maintained one. In particular: the server has
+> 1.9 GB of RAM, so `bun run build` below must be run on a laptop or in CI and
+> the output copied across, not run on the server.
+
 Next.js runs as a normal Node server on their internal network:
 
 ```bash
