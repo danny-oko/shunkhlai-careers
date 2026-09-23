@@ -74,9 +74,21 @@ export function salaryText(salaryname: unknown): { text: string; chosen: boolean
 const LOCAL_ID_BASE = 1_000_000_000;
 
 /** The `erp` marker `/api/me` keeps on each application row (absent in the mock). */
-type RowErp = { status?: unknown; erpEntryId?: unknown; attempts?: unknown; error?: unknown };
+type RowErp = {
+  status?: unknown;
+  erpEntryId?: unknown;
+  attempts?: unknown;
+  error?: unknown;
+  /** The sync gave up: refused by the ERP, or out of attempts. */
+  terminal?: unknown;
+};
 
-/** Pushes before the sync stops retrying — `MAX_ATTEMPTS` in `server/applicant/erp-model.ts`. */
+/**
+ * Pushes before the sync stops retrying — `MAX_ATTEMPTS` in
+ * `server/applicant/erp-retry.ts`, repeated rather than imported because this
+ * module is bundled for the browser and that one reaches for `node:crypto`.
+ * It is only a fallback: a row the current server wrote carries `terminal`.
+ */
 export const PUSH_ATTEMPTS = 5;
 
 const rowErp = (row: { erp?: unknown }): RowErp | null =>
@@ -96,18 +108,34 @@ export function erpRequestNumber(row: { entryid?: unknown; erp?: unknown }): num
 /** `hint`: what the applicant can do about it, when anything. */
 export type SyncState = { tone: StatusTone; label: string; hint?: string };
 
+/** Terminal codes: the ERP read the payload and refused it. See `erp-retry.ts`. */
+const REJECTED = new Set(["erp_apply_rejected"]);
+
 /**
  * Where the copy to the ERP stands, in plain words. Null when there is no ERP
  * (mock mode: `skipped`, or no marker at all).
+ *
+ * Three honest things and no fourth. The application itself is safe in every
+ * one of them — it was committed here before the ERP was called at all — so
+ * none of these words may read as "your application is gone":
+ *
+ * - **хадгалагдсан / илгээгдэж байна** — ours, on its way. A `pending` row, and
+ *   also a `failed` one that is still being retried: from the applicant's side
+ *   those are the same situation, and "алдаа" on a row the server will retry
+ *   in forty seconds is a lie that generates a support call.
+ * - **илгээгдсэн** — the ERP has it.
+ * - **анхаарал шаардлагатай** — nobody is retrying any more. This is the only
+ *   state that asks the applicant to do something, and it is only ever shown
+ *   when the row really is terminal.
  */
 export function syncState(row: { erp?: unknown }): SyncState | null {
   const erp = rowErp(row);
   switch (erp?.status) {
     case "pending":
-      return { tone: "pending", label: "ERP-д илгээгдэж байна" };
+      return { tone: "pending", label: "Хадгалагдсан — ERP-д илгээгдэж байна" };
     case "sent":
       return { tone: "positive", label: "Илгээгдсэн" };
-    case "failed":
+    case "failed": {
       // Waiting on something, not failing: it goes by itself once that is done.
       if (erp.error === "profile_incomplete") {
         return { tone: "pending", label: "Хувийн мэдээллээ бөглөсний дараа илгээгдэнэ" };
@@ -115,14 +143,20 @@ export function syncState(row: { erp?: unknown }): SyncState | null {
       if (erp.error === "erp_withdraw_pending") {
         return { tone: "pending", label: "Өмнөх хүсэлт цуцлагдсаны дараа илгээгдэнэ" };
       }
-      if (Number(erp.attempts) >= PUSH_ATTEMPTS) {
+      const rejected = REJECTED.has(String(erp.error));
+      const done = erp.terminal === true || rejected || Number(erp.attempts) >= PUSH_ATTEMPTS;
+      if (done) {
         return {
           tone: "negative",
-          label: "Илгээж чадсангүй",
-          hint: "Хүсэлтээ цуцлаад дахин илгээнэ үү, эсвэл хүний нөөцтэй холбогдоно уу.",
+          label: "Анхаарал шаардлагатай",
+          hint: rejected
+            ? "ERP систем хүсэлтийг хүлээж авсангүй. Хүний нөөцтэй холбогдоно уу."
+            : "Хүсэлт хадгалагдсан ч ERP-д хүрсэнгүй. Хүний нөөцтэй холбогдоно уу.",
         };
       }
-      return { tone: "negative", label: "Илгээж чадсангүй — дахин оролдоно" };
+      // Still being retried: the row is safe and nothing is asked of them.
+      return { tone: "pending", label: "Хадгалагдсан — дахин илгээхийг оролдож байна" };
+    }
     default:
       return null;
   }

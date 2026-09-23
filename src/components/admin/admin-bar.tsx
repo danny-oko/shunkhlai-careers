@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, LogOut, Plus, UserRound } from "lucide-react";
+import { ExternalLink, Inbox, LogOut, Plus } from "lucide-react";
 
 import { logoutAction } from "@/app/admin/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -46,6 +46,16 @@ export async function AdminBar() {
           )}
 
           <ThemeToggle />
+
+          {/* The stuck-application desk. It is in the bar rather than buried
+              under a URL because a stuck application is only "visible rather
+              than silent" if somebody can get to it without being told how. */}
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/admin/applications" aria-label="ERP-д хүрээгүй хүсэлтүүд">
+              <Inbox aria-hidden />
+              <span className="hidden sm:inline">Хүсэлтүүд</span>
+            </Link>
+          </Button>
 
           <Button
             asChild
