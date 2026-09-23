@@ -107,7 +107,7 @@ export function HeroJourney() {
       className={cn("relative", isReduced ? "h-auto" : "h-[590svh]")}
     >
       <SectionRule />
-      <h1 className="sr-only">Хөгжлийн төлөөх хөдөлгүүр бүрийг тэжээнэ</h1>
+      <h1 className="sr-only">Хүчирхэг монголын хөгжлийн хүрд</h1>
 
       <div
         ref={stageRef}

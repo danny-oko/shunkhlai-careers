@@ -74,7 +74,7 @@ export function PrinciplePanel({
           it arrives in is the company speaking, and a kicker above it was one
           line of scaffolding between the two. */}
       <h2 className="type-section font-semibold tracking-[-0.02em]">
-        Хөгжлийн зарчим 70/20/10
+        Сургалт хөгжлийн зарчим 70/20/10
       </h2>
       <p className="mt-5 hidden max-w-2xl type-lead text-ink-muted text-pretty md:block">
         Сургалт, хөгжлийн бодлого нь ажилтныг зөвхөн сургалтад хамруулах бус,
@@ -158,7 +158,7 @@ export function FiguresPanel({
       style={style}
       className={cn("mx-auto w-full max-w-6xl px-6 lg:px-10", className)}
     >
-      <p className="border-y border-foreground/15 py-6 type-section font-semibold tracking-[-0.02em] text-balance">
+      <p className="border-y border-foreground/15 py-6 text-center type-section font-semibold tracking-[-0.02em] text-balance">
         {developmentSum}
       </p>
 
