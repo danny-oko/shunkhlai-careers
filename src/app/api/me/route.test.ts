@@ -1,20 +1,33 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TestDatabase } from "@/lib/db/testing";
-
 /**
- * /api/me against a REAL PostgreSQL engine — PGlite, Postgres compiled to
- * WASM, in this process — driven through drizzle, with the tables created from
- * the committed drizzle/*.sql migration. So every assertion below is about
- * rows actually written, not a hand-rolled fake, and it is the same schema the
- * customer's server gets. Nothing here reaches a network.
+ * /api/me against a REAL SQLite engine (node:sqlite, in memory) driven through
+ * drizzle's sqlite-proxy — the same driver shape as src/lib/db/index.ts — with
+ * the tables created from the committed drizzle/*.sql migrations. So every
+ * assertion below is about rows actually written, not a hand-rolled fake.
  */
+
+// node:sqlite ships with Node 22 but @types/node@20 has no declarations for it.
+type SqliteDb = {
+  exec(sql: string): void;
+  prepare(sql: string): { all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown };
+};
+const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
+  DatabaseSync: new (path: string) => SqliteDb;
+};
 
 const state = vi.hoisted(() => {
   // Reference lookups must hit the bundled mock data, never the live ERP.
   delete process.env.NEXT_PUBLIC_API_URL;
   return {
-    pg: null as TestDatabase | null,
+    sqlite: null as null | {
+      exec(sql: string): void;
+      prepare(sql: string): { all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown };
+    },
     users: new Map<string, { firstName: string; lastName: string; email: string | null }>(),
     userId: null as string | null,
     // Callbacks handed to next/server `after()`; run them with flushAfter().
@@ -48,18 +61,32 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 vi.mock("@/lib/db", async () => {
   const schema = await vi.importActual<typeof import("@/lib/db/schema")>("@/lib/db/schema");
-  const { createTestDatabase } = await import("@/lib/db/testing");
-  state.pg = await createTestDatabase();
-  return { ...schema, schema, getDb: () => state.pg!.db };
+  const { drizzle } = await import("drizzle-orm/sqlite-proxy");
+  const db = drizzle(
+    async (sql, params, method) => {
+      const stmt = state.sqlite!.prepare(sql);
+      const rows = (stmt.all(...params) as Record<string, unknown>[]).map((r) =>
+        Object.values(r),
+      );
+      return { rows: method === "get" ? (rows[0] ?? []) : rows };
+    },
+    { schema },
+  );
+  return { ...schema, schema, getDb: () => db };
 });
 
 import { GET, POST } from "./[...path]/route";
 
 /* --- helpers ------------------------------------------------------------ */
 
-/** Empty tables per case: building Postgres once and truncating is far cheaper. */
-async function freshDb() {
-  await state.pg!.reset();
+function freshDb() {
+  state.sqlite = new DatabaseSync(":memory:");
+  const dir = join(process.cwd(), "drizzle");
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    for (const stmt of readFileSync(join(dir, file), "utf8").split("--> statement-breakpoint")) {
+      if (stmt.trim()) state.sqlite!.exec(stmt);
+    }
+  }
 }
 
 function as(userId: string | null, email: string | null = `${userId}@example.mn`, name = ["Бат", "Дорж"]) {
@@ -86,8 +113,8 @@ async function post(endpoint: string, body?: unknown, query = "") {
   return { status: res.status, body: (await res.json()) as Env };
 }
 
-const rows = async (sql: string, p: unknown[] = []) =>
-  (await state.pg!.client.query<Record<string, unknown>>(sql, p)).rows;
+const rows = (sql: string, ...p: unknown[]) =>
+  state.sqlite!.prepare(sql).all(...p) as Record<string, unknown>[];
 
 const profileOf = async () => (await get("get")).body.retdata as Record<string, unknown>;
 
@@ -103,7 +130,7 @@ beforeEach(async () => {
   state.userId = null;
   state.after = [];
   vi.spyOn(console, "error").mockImplementation(() => {});
-  await freshDb();
+  freshDb();
 });
 
 /* --- auth --------------------------------------------------------------- */
@@ -117,13 +144,13 @@ describe("auth", () => {
       expect(r.body.retmsg).toEqual(expect.any(String));
       expect(r.body.retdata).toBeNull();
     }
-    expect((await rows("select * from applicant_account"))).toEqual([]);
+    expect(rows("select * from applicant_account")).toEqual([]);
   });
 
   it("signed in but Clerk has no email → 401, no row", async () => {
     as("u_noemail", null);
     expect((await get("get")).status).toBe(401);
-    expect((await rows("select * from applicant_account"))).toEqual([]);
+    expect(rows("select * from applicant_account")).toEqual([]);
   });
 });
 
@@ -140,12 +167,12 @@ describe("account document", () => {
     expect(p.lastname).toBe("Дорж");
     expect(String(p.email2).toLowerCase()).toBe("bat@example.mn");
 
-    const stored = (await rows("select email, clerk_user_id from applicant_account"));
+    const stored = rows("select email, clerk_user_id from applicant_account");
     expect(stored).toEqual([{ email: "bat@example.mn", clerk_user_id: "u1" }]);
 
     // A second GET does not create another row.
     await get("get");
-    expect((await rows("select * from applicant_account"))).toHaveLength(1);
+    expect(rows("select * from applicant_account")).toHaveLength(1);
   });
 
   it("email is case-insensitive: Foo@X.com and foo@x.com share one doc", async () => {
@@ -155,7 +182,7 @@ describe("account document", () => {
     expect((await profileOf()).addr2).toBe("Улаанбаатар, 1-р хороо");
     as("u1", "  FOO@x.COM ");
     expect((await profileOf()).addr2).toBe("Улаанбаатар, 1-р хороо");
-    expect((await rows("select email from applicant_account"))).toEqual([{ email: "foo@x.com" }]);
+    expect(rows("select email from applicant_account")).toEqual([{ email: "foo@x.com" }]);
   });
 
   it("isolation: user B never sees user A's data", async () => {
@@ -205,7 +232,7 @@ describe("profile", () => {
       post("SaveHrApplicant", { email2: "second@example.mn" }),
       post("SaveHrApplicant", { lastname: "Шинэ" }),
     ]);
-    const stored = JSON.parse(String((await rows("select data_json from applicant_account"))[0].data_json));
+    const stored = JSON.parse(String(rows("select data_json from applicant_account")[0].data_json));
     expect(stored.profile).toMatchObject({ addr2: "Хан-Уул", email2: "second@example.mn", lastname: "Шинэ" });
   });
 
@@ -222,7 +249,7 @@ describe("profile", () => {
     expect(saved.body.rettype).toBe(0);
 
     // Proven in the DB row itself, not just in memory.
-    const [row] = (await rows("select data_json from applicant_account"));
+    const [row] = rows("select data_json from applicant_account");
     const stored = JSON.parse(String(row.data_json));
     expect(stored.profile).toMatchObject({ regno: "УБ99010101", addr2: "Хан-Уул", lastname: "Шинэ" });
 
@@ -241,13 +268,12 @@ describe("profile", () => {
 /* --- identity gate ----------------------------------------------------- */
 
 describe("identity gate (регистр, овог, нэр, утас before any write)", () => {
-  const stored = async () =>
-    JSON.parse(String((await rows("select data_json from applicant_account"))[0].data_json));
+  const stored = () => JSON.parse(String(rows("select data_json from applicant_account")[0].data_json));
 
   it("refuses every other POST while регистр/утас are blank: 409, Mongolian retmsg, no D1 write", async () => {
     as("u1");
     await get("get");
-    const before = (await stored());
+    const before = stored();
     const cv = new FormData();
     cv.set("file", new File([new Uint8Array([1, 2, 3])], "cv.pdf"));
     const attempts = [
@@ -265,8 +291,8 @@ describe("identity gate (регистр, овог, нэр, утас before any w
       expect(r.body.retmsg).toBe("Эхлээд регистр, овог, нэр, утасны дугаараа бөглөнө үү.");
       expect(r.body.retdata).toBeNull();
     }
-    expect((await stored())).toEqual(before);
-    expect((await rows("select * from applicant_file"))).toEqual([]);
+    expect(stored()).toEqual(before);
+    expect(rows("select * from applicant_file")).toEqual([]);
   });
 
   it("SaveHrApplicant must leave all four filled, judged on the merge with what is stored", async () => {
@@ -280,7 +306,7 @@ describe("identity gate (регистр, овог, нэр, утас before any w
       expect(r.status).toBe(409);
       expect(r.body.rettype).not.toBe(0);
     }
-    expect((await stored()).profile).toMatchObject({ regno: "", mobilephone: "", addr2: "" });
+    expect(stored().profile).toMatchObject({ regno: "", mobilephone: "", addr2: "" });
 
     const ok = await post("SaveHrApplicant", { lastname: "Дорж", firstname: "Бат", ...IDENTITY });
     expect(ok.body.rettype).toBe(0);
@@ -288,7 +314,7 @@ describe("identity gate (регистр, овог, нэр, утас before any w
     expect((await post("SaveHrApplicant", { addr2: "Хан-Уул" })).body.rettype).toBe(0);
     // Blanking one of them is refused.
     expect((await post("SaveHrApplicant", { lastname: "" })).status).toBe(409);
-    expect((await stored()).profile).toMatchObject({ lastname: "Дорж", addr2: "Хан-Уул" });
+    expect(stored().profile).toMatchObject({ lastname: "Дорж", addr2: "Хан-Уул" });
     // …and the other writes now go through.
     expect((await post("SaveHrAppEducation", { entryid: 0, universitynametext: "X" })).body.rettype).toBe(0);
   });
@@ -299,22 +325,21 @@ describe("identity gate (регистр, овог, нэр, утас before any w
   });
 
   it("an unchanged регистр / утас in another spelling keeps the stored value", async () => {
-    await rows(
-      "insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values ($1, $2, $3, $4)",
-      ["p1", "u1", JSON.stringify({ regno: "УБ99010101", mobilephone: "9911-2233" }), new Date()],
-    );
+    state.sqlite!
+      .prepare("insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values (?, ?, ?, ?)")
+      .run("p1", "u1", JSON.stringify({ regno: "УБ99010101", mobilephone: "9911-2233" }), Date.now());
     as("u1");
     await post("SaveHrApplicant", { regno: "уб99010101", mobilephone: "9911-2233", addr2: "x" });
     await post("SaveHrApplicant", { mobilephone: "9911 2233" });
-    expect((await stored()).profile).toMatchObject({ regno: "УБ99010101", mobilephone: "9911-2233", addr2: "x" });
+    expect(stored().profile).toMatchObject({ regno: "УБ99010101", mobilephone: "9911-2233", addr2: "x" });
     await post("SaveHrApplicant", { mobilephone: "8811 2233" }); // a new number is normalised
-    expect((await stored()).profile.mobilephone).toBe("88112233");
+    expect(stored().profile.mobilephone).toBe("88112233");
   });
 
   it("SaveHrApplicant stores регистр upper-cased and the phone as its 8 digits", async () => {
     as("u1");
     await post("SaveHrApplicant", { regno: " уб99010101 ", mobilephone: "+976 9911-2233" });
-    expect((await stored()).profile).toMatchObject({ regno: "УБ99010101", mobilephone: "99112233" });
+    expect(stored().profile).toMatchObject({ regno: "УБ99010101", mobilephone: "99112233" });
   });
 });
 
@@ -360,7 +385,7 @@ describe.each(sections)("section $name", (s) => {
     expect(entryid).toBeGreaterThan(0);
 
     // Row actually lives in the stored JSON.
-    expect(String((await rows("select data_json from applicant_account"))[0].data_json)).toContain("MUST");
+    expect(String(rows("select data_json from applicant_account")[0].data_json)).toContain("MUST");
 
     // Update keeps the id and doesn't duplicate.
     const upd = s.body(entryid) as Record<string, unknown> | Record<string, unknown>[];
@@ -400,7 +425,7 @@ describe("files", () => {
     const res = await post("SaveAppCV", fd);
     expect(res.status).toBe(413);
     expect(res.body.rettype).not.toBe(0);
-    expect((await rows("select count(*) as n from applicant_file"))[0].n).toBe(0);
+    expect(rows("select count(*) as n from applicant_file")[0].n).toBe(0);
   });
 
   it("CV larger than one D1 chunk round-trips byte-exact, then deletes", async () => {
@@ -411,11 +436,11 @@ describe("files", () => {
     fd.set("file", new File([bytes], "cv.pdf", { type: "application/pdf" }));
     expect((await post("SaveAppCV", fd)).body.rettype).toBe(0);
 
-    const chunks = (await rows("select chunk_index, length(data) as n from applicant_file where kind = 'cv' order by chunk_index"));
+    const chunks = rows("select chunk_index, length(data) as n from applicant_file where kind = 'cv' order by chunk_index");
     expect(chunks.length).toBeGreaterThan(1);
     for (const c of chunks) expect(Number(c.n)).toBeLessThan(2_000_000);
     // data_json stays small — the blob is not inlined.
-    expect(String((await rows("select data_json from applicant_account"))[0].data_json).length).toBeLessThan(100_000);
+    expect(String(rows("select data_json from applicant_account")[0].data_json).length).toBeLessThan(100_000);
 
     const p = await profileOf();
     expect(p.filename).toBe("cv.pdf");
@@ -435,7 +460,7 @@ describe("files", () => {
     expect((await post("deleteAppCV")).body.rettype).toBe(0);
     const p3 = await profileOf();
     expect(p3.filename).toBeNull();
-    expect((await rows("select * from applicant_file where kind = 'cv'"))).toEqual([]);
+    expect(rows("select * from applicant_file where kind = 'cv'")).toEqual([]);
     const gone = await download();
     expect(gone.status).toBe(404);
     expect(((await gone.json()) as Env).retmsg).toBe("CV хавсаргаагүй байна.");
@@ -489,7 +514,7 @@ describe("files", () => {
   it("refuses a CV that is not PDF/DOC/DOCX by extension or reported type: Mongolian retmsg, nothing stored", async () => {
     as("u1");
     await ready();
-    const before = String((await rows("select data_json from applicant_account"))[0].data_json);
+    const before = String(rows("select data_json from applicant_account")[0].data_json);
     for (const file of [
       new File([new Uint8Array([1])], "cv.exe"),
       new File([new Uint8Array([1])], "cv", { type: "application/pdf" }), // no extension
@@ -503,8 +528,8 @@ describe("files", () => {
       expect(r.body.rettype).not.toBe(0);
       expect(r.body.retmsg).toBe("PDF, DOC эсвэл DOCX файл оруулна уу.");
     }
-    expect((await rows("select * from applicant_file"))).toEqual([]);
-    expect(String((await rows("select data_json from applicant_account"))[0].data_json)).toBe(before);
+    expect(rows("select * from applicant_file")).toEqual([]);
+    expect(String(rows("select data_json from applicant_account")[0].data_json)).toBe(before);
     expect((await profileOf()).filename).toBeNull();
 
     // An unknown type (octet-stream, or none) with an accepted extension is fine.
@@ -527,7 +552,7 @@ describe("files", () => {
       expect(r.status, file.name).toBe(415);
       expect(r.body.retmsg).toBe("Зураг оруулна уу (JPG, PNG).");
     }
-    expect((await rows("select * from applicant_file"))).toEqual([]);
+    expect(rows("select * from applicant_file")).toEqual([]);
     expect((await profileOf()).picturedata ?? null).toBeNull();
 
     const png = new FormData();
@@ -540,7 +565,7 @@ describe("files", () => {
     await ready();
     const r = await post("SaveAppCV", new FormData());
     expect(r.body.rettype).not.toBe(0);
-    expect((await rows("select * from applicant_file"))).toEqual([]);
+    expect(rows("select * from applicant_file")).toEqual([]);
   });
 });
 
@@ -579,15 +604,14 @@ describe("applications", () => {
 
 describe("legacy applicant_profile snapshot", () => {
   it("is imported into a brand-new account", async () => {
-    await rows(
-      "insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values ($1, $2, $3, $4)",
-      [
+    state.sqlite!
+      .prepare("insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values (?, ?, ?, ?)")
+      .run(
         "p1",
         "u_legacy",
         JSON.stringify({ regno: "УБ88010101", mobilephone: "88112233", addr2: "Legacy addr", picturedata: "AAAA", filedata: "ignored" }),
-        new Date(),
-      ],
-    );
+        Date.now(),
+      );
     as("u_legacy", "legacy@x.mn");
     const p = await profileOf();
     expect(p).toMatchObject({ regno: "УБ88010101", mobilephone: "88112233", addr2: "Legacy addr" });
@@ -595,10 +619,9 @@ describe("legacy applicant_profile snapshot", () => {
   });
 
   it("is NOT re-imported over later edits", async () => {
-    await rows(
-      "insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values ($1, $2, $3, $4)",
-      ["p1", "u_legacy", JSON.stringify({ addr2: "Legacy addr" }), new Date()],
-    );
+    state.sqlite!
+      .prepare("insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values (?, ?, ?, ?)")
+      .run("p1", "u_legacy", JSON.stringify({ addr2: "Legacy addr" }), Date.now());
     as("u_legacy", "legacy@x.mn");
     await get("get");
     await post("SaveHrApplicant", { ...IDENTITY, addr2: "Edited" });
@@ -606,10 +629,9 @@ describe("legacy applicant_profile snapshot", () => {
   });
 
   it("does not leak another Clerk user's snapshot", async () => {
-    await rows(
-      "insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values ($1, $2, $3, $4)",
-      ["p1", "someone_else", JSON.stringify({ regno: "УБ77010101" }), new Date()],
-    );
+    state.sqlite!
+      .prepare("insert into applicant_profile (id, clerk_user_id, data_json, synced_at) values (?, ?, ?, ?)")
+      .run("p1", "someone_else", JSON.stringify({ regno: "УБ77010101" }), Date.now());
     as("u1");
     expect((await profileOf()).regno).not.toBe("УБ77010101");
   });

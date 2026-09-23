@@ -28,8 +28,8 @@ import {
  * a route the client knows the id of, so it has to refuse on its own — a
  * function that trusted the proxy would be an unauthenticated write endpoint.
  *
- * Every write here lands in the application's PostgreSQL database. A failure
- * (network, credentials, missing DATABASE_URL) is logged and turned into
+ * Every write here lands in Cloudflare D1, which localhost and production
+ * share. A failure (network, token, missing env) is logged and turned into
  * `NEWS_DB_ERROR` for the editor — or `?error=db` on the list — never a crash.
  */
 
@@ -78,8 +78,8 @@ async function demoteFeatured(exceptId: string | null): Promise<void> {
 /**
  * Everything a changed article can show up on.
  *
- * The public pages and the desk are `force-dynamic` and read the database on
- * every request, so there is no server-side render cache for these calls to clear —
+ * The public pages and the desk are `force-dynamic` and read D1 on every
+ * request, so there is no server-side render cache for these calls to clear —
  * that is what makes an edit from *any* host (localhost writes the same rows
  * production reads) show up on the next load. What `revalidatePath` still
  * does from a server action is drop this browser's client router cache, so
@@ -100,7 +100,7 @@ function revalidateNews(...slugs: Array<string | null | undefined>): void {
 
 /**
  * Best effort: the save already failed, and the editor's message says so. If
- * the database is down this fails too, and the chunks stay as an orphan — which is why
+ * D1 is down this fails too, and the chunks stay as an orphan — which is why
  * it is logged and swallowed rather than allowed to replace the real error.
  */
 async function discardUpload(key: string): Promise<void> {

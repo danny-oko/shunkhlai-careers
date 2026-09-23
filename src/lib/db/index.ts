@@ -1,62 +1,80 @@
 /**
- * Drizzle client over PostgreSQL (`pg` + `drizzle-orm/node-postgres`).
- * Server-only. The database is the customer's own Postgres on their internal
- * network; the connection string is `DATABASE_URL` in the server environment —
- * never `NEXT_PUBLIC_*`, because it carries the password.
+ * Drizzle client over Cloudflare D1, via D1's HTTP query API (sqlite-proxy).
+ * Server-only. Works under `next dev` (plain Node) using the account/database
+ * id + token in the environment.
  *
- * The exported surface is the one the D1 client had — `getDb()`, `schema` and
- * the schema re-exports — so callers did not have to change.
- *
- * The pool is parked on `globalThis` rather than in a module-level `let`:
- * `next dev` re-evaluates this module on every hot reload, and a fresh
- * `pg.Pool` per reload leaks its sockets until Postgres runs out of
- * connections. In production the module is evaluated once and this is simply a
- * module singleton.
- *
- * `DATABASE_URL` is read on first use, not at import time, so a missing one is
- * an error the first query reports rather than a build that fails to load.
- * SSL follows `?sslmode=` and is off by default — see `./url`.
+ * Production note: when this app is deployed on Cloudflare (OpenNext), swap this
+ * for the native binding — `import { drizzle } from "drizzle-orm/d1"` with the
+ * `DB` binding from `getCloudflareContext()`. The schema and callers don't change.
  */
 import "server-only";
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-
+import { drizzle, type SqliteRemoteDatabase } from "drizzle-orm/sqlite-proxy";
 import * as schema from "./schema";
-import { poolConfig } from "./url";
 
-type DbGlobal = typeof globalThis & {
-  __shunhlaiPgPool?: Pool;
-  __shunhlaiDb?: NodePgDatabase<typeof schema>;
-};
+const D1_ENDPOINT = (account: string, database: string) =>
+  `https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`;
 
-const globalRef = globalThis as DbGlobal;
-
-function getPool(): Pool {
-  if (!globalRef.__shunhlaiPgPool) {
-    const pool = new Pool(poolConfig());
-
-    /**
-     * An idle client that dies takes the process with it without this.
-     *
-     * `pg` re-emits a backend or socket error on the pool itself, and an
-     * `error` event with no listener is how Node decides to throw. The errors
-     * that reach here are the ones nobody is awaiting — Postgres restarting,
-     * an idle connection cut by a firewall — none of which should end the
-     * server. The pool discards the broken client and the next query opens a
-     * fresh one, so logging is the whole job.
-     */
-    pool.on("error", (error) => {
-      console.error("[db] idle client error", error);
-    });
-
-    globalRef.__shunhlaiPgPool = pool;
+async function d1Query(sql: string, params: unknown[]): Promise<Record<string, unknown>[]> {
+  const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const database = process.env.CLOUDFLARE_DATABASE_ID;
+  const token = process.env.CLOUDFLARE_D1_TOKEN;
+  if (!account || !database || !token) {
+    throw new Error(
+      "Cloudflare D1 env missing: CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_DATABASE_ID / CLOUDFLARE_D1_TOKEN"
+    );
   }
-  return globalRef.__shunhlaiPgPool;
+  const res = await fetch(D1_ENDPOINT(account, database), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, params }),
+  });
+  return readD1Response(res);
 }
 
-export function getDb(): NodePgDatabase<typeof schema> {
-  globalRef.__shunhlaiDb ??= drizzle(getPool(), { schema });
-  return globalRef.__shunhlaiDb;
+type D1Body = {
+  success: boolean;
+  errors?: unknown;
+  result?: { results?: Record<string, unknown>[] }[];
+};
+
+/**
+ * The rows out of a D1 HTTP response, or an error that says what happened.
+ *
+ * Read as text first: a gateway error or a rate limit comes back as HTML or
+ * plain text, and `res.json()` on that threw "Unexpected token '<'", which
+ * hid the HTTP status the caller needed to see.
+ */
+export async function readD1Response(res: Response): Promise<Record<string, unknown>[]> {
+  const text = await res.text();
+  let body: D1Body | null = null;
+  try {
+    body = JSON.parse(text) as D1Body;
+  } catch {
+    body = null;
+  }
+  if (!body || typeof body !== "object") {
+    throw new Error(`D1 query failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
+  if (!body.success || !res.ok) {
+    throw new Error(`D1 query failed: HTTP ${res.status} ${JSON.stringify(body.errors ?? body)}`);
+  }
+  return body.result?.[0]?.results ?? [];
+}
+
+let cached: SqliteRemoteDatabase<typeof schema> | null = null;
+
+export function getDb(): SqliteRemoteDatabase<typeof schema> {
+  if (cached) return cached;
+  cached = drizzle(
+    async (sql, params, method) => {
+      const rows = await d1Query(sql, params);
+      // sqlite-proxy wants positional arrays; D1 returns column-ordered objects.
+      const arr = rows.map((r) => Object.values(r));
+      return { rows: method === "get" ? arr[0] ?? [] : arr };
+    },
+    { schema }
+  );
+  return cached;
 }
 
 export { schema };

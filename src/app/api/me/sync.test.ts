@@ -1,19 +1,32 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 
-import type { TestDatabase } from "@/lib/db/testing";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Two-way ERP sync through /api/me (implementor suite): a real in-memory
- * PostgreSQL (PGlite, built from the committed migration) behind drizzle, and
- * a stateful fake ERP behind global fetch.
+ * SQLite behind drizzle, and a stateful fake ERP behind global fetch.
  */
+
+type SqliteDb = {
+  exec(sql: string): void;
+  prepare(sql: string): { all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown };
+};
+const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
+  DatabaseSync: new (path: string) => SqliteDb;
+};
 
 const state = vi.hoisted(() => {
   delete process.env.NEXT_PUBLIC_API_URL;
   return {
-    pg: null as TestDatabase | null,
+    sqlite: null as null | SqliteDbLike,
     userId: "u1" as string | null,
     after: [] as Array<() => unknown>,
+  };
+  type SqliteDbLike = {
+    exec(sql: string): void;
+    prepare(sql: string): { all(...params: unknown[]): unknown[]; run(...params: unknown[]): unknown };
   };
 });
 
@@ -42,9 +55,16 @@ vi.mock("@clerk/nextjs/server", () => ({
 }));
 vi.mock("@/lib/db", async () => {
   const schema = await vi.importActual<typeof import("@/lib/db/schema")>("@/lib/db/schema");
-  const { createTestDatabase } = await import("@/lib/db/testing");
-  state.pg = await createTestDatabase();
-  return { ...schema, schema, getDb: () => state.pg!.db };
+  const { drizzle } = await import("drizzle-orm/sqlite-proxy");
+  const db = drizzle(
+    async (sql, params, method) => {
+      const stmt = state.sqlite!.prepare(sql);
+      const rows = (stmt.all(...params) as Record<string, unknown>[]).map((r) => Object.values(r));
+      return { rows: method === "get" ? (rows[0] ?? []) : rows };
+    },
+    { schema },
+  );
+  return { ...schema, schema, getDb: () => db };
 });
 
 import { GET, POST } from "./[...path]/route";
@@ -158,9 +178,14 @@ async function fakeErp(input: string | URL, init?: RequestInit) {
 
 /* --- helpers --------------------------------------------------------------- */
 
-/** Empty tables per case: building Postgres once and truncating is far cheaper. */
-async function freshDb() {
-  await state.pg!.reset();
+function freshDb() {
+  state.sqlite = new DatabaseSync(":memory:");
+  const dir = join(process.cwd(), "drizzle");
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    for (const stmt of readFileSync(join(dir, file), "utf8").split("--> statement-breakpoint")) {
+      if (stmt.trim()) state.sqlite!.exec(stmt);
+    }
+  }
 }
 
 type Env = { rettype: number; retmsg: string; retdata: unknown };
@@ -183,16 +208,9 @@ async function runAfter() {
   while (state.after.length) await state.after.shift()!();
 }
 
-const doc = async () => {
-  const { rows } = await state.pg!.client.query<{ data_json: string }>(
-    "select data_json from applicant_account",
-  );
-  return JSON.parse(rows[0].data_json) as Row & {
-    erp?: Row;
-    education: Row[];
-    interests: Row[];
-    applications: Row[];
-  };
+const doc = () => {
+  const [row] = state.sqlite!.prepare("select data_json from applicant_account").all() as Array<{ data_json: string }>;
+  return JSON.parse(row.data_json) as Row & { erp?: Row; education: Row[]; interests: Row[]; applications: Row[] };
 };
 
 /** An account that already has the регистр + phone (a pre-sync D1 doc). */
@@ -205,8 +223,8 @@ async function seedAccount() {
 
 let logs: string[];
 
-beforeEach(async () => {
-  await freshDb();
+beforeEach(() => {
+  freshDb();
   state.userId = "u1";
   state.after = [];
   erp = {
@@ -283,7 +301,7 @@ describe("pull (ERP → D1)", () => {
     expect(((await get("getInterestedJobsList")).retdata as Row[]).map((r) => r.entryid)).toEqual([15]);
     const apps = (await get("getRecruitmenRequestList")).retdata as Row[];
     expect(apps.map((r) => r.entryid)).toEqual([16]);
-    expect((await doc()).erp?.appliedOrderIds).toEqual([786]);
+    expect(doc().erp?.appliedOrderIds).toEqual([786]);
     // Nothing was written to the ERP by a pull.
     expect(erp.calls.filter((c) => !/^(auth\/login|get|Get|getInterested|getRecruitmen)/.test(c.endpoint))).toEqual([]);
   });
@@ -304,7 +322,7 @@ describe("pull (ERP → D1)", () => {
     erp.down = true;
     const profile = (await get("get")).retdata as Row;
     expect(profile.addr2).toBe("");
-    expect((await doc()).erp?.pullFailures).toBe(1);
+    expect(doc().erp?.pullFailures).toBe(1);
     erp.calls = [];
     await get("get");
     expect(erp.calls).toEqual([]); // backing off: no second attempt right away
@@ -373,7 +391,7 @@ describe("write-through (D1 → ERP)", () => {
     await post("DeleteHrAppEducation", undefined, "?ENTRYID=11");
     await post("deleteInterestedJob", undefined, "?entryid=15");
     await post("DeleteOrderApp", undefined, "?entryID=16");
-    expect((await doc()).erp?.pendingDeletes).toHaveLength(3);
+    expect(doc().erp?.pendingDeletes).toHaveLength(3);
     await runAfter();
 
     const deletes = erp.calls.filter((c) => /^delete/i.test(c.endpoint)).map((c) => [c.endpoint, c.query]);
@@ -382,7 +400,7 @@ describe("write-through (D1 → ERP)", () => {
       ["deleteInterestedJob", "?entryid=15"],
       ["DeleteOrderApp", "?entryID=16"],
     ]);
-    expect((await doc()).erp?.pendingDeletes).toBeUndefined();
+    expect(doc().erp?.pendingDeletes).toBeUndefined();
     expect(erp.lists.hrappedulist).toEqual([]);
     expect(erp.interests).toEqual([]);
     expect(erp.requests).toEqual([]);
@@ -414,7 +432,7 @@ describe("write-through (D1 → ERP)", () => {
     await post("DeleteAppExperience", undefined, `?entryid=${saved.entryid}`);
     await runAfter();
     expect(erp.calls.filter((c) => /delete/i.test(c.endpoint))).toEqual([]);
-    expect((await doc()).erp?.pendingDeletes).toBeUndefined();
+    expect(doc().erp?.pendingDeletes).toBeUndefined();
   });
 
   it("an ERP 'not found' answer to a delete counts as done", async () => {
@@ -422,7 +440,7 @@ describe("write-through (D1 → ERP)", () => {
     erp.lists.hrappedulist = []; // already gone in the ERP
     await post("DeleteHrAppEducation", undefined, "?ENTRYID=11");
     await runAfter();
-    expect((await doc()).erp?.pendingDeletes).toBeUndefined();
+    expect(doc().erp?.pendingDeletes).toBeUndefined();
   });
 
   it("a profile edit wins over the ERP and is not overwritten by a pull before it is sent", async () => {
@@ -437,7 +455,7 @@ describe("write-through (D1 → ERP)", () => {
     expect(((await get("get")).retdata as Row).addr2).toBe("Шинэ хаяг");
     await runAfter();
     expect(erp.record.addr2).toBe("Шинэ хаяг");
-    expect((await doc()).erp?.profileDirty).toBeUndefined();
+    expect(doc().erp?.profileDirty).toBeUndefined();
     vi.useRealTimers();
   });
 
