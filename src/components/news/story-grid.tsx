@@ -1,5 +1,6 @@
 import { StoryCard } from "@/components/news/story-card";
 import type { NewsArticle } from "@/lib/news/types";
+import { cn } from "@/lib/utils";
 
 /**
  * Stories in columns.
@@ -19,10 +20,20 @@ import type { NewsArticle } from "@/lib/news/types";
 export function StoryGrid({ articles }: { articles: NewsArticle[] }) {
   return (
     <div className="grid gap-x-7 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
-      {articles.map((article) => (
+      {/* One row, whatever the screen: the grid narrows to two columns on a
+          tablet and one on a phone, and a row of three that wraps to a second
+          line reads as a second section rather than as the tail of this one.
+          So the cards past the row are dropped at each width rather than
+          stacked - they are suggestions, and the desk line at the top of the
+          page is where someone who wants more of them goes. */}
+      {articles.map((article, index) => (
         <StoryCard
           key={article.id}
           article={article}
+          className={cn(
+            index === 1 && "max-sm:hidden",
+            index >= 2 && "max-lg:hidden",
+          )}
           sizes="(min-width: 1024px) 31vw, (min-width: 640px) 46vw, 100vw"
         />
       ))}

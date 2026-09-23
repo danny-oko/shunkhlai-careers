@@ -56,9 +56,10 @@ const STEPS: Step[] = [
 ];
 
 /**
- * The ground the closing two beats stand on: HR's own key visual, the four of
- * them walking up the ramp - which is the principle the panel is about to
- * state, as a picture, and the one real photograph on this screen.
+ * The ground the closing two beats stand on: HR's own key visual, the four
+ * "People of energy" portraits in a two-by-two - the office, the depot, the
+ * laboratory and the station, which is the company the panel is about to
+ * describe, and the only real photography on this screen.
  *
  * Not a fourth STEP. The three above arrive on the line, one per beat, and
  * hand over to each other; this one arrives behind the word once the line is
@@ -274,6 +275,17 @@ const FADE = 0.5;
  * their weight, which is the last moment before the two would be read at once.
  */
 const REVEAL = { from: 0.82, span: 0.18 };
+
+/**
+ * And how long the panel then has to draw itself.
+ *
+ * Its own beat, near enough: the band running out and the three cards coming
+ * up behind it are given from the moment the panel appears to most of the way
+ * through the beat after the word's, which is the one the section keeps for
+ * the panel and where nothing else moves. Inside `REVEAL` alone the whole
+ * thing would be over in about twenty pixels of scroll.
+ */
+const PANEL_DRAW = 0.78;
 /** And how quickly the statements give up the screen once that beat opens. */
 const HAND_OVER = 0.22;
 
@@ -330,30 +342,41 @@ const RATIO = 3 / 2;
  * and the strip behind the bar is left as ink, which is the ground the bar is
  * over everywhere else in this section anyway.
  */
-const BAR = 64;
+const BAR_REM = 4;
+
+/** `h-16` on <SiteHeader> in whatever a rem is at this window. */
+function barPx(): number {
+  if (typeof window === "undefined") return BAR_REM * 16;
+  const root = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return BAR_REM * (Number.isFinite(root) ? root : 16);
+}
 
 /**
- * Where the word lands in it: the empty orange band along the foot of the
- * ramp, left of the man walking up it.
+ * Where the word lands in it: the middle of the picture.
  *
- * Measured off the file rather than judged by eye. Over the box this centres
- * on - a fifth of the picture, clear of every figure in it - the flattest
- * orange is #fd6702, and that is what the word's colour is picked against
- * below.
+ * The picture is four portraits in a two-by-two, and the word crosses all
+ * four of them at full size - so there is no quiet band to put it in the way
+ * the single key visual had one. The middle is the one place that reads as
+ * placed rather than as parked in a corner, and the shade below is what makes
+ * it hold there.
  */
-const SPOT = { x: 0.29, y: 0.845 };
+const SPOT = { x: 0.5, y: 0.5 };
 
 /**
- * And the word's colour once it is there.
+ * The pool of shade the word stands in.
  *
- * White on that orange is 2.95:1, which is under the 3:1 display type has to
- * hold - the word would be a glare rather than a word. The brandbook's own
- * navy on it is 5.55:1, and it is the pairing the lockup in the corner of the
- * same picture is already drawn in. So the word arrives white, off the ink
- * screen it leaves, and is navy by the time it is standing on the orange;
- * `PAINT` is the share of the ground's own arrival it changes over.
+ * Across the band the word occupies, the picture runs from a blown-out office
+ * wall to a near-black workshop floor: white type holds on three quarters of
+ * it and disappears on the fourth, and navy does the opposite. Neither colour
+ * can carry the word on its own, so the ground is darkened under it instead -
+ * an ellipse the width of the word, deep enough that white clears 3:1 over
+ * even the wall (0.72 of ink takes it from 0.96 to 0.28 relative luminance,
+ * which is 3.2:1), and gone well before the edges of the frame. Each of the
+ * four portraits carries its own white lettering, so white is the picture's
+ * own colour for type over it.
  */
-const PAINT = { from: 0.25, span: 0.5 };
+const WORD_SHADE =
+  "radial-gradient(52% 20% at 50% 50%, rgba(4,18,36,0.72) 0%, rgba(4,18,36,0.62) 45%, rgba(4,18,36,0) 100%)";
 
 /**
  * Where each letter of "Бидний" goes when the word breaks up.
@@ -400,6 +423,7 @@ function useWordOrigin(
     y: 0,
     scale: 0.2,
     stage: { width: 0, height: 0 },
+    bar: BAR_REM * 16,
   });
 
   React.useLayoutEffect(() => {
@@ -418,6 +442,7 @@ function useWordOrigin(
         y: box.top + box.height / 2 - (stage.top + stage.height / 2),
         scale: Math.min(box.height / word.offsetHeight, 1),
         stage: { width: stage.width, height: stage.height },
+        bar: barPx(),
       });
     };
 
@@ -540,6 +565,12 @@ export function StatementBands() {
   // then stands for the rest of the run.
   const principle = ease(clamp((outro - REVEAL.from) / REVEAL.span));
 
+  // The panel's own drawing, measured from the moment it appears rather than
+  // from the start of the beat, and running on into the beat after it.
+  const panel = clamp(
+    (phase - (STEPS.length + REVEAL.from)) / PANEL_DRAW,
+  );
+
   // The ground behind both: up with the word, out of focus under the panel.
   const ground = ease(clamp((outro - GROUND.from) / GROUND.span));
   const soften = ease(clamp((outro - SOFTEN.from) / SOFTEN.span));
@@ -549,17 +580,15 @@ export function StatementBands() {
   // and the band the word lands in is a fraction of that box. The landing is
   // given against the middle of the window, which the box's own middle sits
   // half a bar below.
-  const below = Math.max(origin.stage.height - BAR, 0);
+  const below = Math.max(origin.stage.height - origin.bar, 0);
   const frame = {
     width: Math.min(origin.stage.width, below * RATIO),
     height: Math.min(below, origin.stage.width / RATIO),
   };
   const landing = {
     x: frame.width * (SPOT.x - 0.5),
-    y: BAR / 2 + frame.height * (SPOT.y - 0.5),
+    y: origin.bar / 2 + frame.height * (SPOT.y - 0.5),
   };
-  // White off the ink screen, navy on the orange. See PAINT.
-  const paint = clamp((ground - PAINT.from) / PAINT.span);
 
   /** Lifted as it arrives, so the panel enters rather than switches on. */
   const rise = (shown: number) => ({
@@ -697,16 +726,16 @@ export function StatementBands() {
           {/* The picture's own box: the window less the bar over it. The veil
               below is not inset with it - it is what the panel is read on and
               has to cover the whole screen. */}
-          <div className="absolute inset-x-0 bottom-0" style={{ top: BAR }}>
+          <div className="absolute inset-x-0 bottom-0" style={{ top: origin.bar }}>
             <Image
               src={PRINCIPLE_GROUND}
               alt=""
               fill
               sizes="100vw"
-              // Whole, not cropped to the box. It is a composed picture - the
-              // lockup in one corner, the four of them walking out of the
-              // other, the band along the foot the word lands in - and a
-              // window that crops it takes a different piece at every size.
+              // Whole, not cropped to the box. It is a composed picture -
+              // four portraits in a two-by-two, each with its own lettering -
+              // and a window that crops it takes a different piece at every
+              // size, cutting one of the four in half.
               className="object-contain"
               style={{
                 // Still while it is the picture; pushed on only as it softens,
@@ -716,7 +745,15 @@ export function StatementBands() {
               }}
             />
           </div>
-          {/* Nothing over it until the panel wants it. */}
+          {/* The shade the word stands in: only under the word, and only for
+              as long as the word is there - once the panel starts to land, the
+              veil below covers the whole screen and this would double it. */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{ backgroundImage: WORD_SHADE, opacity: 1 - soften }}
+          />
+          {/* Nothing else over it until the panel wants it. */}
           <div
             className="absolute inset-0"
             style={{
@@ -876,7 +913,11 @@ export function StatementBands() {
         {/* What the word gives way to. Under it in the stack, so the word
             breaks apart over the panel rather than beside it. */}
         <div className="absolute inset-0 flex items-center">
-          <PrinciplePanel inert={principle < 0.02} style={rise(principle)} />
+          <PrinciplePanel
+            inert={principle < 0.02}
+            style={rise(principle)}
+            progress={panel}
+          />
         </div>
 
         {/* And the word itself, over everything.
@@ -892,14 +933,13 @@ export function StatementBands() {
         >
           <p
             ref={wordRef}
-            className="type-display font-semibold tracking-[-0.04em] whitespace-nowrap uppercase"
+            className="type-display font-semibold tracking-[-0.04em] whitespace-nowrap text-white uppercase"
             style={{
               opacity: word,
-              // From the label it steps out of to the band at the foot of the
-              // picture. Both ends are places on the screen, so the travel is
-              // one interpolation between them and the scale rides on top.
+              // From the label it steps out of to the middle of the picture.
+              // Both ends are places on the screen, so the travel is one
+              // interpolation between them and the scale rides on top.
               transform: `translate3d(${(origin.x * (1 - grown) + landing.x * grown).toFixed(2)}px, ${(origin.y * (1 - grown) + landing.y * grown).toFixed(2)}px, 0) scale(${scale.toFixed(4)})`,
-              color: `color-mix(in oklab, var(--ink) ${(paint * 100).toFixed(1)}%, white)`,
             }}
           >
             {/* Letters rather than a word, because they have to leave in six

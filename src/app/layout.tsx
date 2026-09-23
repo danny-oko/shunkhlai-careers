@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { clerkAppearance } from "@/lib/clerk/appearance";
+import { clerkLocalizationMn } from "@/lib/clerk/localization-mn";
 import { PT_Serif, Ubuntu_Sans, Ubuntu_Sans_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PaletteProvider } from "@/components/palette-provider";
@@ -46,7 +48,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <ClerkProvider>
+    /* The hosted sign-in and sign-up cards are the only Clerk UI this site
+       mounts, and both hang off this provider - see `src/lib/clerk/`. */
+    <ClerkProvider
+      appearance={clerkAppearance}
+      localization={clerkLocalizationMn}
+    >
       <html
         lang="mn"
         suppressHydrationWarning

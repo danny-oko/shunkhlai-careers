@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
+import { SignInButton, useAuth } from "@clerk/nextjs";
 import { Menu, X } from "lucide-react";
 
 import { BrandMark } from "@/components/brand/brand-logo";
@@ -118,13 +118,19 @@ export function SiteHeader() {
           ) : (
             <>
               <ThemeToggle />
-              <Button
-                asChild
-                variant="ghost"
-                className="hidden h-9 rounded-full px-3 sm:inline-flex"
-              >
-                <Link href="/sign-in">Нэвтрэх</Link>
-              </Button>
+              {/* A dialog over whatever the visitor was reading, rather than a
+                  trip to /sign-in and back: nothing on the page is lost, and
+                  Clerk drops them back where they were once signed in. The
+                  /sign-in route stays for deep links and for the redirect in
+                  `src/app/account/layout.tsx`. */}
+              <SignInButton mode="modal">
+                <Button
+                  variant="ghost"
+                  className="hidden h-9 rounded-full px-3 sm:inline-flex"
+                >
+                  Нэвтрэх
+                </Button>
+              </SignInButton>
             </>
           )}
 
@@ -163,13 +169,17 @@ export function SiteHeader() {
             </Link>
           ))}
           {!isAuthenticated && (
-            <Link
-              href="/sign-in"
-              onClick={() => setIsOpen(false)}
-              className="block py-3.5 text-base"
-            >
-              Нэвтрэх
-            </Link>
+            /* The menu closes on the way to the dialog - `SignInButton` runs
+               the child's own `onClick` before it opens. */
+            <SignInButton mode="modal">
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="block w-full py-3.5 text-left text-base"
+              >
+                Нэвтрэх
+              </button>
+            </SignInButton>
           )}
         </nav>
       )}
