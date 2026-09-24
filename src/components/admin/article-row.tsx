@@ -101,7 +101,11 @@ export function ArticleRow({
         </p>
       </div>
 
-      <div className="flex w-full shrink-0 flex-wrap items-center gap-1.5 sm:w-auto">
+      {/* Wraps but does not overflow. It used to be `shrink-0`, which was safe
+          while the desk had the whole window; beside the sidebar the same row
+          at 1024px pushed the delete control off the right edge. Shrinking
+          lets the group fold onto a second line instead. */}
+      <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
         <form action={setFeaturedAction}>
           <input type="hidden" name="id" value={article.id} />
           {!article.featured && <input type="hidden" name="featured" value="on" />}

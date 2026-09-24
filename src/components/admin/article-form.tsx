@@ -300,7 +300,7 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
       {/* --- action bar ------------------------------------------------- */}
       <div
         ref={barRef}
-        className="sticky top-14 z-30 border-b border-border bg-background/95 backdrop-blur-md"
+        className="sticky top-[var(--admin-bar-h,0px)] z-30 border-b border-border bg-background/95 backdrop-blur-md"
       >
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-5 py-2.5 lg:px-8">
           <Button asChild variant="ghost" size="sm">
@@ -418,9 +418,14 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
 
       {/* --- panes ------------------------------------------------------ */}
       <div className="mx-auto grid w-full max-w-6xl flex-1 gap-0 px-5 lg:grid-cols-2 lg:gap-0 lg:px-0">
+        {/* `min-w-0` because a grid item's default `min-width: auto` is its
+            content's intrinsic width, and the `field-sizing-content`
+            textareas below have a wide one — at 390px this pane was 679px
+            and the whole desk scrolled sideways. Pre-existing; it surfaced
+            while checking the new shell at phone width. */}
         <div
           className={cn(
-            "flex flex-col gap-6 py-8 lg:border-r lg:border-border lg:px-8",
+            "flex min-w-0 flex-col gap-6 py-8 lg:border-r lg:border-border lg:px-8",
             pane === "edit" ? "flex" : "hidden lg:flex",
           )}
         >

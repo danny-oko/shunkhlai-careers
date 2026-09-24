@@ -57,8 +57,7 @@ The row also carries `attempts`, `lastAttemptAt`, `claimedAt` (the lease),
 ERP's `retmsg` has been seen carrying the applicant's own name and register
 number back at the caller; nothing from a response body is written to the
 database or rendered. The codes are in `erp-retry.ts` and their Mongolian
-wording is in `src/app/admin/applications/stuck-labels.ts` and
-`src/components/account/application-format.ts`.
+wording is in `src/components/account/application-format.ts`.
 
 ## Retry policy
 
@@ -155,23 +154,19 @@ sees the fresh `claimedAt`, and claims nothing. So **two sweeps do not both
 push the same application** — except in the reclaimed-lease window described
 above, which is the at-least-once caveat and not a second mechanism.
 
-The sweep has no scheduler of its own yet. It runs from the button on the
-admin desk. Wiring it to a cron on the customer's server (`systemd` timer, or
-a `pm2` cron job hitting an authenticated route) is the remaining piece — until
-then, an application whose applicant never returns is picked up when an admin
-looks at the desk.
+## No screen, for now
 
-## The admin desk
+`/admin/applications` was a desk that listed stuck applications and offered a
+retry and a sweep. It was removed: it showed nothing the owner wanted to act
+on. **The machinery behind it is untouched** — `listStuckApplications`,
+`retryApplication` and `sweepStuckApplications` are still exported from
+`src/server/applicant/stuck.ts` and still tested, because they are the retry
+policy's home and the next caller (a cron on the customer's server — a
+`systemd` timer, or a `pm2` job hitting an authenticated route) needs them
+exactly as they are.
 
-`/admin/applications` — behind `requireAdmin()` in its layout *and* in every
-action, because a server action is a POST that never passes through a layout.
-
-It lists applications that are stuck: terminal ones immediately, and unsent
-ones that nothing has touched for `STALE_AFTER_MS` (30 minutes). Each row shows
-the applicant's email, the posting, the attempt count, the classified reason,
-the timestamps and the first half of the idempotency key — and a **Дахин
-илгээх** button, which is the only way out of `terminal`.
-
-Retrying is a person's decision on purpose: a row is terminal because the ERP
-refused it or because five pushes failed, and an automatic retry would just
-re-bury it.
+Until that caller exists, the sweep has no scheduler: an application whose
+applicant never returns is picked up the next time that applicant loads
+`/api/me`, and `terminal` rows wait for a person. Retrying is a person's
+decision on purpose: a row is terminal because the ERP refused it or because
+five pushes failed, and an automatic retry would just re-bury it.

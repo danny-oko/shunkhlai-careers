@@ -11,7 +11,9 @@ export const metadata: Metadata = {
  *
  * No guard here on purpose: this layout also wraps `/admin/login`, which has
  * to render for someone who is not signed in yet. The gate lives one level
- * down in `news/layout.tsx`, next to the pages that actually hold content.
+ * down, in the `AdminShell` that `news/`, `content/` and `account/` each
+ * mount from their own layout — the shell runs `requireAdminUser()` itself,
+ * so the chrome and the check cannot be separated.
  *
  * `ChromeSlot` in the root layout takes the site header and footer away for
  * everything under `/admin`, so this owns the full height of the window.

@@ -140,9 +140,10 @@ export function RichEditor({
       <input type="hidden" name={name} value={json} />
 
       {/* Sticks under the article's action bar while the body scrolls.
-          `--action-bar-h` is measured by the form; the fallback is its height
-          on a wide screen. */}
-      <div className="sticky top-[calc(3.5rem+var(--action-bar-h,3.25rem))] z-20">
+          `--action-bar-h` is measured by the form and `--admin-bar-h` is
+          published by the admin shell (the phone's top bar, or zero beside a
+          sidebar); the fallbacks are their heights on a wide screen. */}
+      <div className="sticky top-[calc(var(--admin-bar-h,0px)+var(--action-bar-h,3.25rem))] z-20">
         <Toolbar
           state={state}
           onCommand={onCommand}
