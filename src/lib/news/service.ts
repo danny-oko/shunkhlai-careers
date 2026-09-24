@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import {
   countByCategory,
   getArticleById,
@@ -44,19 +46,46 @@ async function orElse<T>(read: () => Promise<T>, fallback: T): Promise<T> {
   }
 }
 
+/**
+ * Every published story, newest first — read once per render.
+ *
+ * A page asks for this in several shapes: the front page for the lead and for
+ * the rail's total, an article for its neighbours and for "more from the
+ * desk". Each used to be its own query, and each query carries every story's
+ * body. React's `cache` memoises for the length of one server render and no
+ * longer, so this is not a cache in the sense the store rules out: the next
+ * request reads the database again, and an edit made from any host is on the
+ * page it renders. Callers get a list to read, never to change.
+ */
+const publishedStories = cache(() =>
+  orElse(() => listArticles({ status: "published" }), [] as NewsArticle[]),
+);
+
 export async function getPublishedArticles(query: {
   category?: NewsCategory | null;
   search?: string;
   limit?: number;
 } = {}): Promise<NewsArticle[]> {
-  return orElse(() => listArticles({ ...query, status: "published" }), []);
+  // A search is matched in the store, as it always was; only the plain lists
+  // (the whole newsroom, or one desk of it) come from the shared read.
+  if (query.search?.trim()) {
+    return orElse(() => listArticles({ ...query, status: "published" }), []);
+  }
+
+  const stories = await publishedStories();
+  const desk = query.category
+    ? stories.filter((article) => article.category === query.category)
+    : stories;
+  return typeof query.limit === "number"
+    ? desk.slice(0, Math.max(0, query.limit))
+    : desk.slice();
 }
 
 /** Published only — a draft's URL must 404 even for someone who guesses it. */
-export async function getArticle(slug: string): Promise<NewsArticle | null> {
+export const getArticle = cache(async (slug: string): Promise<NewsArticle | null> => {
   const article = await orElse(() => getArticleBySlug(slug), null);
   return article?.status === "published" ? article : null;
-}
+});
 
 /**
  * The stories either side of this one, in reading order.
@@ -67,7 +96,7 @@ export async function getArticle(slug: string): Promise<NewsArticle | null> {
 export async function getAdjacent(
   slug: string,
 ): Promise<{ previous: NewsArticle | null; next: NewsArticle | null }> {
-  const published = await orElse(() => listArticles({ status: "published" }), []);
+  const published = await publishedStories();
   const index = published.findIndex((article) => article.slug === slug);
   if (index === -1) return { previous: null, next: null };
 
@@ -93,15 +122,14 @@ export async function getLatestForRelated(
   category: NewsCategory,
   limit = 3,
 ): Promise<NewsArticle[]> {
-  const sameDesk = (
-    await orElse(() => listArticles({ status: "published", category }), [])
-  ).filter((article) => article.slug !== slug);
+  const published = await publishedStories();
+  const sameDesk = published.filter(
+    (article) => article.category === category && article.slug !== slug,
+  );
   if (sameDesk.length >= limit) return sameDesk.slice(0, limit);
 
   const seen = new Set([slug, ...sameDesk.map((article) => article.slug)]);
-  const filler = (await orElse(() => listArticles({ status: "published" }), [])).filter(
-    (article) => !seen.has(article.slug),
-  );
+  const filler = published.filter((article) => !seen.has(article.slug));
 
   return [...sameDesk, ...filler].slice(0, limit);
 }

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { FileText, UploadCloud, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ACCEPTED_CV_EXTENSIONS, CV_LIMITS_TEXT } from "@/lib/apply-schema";
+import { ACCEPTED_CV_EXTENSIONS, CV_LIMITS_TEXT } from "@/lib/apply-rules";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

@@ -1,8 +1,21 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import type { JobDetail } from "@/lib/jobs/types";
-import { ApplyDialog } from "@/components/apply-dialog";
+
+/**
+ * The sheet and everything behind it — the form, its validation, the CV
+ * picker, the account-identity forms — are only ever seen after a click, yet
+ * they were weighed into the posting page's first load. Split off, they arrive
+ * right after the page is interactive instead of before it. The dialog stays
+ * mounted, so a click that lands before the chunk does simply opens the sheet
+ * as soon as it is there; nothing about how it behaves has changed.
+ */
+const ApplyDialog = dynamic(
+  () => import("@/components/apply-dialog").then((module) => module.ApplyDialog),
+  { ssr: false },
+);
 
 type ApplyContextValue = {
   job: JobDetail;

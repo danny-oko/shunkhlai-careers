@@ -6,7 +6,7 @@ import { staticOptions } from "@/components/account/use-dropdown";
 import { useHomeCountry } from "@/components/account/use-home-country";
 import { reference, sections } from "@/lib/api";
 import { normalizeRegno } from "@/lib/applicant-identity";
-import { REGISTER_ID_PATTERN } from "@/lib/apply-schema";
+import { REGISTER_ID_PATTERN } from "@/lib/apply-rules";
 import type { FamilyEntry } from "@/lib/api/sections";
 
 /** Every field of the Postman `SaveAppFamily` row, in the collection's order. */

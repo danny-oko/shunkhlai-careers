@@ -4,8 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 
-import { clearSession, profile as profileApi } from "@/lib/api";
-import type { ApplicantProfile } from "@/lib/api/profile";
+import { clearSession } from "@/lib/api/core/tokens";
+import { getProfile, type ApplicantProfile } from "@/lib/api/profile";
 
 /**
  * Client-side applicant session.
@@ -40,7 +40,7 @@ export function useSession(): SessionValue {
 /** The profile, or null when it cannot be read right now. */
 async function readProfile(): Promise<ApplicantProfile | null> {
   try {
-    return await profileApi.getProfile();
+    return await getProfile();
   } catch {
     // A failed read must not sign anyone out; Clerk owns that.
     return null;

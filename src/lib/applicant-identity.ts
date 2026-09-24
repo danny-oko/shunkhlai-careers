@@ -1,4 +1,4 @@
-import { PHONE_PATTERN, REGISTER_ID_PATTERN } from "@/lib/apply-schema";
+import { PHONE_PATTERN, REGISTER_ID_PATTERN } from "@/lib/apply-rules";
 
 /**
  * The four fields the ERP's SaveHrAppUser needs to create (or find) the

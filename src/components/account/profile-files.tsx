@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { profile as profileApi, toApiError } from "@/lib/api";
 import { pictureSrc } from "@/lib/api/profile";
 import { PhotoTooLargeError, resizePhoto } from "@/lib/resize-image";
-import { CV_LIMITS_TEXT, describeCvFileError } from "@/lib/apply-schema";
+import { CV_LIMITS_TEXT, describeCvFileError } from "@/lib/apply-rules";
 
 /** Profile photo and CV — the two things `SaveHrApplicant` does not carry. (Clerk owns the password.) */
 

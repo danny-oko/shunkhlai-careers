@@ -98,6 +98,29 @@ ERP read for liveness and posting state, and falls back with a banner when that
 fails. Reading is open to both roles; the retry is `admin` only
 (`mayRetryApplications`, the same shape as `mayDeleteArticles`).
 
+## Performance rules
+
+Measured with `next build` (route sizes in `.next/diagnostics/route-bundle-stats.json`).
+Every route pays for the root layout's client graph, so what that graph imports
+is the first thing to check when a page gets heavier.
+
+- **Keep zod out of the root layout's client graph.** `SessionProvider` and the
+  header are on every page; `src/lib/apply-rules.ts` is the zod-free half of
+  `apply-schema.ts` for exactly this reason. Client code that only needs a
+  pattern or a CV limit imports `apply-rules`, never `apply-schema`. Likewise
+  import `@/lib/api/profile` or `@/lib/api/core/*` directly from layout-level
+  components rather than the `@/lib/api` barrel.
+- **Postings are cached for a minute, filter options for five** — successful
+  reads only (`unstable_cache` in `src/lib/jobs/service.ts`). A read that throws
+  is never stored, so an ERP outage is retried by the next visitor. Mock-backend
+  mode is not cached.
+- **The database is still read on every request.** News and content reads use
+  React's per-render `cache` to share one query inside a single render (the
+  article page used to run up to five list reads); nothing survives the request,
+  so the shared-database invariant above holds.
+- The apply sheet is loaded with `next/dynamic` (`apply-provider.tsx`): it is
+  only seen after a click and carries the form, validation and CV picker.
+
 ## Environment
 
 | Variable | Where | Notes |
