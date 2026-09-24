@@ -192,7 +192,8 @@ const TABS = [
     // headings, each carrying the photographs that were laid out beside it -
     // four for the sports, three for the grants - which the dialog runs
     // through. The two days of paid leave and the three wellbeing tiles are
-    // the earlier content plan's, kept beside the heading each belongs under.
+    // the earlier content plan's, kept beside the heading each belongs under -
+    // the two days are hidden for now, having no photograph yet.
     wall: [
       {
         title: "Шунхлайд ажиллахын давуу тал",
@@ -205,10 +206,12 @@ const TABS = [
         body: "Ажилтнуудынхаа эрүүл мэндэд тогтмол анхаарч, урьдчилан сэргийлэх үзлэг, шинжилгээ болон шаардлагатай үед эмчилгээ, сувиллын дэмжлэг үзүүлдэг. Эрүүл, тогтвортой ажиллах нөхцөлийг бүрдүүлэх нь бидний хүний нөөцийн бодлогын чухал хэсэг юм.",
         image: "/benefits/health-support.jpg",
       },
-      {
-        title: "Эрүүл мэндийн өдөр",
-        body: "Жилд 2 өдрийн цалинтай чөлөө.",
-      },
+      // Hidden until HR sends a photograph for it: without one the tile turned
+      // on the wall as a blank. Add `image:` and uncomment to bring it back.
+      // {
+      //   title: "Эрүүл мэндийн өдөр",
+      //   body: "Жилд 2 өдрийн цалинтай чөлөө.",
+      // },
       {
         title: "Спорт, идэвхтэй амьдрал",
         body: "Ажилтнуудыг эрүүл, идэвхтэй амьдралын хэв маягтай байхад нь дэмжиж, фитнес, спорт заал болон төрөл бүрийн спортын арга хэмжээнд хамрагдах боломжийг бүрдүүлдэг.",
@@ -241,10 +244,11 @@ const TABS = [
         body: "Ажил, хувийн амьдралын тэнцвэрийг дэмжих зорилгоор тодорхой нөхцөлд цалинтай чөлөө авах боломжийг бүрдүүлдэг. Ингэснээр ажилтнууд гэр бүл, хувийн амьдралдаа шаардлагатай цаг гаргах боломжтой.",
         image: "/benefits/paid-leave.jpg",
       },
-      {
-        title: "Гэр бүлийн өдөр",
-        body: "Жилд 1 өдрийн цалинтай чөлөө.",
-      },
+      // Hidden until HR sends a photograph for it - see "Эрүүл мэндийн өдөр".
+      // {
+      //   title: "Гэр бүлийн өдөр",
+      //   body: "Жилд 1 өдрийн цалинтай чөлөө.",
+      // },
       {
         title: "Компанийн арга хэмжээнүүд",
         body: "Хамт олны уур амьсгал, багийн ажиллагааг дэмжих зорилгоор баяр, спорт, аялал, дотоод арга хэмжээ болон ажилтнуудыг идэвхжүүлэх төрөл бүрийн хөтөлбөрийг тогтмол зохион байгуулдаг.",
