@@ -2,8 +2,8 @@
 
 Everything this app stores lives in one PostgreSQL database: applicant
 accounts and their files, the newsroom, and the `app_user` staff table. It
-replaces Cloudflare D1, which is being abandoned — the rows are copied across
-once and D1 is never written to again.
+replaces Cloudflare D1, which has been retired; the rows were copied across
+once and nothing reads D1 any more.
 
 ## The connection string
 
@@ -55,37 +55,17 @@ which is worth reading twice before running it.
 password is held by the customer's IT; it belongs in that machine's
 environment and never in this repository.
 
-## Bringing the D1 rows across
+## Cloudflare D1 (gone)
 
-Once, after the tables exist, with both the D1 credentials and `DATABASE_URL`
-in the environment (`.env.local` is loaded by bun automatically):
+The rows were copied across on 2026-09-24 and D1 was retired: its client, the
+importer and its credentials are all deleted. Counts matched on every table
+except `news_article`, where six retired placeholder drafts were not carried
+over — no real content, and recorded in the migration notes at the time.
 
-```bash
-bun run db:import -- --dry-run   # count the rows on both sides, write nothing
-bun run db:import                # copy them
-```
-
-The script (`scripts/db/d1-to-postgres.ts`) reads all seven tables in FK-safe
-order and inserts with `ON CONFLICT DO NOTHING`, so it is safe to re-run after
-an interrupted copy. It never writes to D1 — the client it uses refuses any
-statement that is not a SELECT — and it never updates or deletes in Postgres.
-It prints source and target counts per table at the end; those two columns
-matching is the check that the copy landed.
-
-What changes on the way across (the conversions are in
-`src/lib/db/d1-rows.ts`, and unit-tested):
-
-| D1 (SQLite) | PostgreSQL |
-|---|---|
-| `created_at` / `updated_at` / `synced_at` / `erp_token_expires_at` as epoch-ms integers | `timestamp with time zone` |
-| `news_article.featured` 0/1 | `boolean` |
-| `news_article.body_json` TEXT | `jsonb` (same column name) |
-| `news_article.published_at` TEXT `YYYY-MM-DD` | unchanged — an editorial date whose lexical sort is the chronological one |
-| `applicant_file` / `news_media` base64 chunks | unchanged — still chunked |
-
-`applicant_account.data_json` and `applicant_profile.data_json` stay TEXT: both
-hold documents the app parses defensively, and a `jsonb` column would reject a
-malformed one at write time instead of letting the reader cope.
+A final export of everything D1 held was taken before the code was removed. It
+is **not** in this repository: it contains applicants' personal data, and it
+lives with the owner. If a row ever turns out to be missing, that file is the
+source, not the code.
 
 ## Editable page content (`site_content`)
 
@@ -179,8 +159,7 @@ without `--update-env` keeps the old one.
 
 ### Checks before handing it over
 
-- `psql "$DATABASE_URL" -c '\dt'` lists the nine tables.
-- `bun run db:import -- --dry-run` shows the same counts on both sides.
+- `psql "$DATABASE_URL" -c '\dt'` lists the eleven tables.
 - The site's `/news` renders, and `/admin/news` can save a story.
 - `max_connections` on the server is comfortably above
   `DATABASE_POOL_MAX` × instances.

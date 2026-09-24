@@ -219,12 +219,14 @@ an edit made from another host shows up here; the admin actions also call
 `revalidatePath` for `/news`, the story's old and new URL, and `/admin/news`,
 which clears the editor's own client router cache.
 
-**Content:** `bun scripts/news/sync.ts [--dry-run] [--force]` wrote the owner's
-articles (`scripts/news/articles.source.json`, pictures mapped in
-`scripts/news/images.json`) into the old D1 database and set the seven
-placeholder rows to draft. It is kept as the record of how those rows were
-laid down and **still speaks SQLite to D1** — it has not been ported. The rows
-themselves come across with `bun scripts/db/d1-to-postgres.ts`.
+**Content:** the owner's articles were laid down once by a sync script that
+wrote to the old D1 database, then copied into PostgreSQL with the rest of the
+rows. Both scripts were deleted when D1 was retired; the stories now live in
+`news_article` and are edited at `/admin/news` like any other.
+
+`scripts/news/articles.source.json` and `scripts/news/images.json` are kept as
+the record of what was published and which photograph belongs to which story —
+they are documents, not code, and nothing reads them.
 
 ## Covers
 

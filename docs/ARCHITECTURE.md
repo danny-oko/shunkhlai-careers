@@ -24,9 +24,9 @@ Two identity systems, on purpose:
 
 Breaking one of these is how outages happen here. They are not style preferences.
 
-1. **The database is shared between localhost and production.** The same
-   `CLOUDFLARE_DATABASE_ID` (and later the same Postgres) serves `next dev` on a
-   laptop and the deployed site. **A local write is a production write.** Never
+1. **The database is shared between localhost and production.** One PostgreSQL
+   database serves `next dev` on a laptop and the deployed site — the same
+   `DATABASE_URL`. **A local write is a production write.** Never
    write "self-healing" or repair logic that runs on read, and never design
    per-environment secrets against it.
 2. **The applicant never sees a регистр/phone connect form.** It was removed
@@ -59,7 +59,6 @@ src/app/
 
 src/lib/
   db/          Drizzle client + schema. getDb() is the only way in.
-  d1/          read-only Cloudflare D1 client (migration only; refuses non-SELECT)
   news/        types, rich-text schema, service (the ONLY caller of the store)
   auth/        argon2id password hashing
   jobs/        job listing fetch + filters
@@ -104,7 +103,6 @@ fails. Reading is open to both roles; the retry is `admin` only
 | Variable | Where | Notes |
 |---|---|---|
 | `DATABASE_URL` | server only | PostgreSQL. Never `NEXT_PUBLIC_*`. |
-| `CLOUDFLARE_ACCOUNT_ID` / `_DATABASE_ID` / `_D1_TOKEN` | server only | D1, being retired; read-only after the migration |
 | `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET` | server only | admin sign-in |
 | Clerk keys | mixed | applicant identity |
 | `NEXT_PUBLIC_API_URL` | client | ERP origin |

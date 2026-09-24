@@ -354,11 +354,12 @@ export async function getApplication(key: string): Promise<DeskApplicationDetail
 /**
  * The `application_log` row for this application, if the D1 import left one.
  *
- * Nothing in the running app writes this table any more — `src/lib/db/d1-rows.ts`
- * is its only other reader, and its unique index is one row per (user, job), so
- * it is a state row rather than a history. It is read anyway because on an
- * account carried over from D1 it is the only trace of an attempt older than
- * the current document.
+ * Nothing writes this table any more: the importer that filled it was deleted
+ * with the rest of the D1 code, and its unique index is one row per
+ * (user, job), so it is a state row rather than a history. It is read anyway
+ * because on an account carried over from D1 it is the only trace of an
+ * attempt older than the current document. When those accounts have aged out,
+ * the table and this read can go together.
  *
  * **`error_message` is not selected.** It was written in the D1 era straight
  * from the upstream failure, so it can hold the ERP's `retmsg` — which has
