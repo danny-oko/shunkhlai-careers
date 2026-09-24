@@ -2,8 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { HeroSlide } from "@/components/landing/hero-slides";
-import { heroSlides } from "@/components/landing/hero-slides";
+import type { HeroContent } from "@/lib/content/schema";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,18 +12,23 @@ import { cn } from "@/lib/utils";
  * carry their own lockup across the top, so nothing here ever lands on it.
  * The page's headline is not here — it has a screen of its own, in
  * <StatementScreen>, straight after this one.
+ *
+ * Every word and every picture comes from `site_content`'s `hero` row, or
+ * from the value that row falls back to; nothing on this screen is written
+ * here any more. See `src/lib/content/defaults.ts`.
  */
 export function HeroOverlay({
-  slide,
+  hero,
   active,
   roleCount,
   onSelect,
 }: {
-  slide: HeroSlide;
+  hero: HeroContent;
   active: number;
   roleCount: number;
   onSelect: (index: number) => void;
 }) {
+  const slide = hero.slides[active] ?? hero.slides[0];
   return (
     // z-30: over the slides, which carry a z-index of their own. See the note
     // on the scrim in <HeroStage>.
@@ -34,7 +38,7 @@ export function HeroOverlay({
           key={slide.src}
           className="brand-word-in text-[clamp(1.1875rem,0.9583rem_+_1.0185vw,1.875rem)] font-semibold tracking-[-0.02em] [text-shadow:0_2px_24px_rgb(0_0_0/45%)]"
         >
-          Хүчирхэг монголын хөгжлийн хүрд
+          {hero.heading}
           <span className="mt-1 block type-copy font-medium opacity-75">
             {slide.caption}
           </span>
@@ -43,8 +47,10 @@ export function HeroOverlay({
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild className="h-11 rounded-full px-6 type-copy">
-              <Link href="/careers">
-                {roleCount} нээлттэй ажлын байр
+              <Link href={hero.primaryCta.href}>
+                {/* The count is live data from the recruitment API; the words
+                    after it are the editable half. */}
+                {roleCount} {hero.primaryCta.label}
                 <ArrowRight className="ml-1 size-4 transition-transform group-hover/button:translate-x-0.5" />
               </Link>
             </Button>
@@ -53,12 +59,12 @@ export function HeroOverlay({
               variant="outline"
               className="h-11 rounded-full border-white/35 bg-white/10 px-6 type-copy text-white backdrop-blur-sm hover:bg-white/20 hover:text-white dark:border-white/35 dark:bg-white/10 dark:hover:bg-white/20"
             >
-              <Link href="/about">Бидний тухай</Link>
+              <Link href={hero.secondaryCta.href}>{hero.secondaryCta.label}</Link>
             </Button>
           </div>
 
           <div className="flex items-center gap-2">
-            {heroSlides.map((item, index) => (
+            {hero.slides.map((item, index) => (
               <button
                 key={item.src}
                 type="button"

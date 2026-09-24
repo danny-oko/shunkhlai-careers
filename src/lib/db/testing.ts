@@ -38,6 +38,7 @@ const TABLES = [
   "news_article",
   "news_media",
   "stored_file",
+  "site_content",
 ] as const;
 
 /** The committed migrations, one statement per entry. */

@@ -4,9 +4,9 @@ import * as React from "react";
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
 
-import { heroSlides } from "@/components/landing/hero-slides";
 import { HeroOverlay } from "@/components/landing/hero-overlay";
 import { useScrollProgress } from "@/components/landing/use-scroll-progress";
+import type { HeroContent } from "@/lib/content/schema";
 import { cn } from "@/lib/utils";
 
 const SLIDE_MS = 6500;
@@ -21,8 +21,13 @@ const OPEN_AT = 0.62;
  * the length of it. Frame inset and corner radius are driven off how far
  * through that runway the reader is, so the growth tracks the scroll exactly
  * rather than playing as a fixed-length animation.
+ *
+ * The footage and the type over it are the `hero` row of `site_content`,
+ * handed down from the page: the slide timer below is why this has to stay a
+ * client component, and a client component cannot read the database.
  */
-export function HeroStage({ roleCount }: { roleCount: number }) {
+export function HeroStage({ hero, roleCount }: { hero: HeroContent; roleCount: number }) {
+  const slides = hero.slides;
   const sectionRef = React.useRef<HTMLElement>(null);
   const { progress, isReduced } = useScrollProgress(sectionRef);
   /**
@@ -56,13 +61,15 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
     if (isReduced) return;
     const timer = window.setInterval(
       () => setShown((current) => ({
-        active: (current.active + 1) % heroSlides.length,
+        active: (current.active + 1) % slides.length,
         previous: current.active,
       })),
       SLIDE_MS,
     );
     return () => window.clearInterval(timer);
-  }, [isReduced]);
+    // Re-armed when the slides change: an admin dropping the hero to one
+    // picture must not leave a timer cycling through indices that are gone.
+  }, [isReduced, slides.length]);
 
   // easeOutCubic: most of the opening happens early, then it settles.
   const opened = Math.min(progress / OPEN_AT, 1);
@@ -72,7 +79,7 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
   return (
     <section
       ref={sectionRef}
-      aria-label="Шунхлай - Хүчирхэг монголын хөгжлийн хүрд"
+      aria-label={`Шунхлай - ${hero.heading}`}
       className={cn("relative", isReduced ? "h-svh" : "h-[150svh]")}
     >
       <div className="sticky top-0 h-svh overflow-hidden">
@@ -86,7 +93,7 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
             borderRadius: `${closed * 28}px`,
           }}
         >
-          {heroSlides.map((item, index) => (
+          {slides.map((item, index) => (
             <div
               key={item.src}
               aria-hidden={index !== active}
@@ -143,7 +150,7 @@ export function HeroStage({ roleCount }: { roleCount: number }) {
           <div className="absolute inset-x-0 bottom-0 z-30 h-3/5 bg-linear-to-t from-black/80 via-black/45 to-transparent" />
 
           <HeroOverlay
-            slide={heroSlides[active]}
+            hero={hero}
             active={active}
             roleCount={roleCount}
             onSelect={show}

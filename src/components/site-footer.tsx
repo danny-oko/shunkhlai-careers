@@ -5,6 +5,7 @@ import { BrandLockup } from "@/components/brand/brand-logo";
 import { DotWordmark } from "@/components/brand/dot-wordmark";
 import { GradientRule } from "@/components/brand/gradient-rule";
 import { SectionRule } from "@/components/brand/section-rule";
+import { getContent } from "@/lib/content/service";
 import { cn } from "@/lib/utils";
 
 const HEADING =
@@ -47,41 +48,28 @@ const columns = [
   },
 ];
 
-const contact: Array<{ label: string; value: string; href?: string }> = [
-  { label: "Утас", value: "9669-6229", href: "tel:+97696696229" },
-  {
-    label: "Facebook",
-    value: "Shunkhlai HR",
-    href: "https://www.facebook.com/ShunkhlaiHR",
-  },
-  {
-    label: "Instagram",
-    value: "Shunkhlai_jobs",
-    href: "https://www.instagram.com/shunkhlai_jobs/",
-  },
-];
-
-/** The registered office, as it is printed at the foot of the page. */
-const OFFICE = "Капитал Хаус, Чингисийн өргөн чөлөө 48/1, Улаанбаатар-36";
-
 /**
- * The company's own Google Maps listing - Шунхлай ХХК, at 47.8986222,
- * 106.9027632.
- *
- * The listing, not a search for the address above it. Searching was tried
- * first and was wrong: handed the printed address, Maps answers with a Capital
- * House at 47.9144669, 106.9155284, which is two kilometres from where the
+ * The address and the contact column are the `footer` row of `site_content`,
+ * edited at `/admin/content`. What they said before they were editable — and
+ * what they say again the moment that row is missing or the database is
+ * down — is `FOOTER_DEFAULT` in `src/lib/content/defaults.ts`, including the
+ * long-standing reason the map link is the company's own Maps listing by
+ * `cid` and not a search for the address printed beside it: handed that
+ * address, Maps answers with a Capital House two kilometres from where the
  * company actually is. The address as printed and the place as pinned are not
  * the same thing, and only the second of them can be linked to reliably.
  *
- * `cid` is that listing's own id - `0x126a828b13a3ad7` in the hex Maps writes
- * into its URLs, in decimal here because that is the form `?cid=` takes. It
- * opens the company's card rather than a dropped pin, and it keeps working if
- * the wording of the address ever changes.
+ * The two link columns above are navigation, not content: they are this
+ * site's own routes and its own section anchors, so an editor changing one
+ * would be changing where the footer points rather than what it says. They
+ * stay here.
  */
-const OFFICE_MAP = "https://www.google.com/maps?cid=82938535878474455";
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  // Never throws: an unreachable database renders the address and contacts
+  // the site shipped with rather than an empty column.
+  const footer = await getContent("footer");
+
   return (
     <footer className="relative bg-secondary/40">
       <SectionRule />
@@ -153,8 +141,8 @@ export function SiteFooter() {
           <div>
             <p className={HEADING}>Холбоо барих</p>
             <ul className="mt-4 space-y-2.5">
-              {contact.map((item) => (
-                <li key={item.value} className={cn(ROW, "wrap-break-word")}>
+              {footer.contacts.map((item) => (
+                <li key={item.label + item.value} className={cn(ROW, "wrap-break-word")}>
                   <span className="text-muted-foreground">{item.label}: </span>
                   {item.href ? (
                     <a
@@ -188,15 +176,23 @@ export function SiteFooter() {
               nudge down is half the difference between the 16px icon and the
               20px line it sits on, which puts it on the first line's middle
               rather than its top. */}
-          <a
-            href={OFFICE_MAP}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex items-start gap-1.5 text-sm text-muted-foreground transition-colors hover:text-brand"
-          >
-            <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
-            {OFFICE}
-          </a>
+          {footer.addressUrl ? (
+            <a
+              href={footer.addressUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-start gap-1.5 text-sm text-muted-foreground transition-colors hover:text-brand"
+            >
+              <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
+              {footer.address}
+            </a>
+          ) : (
+            /* An address with nowhere to point is still the address. */
+            <p className="inline-flex items-start gap-1.5 text-sm text-muted-foreground">
+              <MapPin className="mt-0.5 size-4 shrink-0" aria-hidden />
+              {footer.address}
+            </p>
+          )}
         </div>
       </div>
 

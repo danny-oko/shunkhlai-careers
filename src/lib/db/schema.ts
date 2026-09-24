@@ -342,6 +342,37 @@ export const adminSession = pgTable(
   }),
 );
 
+/**
+ * The marketing copy an admin edits at `/admin/content`, one row per section
+ * of a public page (`hero`, `footer`, `about_stats`).
+ *
+ * A key/value store rather than a column per field: these sections are three
+ * unrelated shapes — a list of slides, a list of contact rows, a list of
+ * figures — and giving each its own table would mean a migration every time a
+ * section gained a field. The shape is instead owned by a zod schema per key
+ * (`src/lib/content/schema.ts`), which every read and every write goes
+ * through, so a row that does not match is rejected at the boundary and the
+ * page falls back to the value it shipped with rather than rendering blanks.
+ *
+ * `value` is `jsonb` and not TEXT, unlike `applicant_account.data_json`: this
+ * document is written by our own validated form, so a malformed one is a bug
+ * worth refusing at write time, not a snapshot from someone else's system
+ * that the reader has to cope with.
+ *
+ * `updated_by` references `app_user` and is nullable: `/admin` still signs in
+ * with ADMIN_PASSWORD (see docs/postgres.md), so there is no staff row to
+ * point at yet. `on delete set null` keeps the edit when the account that
+ * made it is removed — the content is the company's, not the editor's.
+ */
+export const siteContent = pgTable("site_content", {
+  key: text("key").primaryKey(), // hero | footer | about_stats
+  value: jsonb("value").notNull(),
+  updatedAt: tstz("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+  updatedBy: text("updated_by").references(() => appUser.id, { onDelete: "set null" }),
+});
+
 export type ApplicantLink = typeof applicantLink.$inferSelect;
 export type NewApplicantLink = typeof applicantLink.$inferInsert;
 export type ApplicationLog = typeof applicationLog.$inferSelect;
@@ -354,3 +385,4 @@ export type StoredFileRow = typeof storedFile.$inferSelect;
 export type NewStoredFile = typeof storedFile.$inferInsert;
 export type AppUserRow = typeof appUser.$inferSelect;
 export type AdminSessionRow = typeof adminSession.$inferSelect;
+export type SiteContentRow = typeof siteContent.$inferSelect;

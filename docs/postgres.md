@@ -87,6 +87,13 @@ What changes on the way across (the conversions are in
 hold documents the app parses defensively, and a `jsonb` column would reject a
 malformed one at write time instead of letting the reader cope.
 
+## Editable page content (`site_content`)
+
+The marketing copy of `/` and `/about`, and the foot of every page, are rows
+here rather than constants in the components: one row per section, keyed
+`hero`, `footer` or `about_stats`, holding a JSON document in a `jsonb`
+column. `/admin/content` edits them. See `docs/content.md`.
+
 ## Staff accounts (`app_user`)
 
 The table from the customer's guide: `id, name, email (unique),

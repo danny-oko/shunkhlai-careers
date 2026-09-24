@@ -37,7 +37,9 @@ describe("sslFromUrl", () => {
 describe("requireDatabaseUrl", () => {
   it("says which variable is missing rather than failing at connect time", () => {
     delete process.env.DATABASE_URL;
-    expect(() => requireDatabaseUrl()).toThrow(/DATABASE_URL is not set/u);
+    // The message names DATABASE_URL first and then the hosting providers'
+    // own variable names it also accepts - see `requireDatabaseUrl`.
+    expect(() => requireDatabaseUrl()).toThrow(/Set DATABASE_URL/u);
   });
 
   it("carries the URL and its SSL choice into the pool options", () => {

@@ -31,17 +31,38 @@ export function sslFromUrl(url: string): PoolConfig["ssl"] {
   return { rejectUnauthorized: false };
 }
 
+/**
+ * Where the connection string may be found, in order of preference.
+ *
+ * `DATABASE_URL` is what this app documents and what a self-hosted deployment
+ * sets. The `STORAGE_*` names are what Vercel's Neon integration wrote when it
+ * was installed with a custom prefix, and `POSTGRES_URL` is what the same
+ * integration writes without one — neither is worth a manual copy of a live
+ * credential into a second variable, so they are read directly.
+ *
+ * The unpooled variants come last on purpose: they are the same database, but
+ * bypass the connection pooler, and a serverless deployment wants the pooler.
+ */
+const URL_VARIABLES = [
+  "DATABASE_URL",
+  "STORAGE_DATABASE_URL",
+  "POSTGRES_URL",
+  "DATABASE_URL_UNPOOLED",
+  "STORAGE_DATABASE_URL_UNPOOLED",
+] as const;
+
 /** The connection string, or an error that says what to set and to what. */
 export function requireDatabaseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error(
-      "DATABASE_URL is not set. Point it at the application's PostgreSQL " +
-        "database; docs/postgres.md has the connection string to use for " +
-        "local development and for the server.",
-    );
+  for (const name of URL_VARIABLES) {
+    const value = process.env[name];
+    if (value) return value;
   }
-  return url;
+
+  throw new Error(
+    `No database connection string. Set DATABASE_URL (or one of ${URL_VARIABLES.slice(1).join(", ")}) ` +
+      "to the application's PostgreSQL database; docs/postgres.md has the " +
+      "connection strings for local development and for the server.",
+  );
 }
 
 /** Pool options for `DATABASE_URL`, shared by the app and the scripts. */

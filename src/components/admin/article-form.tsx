@@ -7,6 +7,7 @@ import { ExternalLink, Eye, ImageOff, Link2, Loader2, PencilLine, Save, Upload }
 
 import { type ArticleActionState, saveArticleAction } from "@/app/admin/news/actions";
 import { FieldShell } from "@/components/admin/field-shell";
+import { ImageUpload } from "@/components/admin/image-upload";
 import { ArticleBody } from "@/components/news/article-body";
 import { Dateline } from "@/components/news/dateline";
 import { Kicker } from "@/components/news/kicker";
@@ -601,9 +602,17 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
               </div>
             </div>
 
-            {/* A hosted image (Cloudinary) instead of an upload. Secondary to
-                the file picker, so it is sized like one of its controls rather
-                than like the headline fields above. */}
+            {/* A hosted image (Cloudinary) instead of an upload into
+                `news_media`. Secondary to the file picker, so it is sized like
+                one of its controls rather than like the headline fields above.
+
+                The button beside it fills this field for the editor: it posts
+                the picture to `/admin/upload`, which signs the upload
+                server-side and answers with the address. Worth having both —
+                pasting a URL is right when the picture is already hosted, and
+                uploading is right when it is on the editor's desktop and is
+                bigger than the 600KB a server action can carry (see
+                `cover-upload.ts`). */}
             <div className="flex flex-col gap-1.5">
               <Label
                 htmlFor="coverUrl"
@@ -629,6 +638,16 @@ export function ArticleForm({ article }: { article: NewsArticle | null }) {
                 aria-invalid={coverUrlError ? true : undefined}
                 aria-describedby={coverUrlError ? "coverUrl-error" : "coverUrl-hint"}
                 className="h-[38px] text-[0.8125rem] md:text-[0.8125rem]"
+              />
+              <ImageUpload
+                folder="news"
+                label="Cloudinary руу байршуулах"
+                onUploaded={(url) => {
+                  onCoverUrlChange(url);
+                  // The uploaded address is the cover now; an untouched
+                  // "remove" tick from before would otherwise outvote it.
+                  setCoverUrlTouched(true);
+                }}
               />
               {coverUrlError ? (
                 <p id="coverUrl-error" role="alert" className="text-[0.8125rem] text-destructive">

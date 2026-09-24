@@ -22,6 +22,13 @@
       "when": 1790178173394,
       "tag": "0001_complete_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790178173395,
+      "tag": "0002_loud_chimera",
+      "breakpoints": true
     }
   ]
 }

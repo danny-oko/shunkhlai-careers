@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, Inbox, LogOut, Plus, UserRound } from "lucide-react";
+import { ExternalLink, Inbox, LayoutTemplate, LogOut, Plus, UserRound } from "lucide-react";
 
 import { logoutAction } from "@/app/admin/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -54,6 +54,16 @@ export async function AdminBar() {
             <Link href="/admin/applications" aria-label="ERP-д хүрээгүй хүсэлтүүд">
               <Inbox aria-hidden />
               <span className="hidden sm:inline">Хүсэлтүүд</span>
+            </Link>
+          </Button>
+
+          {/* The second desk. The newsroom is the bar's home, so this is the
+              one link that says where else there is to go; the label is
+              dropped on a phone like the two beside it. */}
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/admin/content" aria-label="Хуудасны контент">
+              <LayoutTemplate aria-hidden />
+              <span className="hidden sm:inline">Хуудасны контент</span>
             </Link>
           </Button>
 

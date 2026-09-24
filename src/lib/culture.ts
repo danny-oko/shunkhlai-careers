@@ -218,23 +218,15 @@ export const clubs: Club[] = [
  */
 export const clubCount = clubs.length;
 
-export type AcademyFigure = {
-  value: string;
-  label: string;
-};
-
-/**
- * Shunkhlai Academy, 2026 - the figures from HR's own write-up.
- *
- * Kept as strings: these are read as shapes, not summed. "10,029" and "90.7%"
- * carry a separator and a unit that a number would have to be given back.
+/*
+ * `academyFigures` - Shunkhlai Academy's figures for the year - used to stand
+ * here. They are editable now, so they live where every editable section's
+ * fallback lives: `ABOUT_STATS_DEFAULT` in `src/lib/content/defaults.ts`,
+ * read through `getContent("about_stats")`. The values are unchanged, and are
+ * still strings for the same reason - these are read as shapes, not summed;
+ * "10,029" and "90.7%" carry a separator and a unit a number would have to be
+ * given back.
  */
-export const academyFigures: AcademyFigure[] = [
-  { value: "10,029", label: "сургалтын хамрагдалт" },
-  { value: "13,883", label: "цагийн сургалт" },
-  { value: "4,197", label: "зохион байгуулсан сургалт" },
-  { value: "90.7%", label: "сургалтын дараах үнэлгээ" },
-];
 
 export type DevelopmentShare = {
   /** The share itself, and the width the band is drawn at. */

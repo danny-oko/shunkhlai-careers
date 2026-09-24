@@ -1,5 +1,7 @@
 import type { Config } from "drizzle-kit";
 
+import { requireDatabaseUrl } from "./src/lib/db/url";
+
 // Generate SQL from src/lib/db/schema.ts:  bun run db:generate
 // Apply it to the database in DATABASE_URL:  bun run db:push
 //
@@ -11,6 +13,9 @@ export default {
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL ?? "",
+    // Same resolution the app uses, so a deployment whose connection string
+    // arrives under a hosting provider's own variable name can still be
+    // migrated without copying a live credential into a second variable.
+    url: requireDatabaseUrl(),
   },
 } satisfies Config;

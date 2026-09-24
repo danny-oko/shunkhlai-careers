@@ -9,6 +9,7 @@ import { SphereGallery } from "@/components/aboutUs/sphere-gallery";
 import { FiguresPanel } from "@/components/aboutUs/academy-principle";
 import { BrandLockup } from "@/components/brand/brand-logo";
 import { useScrollProgress } from "@/components/landing/use-scroll-progress";
+import type { AboutStatsContent } from "@/lib/content/schema";
 import { clubCount, clubs } from "@/lib/culture";
 
 const ID = "culture";
@@ -324,8 +325,12 @@ const TABS = [
  * The walls used to be three panels of prose behind the same track. They are
  * pictures now, so there is nothing left to measure or cross-fade, and what was
  * three components is the `wall` on each tab.
+ *
+ * `stats` is passed straight through to <FiguresPanel>: this section and
+ * everything under it is a client component, so the `about_stats` row is read
+ * by the page and handed down rather than queried here.
  */
-export function CultureSection() {
+export function CultureSection({ stats }: { stats: AboutStatsContent }) {
   const sectionRef = React.useRef<HTMLElement>(null);
   const { progress, isReduced } = useScrollProgress(sectionRef);
   const [active, setActive] = React.useState(0);
@@ -477,6 +482,7 @@ export function CultureSection() {
                 invisible it would swallow the hover on every tile behind it
                 and the wall would stop answering the pointer. */}
             <FiguresPanel
+              stats={stats}
               inert={figures < 0.02}
               style={{
                 ...rise(figures),
@@ -549,7 +555,7 @@ export function CultureSection() {
             simply the last thing in the section. */}
         {isReduced && (
           <div className="mt-section">
-            <FiguresPanel />
+            <FiguresPanel stats={stats} />
           </div>
         )}
       </div>

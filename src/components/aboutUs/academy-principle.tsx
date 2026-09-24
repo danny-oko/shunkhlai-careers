@@ -1,10 +1,7 @@
 import * as React from "react";
 
-import {
-  academyFigures,
-  developmentShares,
-  developmentSum,
-} from "@/lib/culture";
+import type { AboutStatsContent } from "@/lib/content/schema";
+import { developmentShares, developmentSum } from "@/lib/culture";
 import { cn } from "@/lib/utils";
 
 /**
@@ -190,12 +187,20 @@ export function PrinciplePanel({
  * this lands at the end of <CultureSection>, on whatever ground the theme has
  * given that section, and `--foreground` is the only white that is also black
  * when the page is.
+ *
+ * The heading and the four figures are the `about_stats` row of
+ * `site_content`, handed down from `/about` through <CultureSection>. They
+ * arrive as props rather than being read here because everything from
+ * <CultureSection> down is a client component - the wall turns on scroll -
+ * and a client component cannot query the database.
  */
 export function FiguresPanel({
+  stats,
   className,
   style,
   inert,
 }: {
+  stats: AboutStatsContent;
   className?: string;
   style?: React.CSSProperties;
   inert?: boolean;
@@ -211,11 +216,11 @@ export function FiguresPanel({
       </p>
 
       <h2 className="mt-block type-eyebrow font-medium tracking-[0.14em] text-muted-foreground uppercase">
-        Хөгжил тоон үзүүлэлтээр · 2026
+        {stats.heading}
       </h2>
 
       <dl className="mt-7 grid grid-cols-2 gap-x-8 gap-y-7 lg:grid-cols-4">
-        {academyFigures.map((figure) => (
+        {stats.items.map((figure) => (
           <div key={figure.label}>
             <dt className="type-figure font-semibold tracking-[-0.04em] tabular-nums">
               {figure.value}

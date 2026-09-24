@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { SiteLoader } from "@/components/landing/site-loader";
 import { HeroStage } from "@/components/landing/hero-stage";
 import { HeroJourney } from "@/components/landing/hero-journey";
+import { getContent } from "@/lib/content/service";
 import { getFilterData, listJobsSafe } from "@/lib/jobs";
 
 /**
@@ -11,6 +12,11 @@ import { getFilterData, listJobsSafe } from "@/lib/jobs";
  * same list forever. Five minutes: fresh enough for a careers site, cheap
  * enough that the recruitment API is not hit on every visit.
  * (Must stay a literal — the value has to be statically analysable.)
+ *
+ * The hero copy is read on the same schedule, and does not wait five minutes
+ * for an edit: saving it calls `revalidatePath("/")`, which drops this window
+ * so the next request renders the new wording. See
+ * `src/app/admin/content/actions.ts`.
  */
 export const revalidate = 300;
 
@@ -28,7 +34,13 @@ export const metadata: Metadata = {
 };
 
 export default async function LandingPage() {
-  const [jobs, filters] = await Promise.all([listJobsSafe(), getFilterData()]);
+  // `getContent` never throws and never answers empty: an unwritten row or an
+  // unreachable database renders the hero this page shipped with.
+  const [jobs, filters, hero] = await Promise.all([
+    listJobsSafe(),
+    getFilterData(),
+    getContent("hero"),
+  ]);
   // Only the adverts taking applications, the same count the careers page
   // shows: the list also carries postings already in or past selection.
   const roleCount = jobs.filter((job) => job.isOpen).length;
@@ -43,7 +55,7 @@ export default async function LandingPage() {
   return (
     <main className="flex-1">
       <SiteLoader provinces={provinces} />
-      <HeroStage roleCount={roleCount} />
+      <HeroStage hero={hero} roleCount={roleCount} />
       <HeroJourney />
     </main>
   );

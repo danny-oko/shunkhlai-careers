@@ -3,6 +3,7 @@ import { HistoryTimeline } from "@/components/aboutUs/history-timeline";
 import { StatementBands } from "@/components/aboutUs/statement-bands";
 import { CultureSection } from "@/components/aboutUs/culture-section";
 import { LifeGallery } from "@/components/aboutUs/life-gallery";
+import { getContent } from "@/lib/content/service";
 
 export const metadata: Metadata = {
   title: "Бидний тухай",
@@ -17,7 +18,18 @@ export const metadata: Metadata = {
   },
 };
 
-export default function AboutPage() {
+/**
+ * The Academy's figures are a row in `site_content` now, so this page reads
+ * the database on every render rather than being baked at build: an admin
+ * saving them sees the change on the next load. The read itself cannot fail
+ * the page — `getContent` answers with the figures the page shipped with when
+ * the database is unreachable.
+ */
+export const dynamic = "force-dynamic";
+
+export default async function AboutPage() {
+  const stats = await getContent("about_stats");
+
   return (
     <main className="flex-1">
       {/* The page opens on a pinned section rather than a heading, as the
@@ -33,7 +45,7 @@ export default function AboutPage() {
       {/* Closes on itself: the wall turns, the pictures gather into the
           company's mark, and the Academy's figures for the year come up
           behind it. */}
-      <CultureSection />
+      <CultureSection stats={stats} />
       <LifeGallery />
     </main>
   );
