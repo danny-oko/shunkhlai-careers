@@ -14,27 +14,47 @@ import type { NewsArticle, NewsCategory, NewsStatus } from "./types";
  *
  * `src/lib/jobs/local.ts` is the precedent: a server-side read goes straight
  * to the source rather than back out through HTTP, because a render that
- * happens before the server is listening cannot fetch from itself. Everything
- * here is `async` even though nothing awaits yet — that is the seam. When the
- * newsroom moves behind a real API or a database, these seven functions change
- * and no page does.
+ * happens before the server is listening cannot fetch from itself.
+ *
+ * The store is Cloudflare D1 over HTTP, so any read can fail — the network,
+ * an expired token, a missing env var. The public reads below absorb that and
+ * answer "nothing": a reader then sees the newsroom's own empty state (or its
+ * 404) instead of a 500. The admin reads do not; the desk has to tell the
+ * editor that the database is unreachable, not pretend the desk is empty.
  *
  * `server-only` is the guard that keeps the store out of a client bundle: the
- * store reads the filesystem, and an accidental `"use client"` above an import
+ * store holds the D1 token, and an accidental `"use client"` above an import
  * of it would be a build error here rather than a mystery at runtime.
  */
+
+const EMPTY_COUNTS: Record<NewsCategory, number> = {
+  company: 0,
+  industry: 0,
+  society: 0,
+  people: 0,
+};
+
+/** Runs a public read, falling back to `fallback` if the database is down. */
+async function orElse<T>(read: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    console.error("[news] D1 read failed:", error instanceof Error ? error.message : error);
+    return fallback;
+  }
+}
 
 export async function getPublishedArticles(query: {
   category?: NewsCategory | null;
   search?: string;
   limit?: number;
 } = {}): Promise<NewsArticle[]> {
-  return listArticles({ ...query, status: "published" });
+  return orElse(() => listArticles({ ...query, status: "published" }), []);
 }
 
 /** Published only — a draft's URL must 404 even for someone who guesses it. */
 export async function getArticle(slug: string): Promise<NewsArticle | null> {
-  const article = getArticleBySlug(slug);
+  const article = await orElse(() => getArticleBySlug(slug), null);
   return article?.status === "published" ? article : null;
 }
 
@@ -47,7 +67,7 @@ export async function getArticle(slug: string): Promise<NewsArticle | null> {
 export async function getAdjacent(
   slug: string,
 ): Promise<{ previous: NewsArticle | null; next: NewsArticle | null }> {
-  const published = listArticles({ status: "published" });
+  const published = await orElse(() => listArticles({ status: "published" }), []);
   const index = published.findIndex((article) => article.slug === slug);
   if (index === -1) return { previous: null, next: null };
 
@@ -58,7 +78,7 @@ export async function getAdjacent(
 }
 
 export async function getCategoryCounts(): Promise<Record<NewsCategory, number>> {
-  return countByCategory("published");
+  return orElse(() => countByCategory("published"), { ...EMPTY_COUNTS });
 }
 
 /**
@@ -73,13 +93,13 @@ export async function getLatestForRelated(
   category: NewsCategory,
   limit = 3,
 ): Promise<NewsArticle[]> {
-  const sameDesk = listArticles({ status: "published", category }).filter(
-    (article) => article.slug !== slug,
-  );
+  const sameDesk = (
+    await orElse(() => listArticles({ status: "published", category }), [])
+  ).filter((article) => article.slug !== slug);
   if (sameDesk.length >= limit) return sameDesk.slice(0, limit);
 
   const seen = new Set([slug, ...sameDesk.map((article) => article.slug)]);
-  const filler = listArticles({ status: "published" }).filter(
+  const filler = (await orElse(() => listArticles({ status: "published" }), [])).filter(
     (article) => !seen.has(article.slug),
   );
 
@@ -87,6 +107,8 @@ export async function getLatestForRelated(
 }
 
 /* --- admin reads (behind requireAdmin) ---------------------------------- */
+
+/* These throw on a D1 failure; the admin pages catch and say so in Mongolian. */
 
 export async function getAdminArticles(
   query: { status?: NewsStatus | "all"; search?: string } = {},

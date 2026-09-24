@@ -5,6 +5,9 @@ import {
   bodyExcerpt,
   categoryLabel,
   coverUrl,
+  coverUrlKey,
+  isOptimizableCover,
+  isUrlCoverKey,
   formatNewsDate,
   formatNewsDateShort,
   isNewsCategory,
@@ -214,5 +217,61 @@ describe("coverUrl", () => {
     expect(coverUrl("seed:brand/mock-03.jpg")).toBe(
       "/api/news/media/seed%3Abrand%2Fmock-03.jpg",
     );
+  });
+});
+
+describe("coverUrl — hosted covers", () => {
+  const CLOUDINARY = "https://res.cloudinary.com/doxmbmqjm/image/upload/v1/festival.jpg";
+
+  it("returns an https URL unchanged instead of routing it through the media route", () => {
+    expect(coverUrl(CLOUDINARY)).toBe(CLOUDINARY);
+    expect(coverUrl("https://images.example.org/a/b.webp")).toBe(
+      "https://images.example.org/a/b.webp",
+    );
+  });
+
+  it("refuses an address that is not https, rather than treating it as a media key", () => {
+    // Each of these must come back null — not "/api/news/media/http%3A…",
+    // which would ask the store to look up a URL as if it were an id.
+    for (const key of [
+      "http://res.cloudinary.com/x.jpg",
+      "javascript:alert(1)",
+      "data:image/png;base64,AAAA",
+      "ftp://example.org/x.jpg",
+    ]) {
+      expect(coverUrl(key), key).toBe(null);
+    }
+  });
+
+  it("still sends store keys and seed keys to the media route", () => {
+    expect(isUrlCoverKey("med_aaaabbbbcccc")).toBe(false);
+    expect(isUrlCoverKey("seed:brand/mock-03.jpg")).toBe(false);
+    expect(isUrlCoverKey(CLOUDINARY)).toBe(true);
+    expect(isUrlCoverKey(null)).toBe(false);
+  });
+});
+
+describe("coverUrlKey", () => {
+  it("accepts absolute https only", () => {
+    expect(coverUrlKey("  https://res.cloudinary.com/a/b.jpg ")).toBe(
+      "https://res.cloudinary.com/a/b.jpg",
+    );
+    expect(coverUrlKey("/brand/logo-mark.png")).toBe(null);
+    expect(coverUrlKey("http://res.cloudinary.com/a/b.jpg")).toBe(null);
+    expect(coverUrlKey("res.cloudinary.com/a/b.jpg")).toBe(null);
+    expect(coverUrlKey("")).toBe(null);
+    expect(coverUrlKey(42)).toBe(null);
+  });
+});
+
+describe("isOptimizableCover", () => {
+  it("optimises site paths and Cloudinary, and passes any other host through", () => {
+    expect(isOptimizableCover("/api/news/media/med_aaaabbbbcccc")).toBe(true);
+    expect(isOptimizableCover("https://res.cloudinary.com/doxmbmqjm/image/upload/x.jpg")).toBe(
+      true,
+    );
+    // Outside `images.remotePatterns`: the optimiser would 400 these.
+    expect(isOptimizableCover("https://images.example.org/x.jpg")).toBe(false);
+    expect(isOptimizableCover("https://res.cloudinary.com/x.jpg?v=2")).toBe(false);
   });
 });

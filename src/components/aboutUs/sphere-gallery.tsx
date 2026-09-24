@@ -128,6 +128,45 @@ const LOGO_TILE = 1.8;
 const LOGO_MIN = 116;
 
 const PERSPECTIVE = 1100;
+
+/**
+ * How much bigger than its own box the stage draws a tile, at the most.
+ *
+ * `sizes` is the one thing on an <Image> that has to be told the truth, and
+ * on this wall the truth is not the box: a tile at the front of the turn sits
+ * a whole radius nearer the reader than the middle of the sphere, and the
+ * perspective draws it at P/(P-r) - 1.89 with the numbers above, since the
+ * radius is held at very nearly half the perspective at every stage this is
+ * shown on. The hover takes it 8% further again, and the hover is exactly
+ * when someone is looking closely at one.
+ */
+const FRONT = 2.05;
+
+/**
+ * And how much of a photograph is cut away before it is drawn.
+ *
+ * The tiles are 3:4 portraits and almost every picture HR sent is landscape,
+ * so `object-cover` fills the box out of the middle of the frame and throws
+ * the sides away. The widest of them are 16:9: what covers a 3:4 box is
+ * (16/9)/(3/4) times as wide as the box, and the rest of the file is never
+ * seen. Sized for that worst case - a portrait original asks for more than it
+ * needs, but the optimiser never serves past a file's own width, and none of
+ * these is over 1200.
+ *
+ * The two together are what was missing. `sizes` said 160px, so the browser
+ * took a 384px file, and the front of the sphere drew it across 713 device
+ * pixels on a 2560 screen - a picture at half the resolution it was being
+ * shown at, which is what reads as a bad photograph rather than as a small
+ * one.
+ */
+const COVER = (16 / 9) / (3 / 4);
+
+/** What one tile asks the optimiser for, in CSS pixels. */
+const demand = (width: number, logo: boolean) =>
+  // A lockup is `object-contain` on its own plate, so nothing is cut off it
+  // and the box is the whole of it.
+  `${Math.round(width * FRONT * (logo ? 1 : COVER))}px`;
+
 /** How far it tips as it turns. Small: it is what swings tiles off the top. */
 const TIP = 0.06;
 
@@ -228,6 +267,18 @@ const picture = (item: WallItem, index: number) => photos(item)[0] ?? mock(index
 const PENDING = "Дэлгэрэнгүй мэдээлэл удахгүй нэмэгдэнэ.";
 
 /**
+ * The dialog's picture column.
+ *
+ * `sm:max-w-md` is 28rem, and above 1440 the page scales its own root with the
+ * window - so on a 2560 screen that column is nearer 800px than 448. A rem
+ * here would not catch it: lengths in `sizes` resolve against the browser's
+ * initial font size, as they do in a media query, not against the root the
+ * page has set.
+ */
+const DIALOG_SIZES =
+  "(max-width: 640px) 100vw, (min-width: 1440px) 900px, 448px";
+
+/**
  * Light in both themes: the lockups are drawn for a white ground.
  *
  * With the edge, which is not decoration — the page this sits on is white too,
@@ -244,10 +295,10 @@ const PLATE = "bg-white ring-1 ring-black/10";
  * taller than wide and keeps the half-width drop the first two walls were
  * built with.
  */
-const box = (item: WallItem, index: number, tile: number) => {
+const box = (item: WallItem, index: number, tile: number, unit: number) => {
   const vary = VARY[index % VARY.length];
   const width = Math.round(
-    vary * (item.logo ? Math.max(tile * LOGO_TILE, LOGO_MIN) : tile),
+    vary * (item.logo ? Math.max(tile * LOGO_TILE, LOGO_MIN * unit) : tile),
   );
   return {
     width,
@@ -478,18 +529,18 @@ function Details({
                 <Visual
                   item={art}
                   index={index}
-                  sizes="(max-width: 640px) 100vw, 448px"
+                  sizes={DIALOG_SIZES}
                   pad="p-8"
                 />
               ) : shots.length > 1 ? (
                 <PhotoRun
                   shots={shots}
-                  sizes="(max-width: 640px) 100vw, 448px"
+                  sizes={DIALOG_SIZES}
                 />
               ) : (
                 <Photo
                   src={shots[0] ?? mock(index)}
-                  sizes="(max-width: 640px) 100vw, 448px"
+                  sizes={DIALOG_SIZES}
                 />
               )}
             </div>
@@ -562,7 +613,15 @@ export function SphereGallery({
     [items.length],
   );
   const [opened, setOpened] = React.useState<number | null>(null);
-  const [stage, setStage] = React.useState({ w: 0, h: 0 });
+  // The stage's box, and the unit the design is drawn in.
+  //
+  // Every floor and ceiling below is a pixel figure taken against a 16px root,
+  // and above 1440 the page scales that root with the window (see the block at
+  // the top of globals.css). Measured here as a ratio, so a 2560 or a 4K screen
+  // gets a sphere and tiles the same share of the window a 1440 one gets rather
+  // than the same number of pixels, which is what left the wall reading as
+  // confetti on a big monitor.
+  const [stage, setStage] = React.useState({ w: 0, h: 0, unit: 1 });
   const turn = React.useRef({ shown: 0, target: 0 });
 
   // The sphere is sized off the box it is given, so it is right on a phone and
@@ -573,7 +632,12 @@ export function SphereGallery({
 
     const watch = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      setStage({ w: width, h: height });
+      const root = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      setStage({
+        w: width,
+        h: height,
+        unit: Number.isFinite(root) && root > 0 ? root / 16 : 1,
+      });
     });
     watch.observe(box);
     return () => watch.disconnect();
@@ -582,15 +646,22 @@ export function SphereGallery({
   const hold = (value: number, [low, high]: readonly [number, number]) =>
     Math.min(Math.max(value, low), high);
 
+  const scaled = React.useCallback(
+    ([low, high]: readonly [number, number]) =>
+      [low * stage.unit, high * stage.unit] as const,
+    [stage.unit],
+  );
+
   const radius = React.useMemo(
     () => ({
-      x: hold(stage.w * SPREAD.x, BOUNDS.x),
-      y: hold(stage.h * SPREAD.y, BOUNDS.y),
-      z: hold(stage.w * SPREAD.z, BOUNDS.z),
+      x: hold(stage.w * SPREAD.x, scaled(BOUNDS.x)),
+      y: hold(stage.h * SPREAD.y, scaled(BOUNDS.y)),
+      z: hold(stage.w * SPREAD.z, scaled(BOUNDS.z)),
     }),
-    [stage.w, stage.h],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stage.w, stage.h, stage.unit],
   );
-  const tile = Math.max(radius.x * TILE, TILE_MIN);
+  const tile = Math.max(radius.x * TILE, TILE_MIN * stage.unit);
 
   // Read by the frame loop, so holding a tile does not restart it: the loop
   // closes over this ref once and checks it sixty times a second.
@@ -710,10 +781,14 @@ export function SphereGallery({
                 frame(item),
               )}
             >
+              {/* A column of this grid is 45vw on a phone and 22vw from `sm`,
+                  and the same 3:4 crop applies here as on the sphere - so
+                  what a tile has to supply is COVER times that. There is no
+                  perspective on this one, which is the whole difference. */}
               <Visual
                 item={item}
                 index={index}
-                sizes="(max-width: 640px) 45vw, 22vw"
+                sizes="(max-width: 640px) 100vw, 52vw"
                 pad="p-[6%]"
               />
             </span>
@@ -747,7 +822,7 @@ export function SphereGallery({
         aria-hidden
         className={cn("relative", className)}
         style={{
-          perspective: `${PERSPECTIVE}px`,
+          perspective: `${PERSPECTIVE * stage.unit}px`,
           transformStyle: "preserve-3d",
           // Once the wall is on its way in it is no longer something to point
           // at: a tile caught under the pointer would stop the gathering dead,
@@ -756,53 +831,63 @@ export function SphereGallery({
           pointerEvents: gather > 0.02 ? "none" : undefined,
         }}
       >
-        {items.map((item, index) => (
-          <div
-            key={item.title}
-            onPointerEnter={() => {
-              held.current = true;
-            }}
-            onPointerLeave={() => {
-              held.current = opened !== null;
-            }}
-            onClick={() => setOpened(index)}
-            className="group absolute top-1/2 left-1/2 cursor-pointer will-change-transform"
-            style={box(item, index, tile)}
-          >
-            {/* The lift is on the inner box: the outer one's transform is
-                rewritten every frame by the loop and would swallow it. */}
+        {items.map((item, index) => {
+          const shape = box(item, index, tile, stage.unit);
+
+          return (
             <div
-              className={cn(
-                "relative overflow-hidden rounded-[3px] shadow-[0_10px_30px_-14px_rgb(0_0_0/0.4)] transition-[scale,box-shadow] duration-300 ease-out group-hover:scale-[1.08] group-hover:shadow-[0_22px_50px_-20px_rgb(0_0_0/0.5)]",
-                frame(item),
-              )}
+              key={item.title}
+              onPointerEnter={() => {
+                held.current = true;
+              }}
+              onPointerLeave={() => {
+                held.current = opened !== null;
+              }}
+              onClick={() => setOpened(index)}
+              className="group absolute top-1/2 left-1/2 cursor-pointer will-change-transform"
+              style={shape}
             >
-              <Visual
-                item={item}
-                index={index}
-                sizes={item.logo ? "300px" : "160px"}
-                pad="p-[6%]"
-              />
+              {/* The lift is on the inner box: the outer one's transform is
+                  rewritten every frame by the loop and would swallow it. */}
+              <div
+                className={cn(
+                  "relative overflow-hidden rounded-[3px] shadow-[0_10px_30px_-14px_rgb(0_0_0/0.4)] transition-[scale,box-shadow] duration-300 ease-out group-hover:scale-[1.08] group-hover:shadow-[0_22px_50px_-20px_rgb(0_0_0/0.5)]",
+                  frame(item),
+                )}
+              >
+                {/* Held back until the stage has been measured, which is the
+                    frame after this one. Drawn before that, every tile is at
+                    the floor width and asks for a file it will never show,
+                    and the right one is fetched a moment later anyway. */}
+                {stage.w > 0 && (
+                  <Visual
+                    item={item}
+                    index={index}
+                    sizes={demand(shape.width, !!item.logo)}
+                    pad="p-[6%]"
+                  />
+                )}
+              </div>
+
+              {/* Under its own picture rather than at the foot of the stage:
+                  named where it is, the caption belongs to the tile the eye is
+                  already on. `top-full` keeps it out of the tile's own box, so
+                  it cannot push the picture off its point on the sphere.
+
+                  Set in pixels and small, not on the type scale. The caption is
+                  inside the tile, so the stage's perspective grows it with
+                  everything else: a tile at the front of the sphere is drawn at
+                  about twice its size, and `type-kicker` - 13px on a desktop -
+                  arrived there at 25, which is the size of a heading. Nine
+                  lands at about eighteen where it is read, and the scale's own
+                  floor could not go low enough to allow for a doubling it knows
+                  nothing about. */}
+              <p className="absolute inset-x-[-3rem] top-full mt-1.5 text-center text-[9px] leading-snug tracking-[0.03em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                {item.title}
+              </p>
             </div>
-
-            {/* Under its own picture rather than at the foot of the stage:
-                named where it is, the caption belongs to the tile the eye is
-                already on. `top-full` keeps it out of the tile's own box, so
-                it cannot push the picture off its point on the sphere.
-
-                Set in pixels and small, not on the type scale. The caption is
-                inside the tile, so the stage's perspective grows it with
-                everything else: a tile at the front of the sphere is drawn at
-                about twice its size, and `type-kicker` - 13px on a desktop -
-                arrived there at 25, which is the size of a heading. Nine
-                lands at about eighteen where it is read, and the scale's own
-                floor could not go low enough to allow for a doubling it knows
-                nothing about. */}
-            <p className="absolute inset-x-[-3rem] top-full mt-1.5 text-center text-[9px] leading-snug tracking-[0.03em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              {item.title}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {details}

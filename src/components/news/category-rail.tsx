@@ -14,6 +14,18 @@ import { cn } from "@/lib/utils";
  * Plain links, so the filter is in the URL: a reader can bookmark a desk, and
  * the page stays renderable without JavaScript.
  */
+/**
+ * Desks kept off the line.
+ *
+ * Nothing is removed from the newsroom's own model by this: a story already
+ * filed under one of these is still published, still counted in Бүгд and
+ * still carries its own kicker - it simply has no section of its own across
+ * the top, and the editor can still file to it. Taking the desk out of
+ * `NEWS_CATEGORIES` instead would make every stored story under it fail to
+ * read back.
+ */
+const OFF_THE_LINE: ReadonlyArray<NewsCategory> = ["society"];
+
 export function CategoryRail({
   active,
   counts,
@@ -25,7 +37,9 @@ export function CategoryRail({
 }) {
   const items = [
     { href: "/news", label: "Бүгд", count: total, isActive: active === null },
-    ...NEWS_CATEGORIES.map((category) => ({
+    ...NEWS_CATEGORIES.filter(
+      (category) => !OFF_THE_LINE.includes(category.value),
+    ).map((category) => ({
       href: `/news?category=${category.value}`,
       label: category.label,
       count: counts[category.value],
@@ -38,7 +52,7 @@ export function CategoryRail({
       aria-label="Мэдээний бүлэг"
       className="relative border-b border-border bg-background"
     >
-      {/* Five sections fit on one line above `lg` and do not below it, so the
+      {/* The sections fit on one line above `lg` and do not below it, so the
           rail scrolls sideways rather than wrapping to two rows — two rows of
           sections reads as a menu rather than as a rail. The fade is the only
           thing that says it scrolls, since the scrollbar is hidden; it is

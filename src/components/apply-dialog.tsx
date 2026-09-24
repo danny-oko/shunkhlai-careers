@@ -39,7 +39,7 @@ export const ApplyDialog = ({
   const body = apply.isSent ? (
     <SentPanel job={job} onClose={() => handleOpenChange(false)} />
   ) : status !== "authenticated" ? (
-    <SignInPanel />
+    <SignInPanel onClose={() => handleOpenChange(false)} />
   ) : blocked ? (
     <IdentityPanel />
   ) : (

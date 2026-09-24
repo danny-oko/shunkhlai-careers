@@ -8,7 +8,7 @@ import { CategoryRail } from "@/components/news/category-rail";
 import { LeadStory } from "@/components/news/lead-story";
 import { Masthead } from "@/components/news/masthead";
 import { SectionHead } from "@/components/news/section-head";
-import { StoryGrid } from "@/components/news/story-grid";
+import { StoryRail } from "@/components/news/story-rail";
 import { getCategoryCounts, getPublishedArticles } from "@/lib/news/service";
 import { categoryLabel, isNewsCategory } from "@/lib/news/types";
 
@@ -21,10 +21,11 @@ export const metadata: Metadata = {
 /**
  * The front page is always current.
  *
- * Two reasons it cannot be cached: the store is in this process, so a cached
- * render would keep showing the front page as it was before the editor's last
- * save; and the masthead prints today's date, which a cached page would freeze
- * on the day it was built.
+ * Two reasons it cannot be cached: the stories live in D1, which every host
+ * writes to — an edit made from another host cannot revalidate this one's
+ * cache, so only a per-request read is guaranteed to show it; and the masthead
+ * prints today's date, which a cached page would freeze on the day it was
+ * built.
  */
 export const dynamic = "force-dynamic";
 
@@ -72,7 +73,7 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
         />
       </Rise>
 
-      <div className="mx-auto max-w-6xl px-6 pb-20 lg:px-10">
+      <div className="mx-auto max-w-6xl px-6 lg:px-10">
         {lead ? (
           <>
             <section aria-labelledby="lead-heading" className="py-9 sm:py-12">
@@ -84,8 +85,16 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
               </Rise>
             </section>
 
+            {/* No padding under the rail when it is the last thing on the page:
+                it is a band that runs the width of the page, and the space it
+                used to leave under itself read as the page having ended early.
+                It sits on the footer's rule the way the masthead sits under
+                the header. */}
             {columns.length > 0 && (
-              <section aria-labelledby="more-heading" className="pb-12">
+              <section
+                aria-labelledby="more-heading"
+                className={briefs.length > 0 ? "pb-12" : undefined}
+              >
                 <SectionHead
                   title={deskName ?? "Бусад мэдээ"}
                   note={`${columns.length + briefs.length} мэдээ`}
@@ -94,12 +103,12 @@ export default async function NewsPage({ searchParams }: PageProps<"/news">) {
                 <h2 id="more-heading" className="sr-only">
                   Бусад мэдээ
                 </h2>
-                <StoryGrid articles={columns} />
+                <StoryRail articles={columns} />
               </section>
             )}
 
             {briefs.length > 0 && (
-              <section aria-labelledby="archive-heading">
+              <section aria-labelledby="archive-heading" className="pb-16">
                 <SectionHead title="Архив" className="mb-1" />
                 <h2 id="archive-heading" className="sr-only">
                   Архив

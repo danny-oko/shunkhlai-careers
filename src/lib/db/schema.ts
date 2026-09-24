@@ -13,6 +13,8 @@ import {
   sqliteTable,
   text,
   integer,
+  index,
+  primaryKey,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
@@ -147,3 +149,5 @@ export type ApplicationLog = typeof applicationLog.$inferSelect;
 export type ApplicantProfileRow = typeof applicantProfile.$inferSelect;
 export type ApplicantAccountRow = typeof applicantAccount.$inferSelect;
 export type ApplicantFileRow = typeof applicantFile.$inferSelect;
+export type NewsArticleRow = typeof newsArticle.$inferSelect;
+export type NewsMediaRow = typeof newsMedia.$inferSelect;

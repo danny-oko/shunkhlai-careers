@@ -111,7 +111,14 @@ function Block({
     case "paragraph":
       if (!hasText(block.content)) return null;
       return (
-        <p className={dropCap ? "news-dropcap" : inItem ? "mt-2 first:mt-0" : "mt-5"}>
+        // Both edges flush. The copy runs the full width of the page now, so
+        // a line holds enough words for the spaces to absorb the difference
+        // without the rivers a narrow measure would open up. Headings and
+        // pull quotes are set elsewhere and stay ragged: they are display
+        // type, and a stretched two-line heading reads as a mistake.
+        <p
+          className={`text-justify ${dropCap ? "news-dropcap" : inItem ? "mt-2 first:mt-0" : "mt-5"}`}
+        >
           <Inlines content={block.content} />
         </p>
       );
@@ -248,7 +255,10 @@ export function ArticleBody({ doc }: { doc: RichDoc }) {
   );
 
   return (
-    <div className="news-body news-measure mx-auto">
+    // The column the cover sets: the picture above runs the full width of
+    // the page's container, so the copy is given the same edges and the two
+    // end on the same line down both sides.
+    <div className="news-body">
       {doc.content.map((block, index) => (
         <Block key={index} block={block} dropCap={index === opening} inItem={false} />
       ))}

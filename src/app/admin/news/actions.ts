@@ -3,10 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { articleFieldErrors, articleFormSchema, coverFileError } from "@/lib/news/schema";
+import {
+  NEWS_DB_ERROR,
+  articleFieldErrors,
+  articleFormSchema,
+  chooseCover,
+  coverFileError,
+} from "@/lib/news/schema";
 import { requireAdmin } from "@/server/admin/guard";
 import {
   deleteArticle,
+  dropMedia,
   getArticleById,
   listArticles,
   putMedia,
@@ -20,6 +27,10 @@ import {
  * redirected an unauthenticated *navigation*, but a server action is a POST to
  * a route the client knows the id of, so it has to refuse on its own — a
  * function that trusted the proxy would be an unauthenticated write endpoint.
+ *
+ * Every write here lands in Cloudflare D1, which localhost and production
+ * share. A failure (network, token, missing env) is logged and turned into
+ * `NEWS_DB_ERROR` for the editor — or `?error=db` on the list — never a crash.
  */
 
 export type ArticleActionState = {
@@ -39,6 +50,7 @@ const FIELDS = [
   "author",
   "publishedAt",
   "coverAlt",
+  "coverUrl",
   "body",
   "status",
   "featured",
@@ -51,19 +63,52 @@ function readFields(formData: FormData): Record<string, string> {
   );
 }
 
-/** Clears the lead flag from every article but `exceptId`. */
-function demoteFeatured(exceptId: string | null): void {
-  const incumbents = listArticles({ status: "all" }).filter(
-    (row) => row.featured && row.id !== exceptId,
-  );
-  for (const other of incumbents) saveArticle({ ...other, featured: false });
+function logDbError(action: string, error: unknown): void {
+  console.error(`[admin/news] ${action} failed:`, error instanceof Error ? error.message : error);
 }
 
-/** Both the front page and the story's own URL move when an article changes. */
-function revalidateNews(slug?: string): void {
+/** Clears the lead flag from every article but `exceptId`. */
+async function demoteFeatured(exceptId: string | null): Promise<void> {
+  const incumbents = (await listArticles({ status: "all" })).filter(
+    (row) => row.featured && row.id !== exceptId,
+  );
+  for (const other of incumbents) await saveArticle({ ...other, featured: false });
+}
+
+/**
+ * Everything a changed article can show up on.
+ *
+ * The public pages and the desk are `force-dynamic` and read D1 on every
+ * request, so there is no server-side render cache for these calls to clear —
+ * that is what makes an edit from *any* host (localhost writes the same rows
+ * production reads) show up on the next load. What `revalidatePath` still
+ * does from a server action is drop this browser's client router cache, so
+ * the editor who just saved and then navigates back to `/news` or the story
+ * sees the new version rather than the prefetched old one.
+ *
+ * Both slugs when a headline changed: the old URL now 404s and must not be
+ * served from a cache as if the story still lived there. The home page has no
+ * news block, so it is not listed.
+ */
+function revalidateNews(...slugs: Array<string | null | undefined>): void {
   revalidatePath("/news");
-  if (slug) revalidatePath(`/news/${slug}`);
+  for (const slug of new Set(slugs)) {
+    if (slug) revalidatePath(`/news/${slug}`);
+  }
   revalidatePath("/admin/news");
+}
+
+/**
+ * Best effort: the save already failed, and the editor's message says so. If
+ * D1 is down this fails too, and the chunks stay as an orphan — which is why
+ * it is logged and swallowed rather than allowed to replace the real error.
+ */
+async function discardUpload(key: string): Promise<void> {
+  try {
+    await dropMedia(key);
+  } catch (error) {
+    logDbError(`discard upload ${key}`, error);
+  }
 }
 
 export async function saveArticleAction(
@@ -84,72 +129,112 @@ export async function saveArticleAction(
   }
 
   const id = String(formData.get("id") ?? "").trim() || null;
-  if (id && !getArticleById(id)) {
-    return { message: "Мэдээ олдсонгүй.", values };
-  }
 
-  /**
-   * Three outcomes, and the difference matters to the store: a new file
-   * replaces the cover, a ticked "remove" clears it, and neither leaves the
-   * existing one alone. `coverKey` is therefore omitted rather than set to
-   * null in that last case.
-   */
   const cover = formData.get("cover");
-  let coverPatch: { coverKey?: string | null } = {};
-
-  if (cover instanceof File && cover.size > 0) {
-    const problem = coverFileError(cover);
+  const upload = cover instanceof File && cover.size > 0 ? cover : null;
+  if (upload) {
+    const problem = coverFileError(upload);
     if (problem) {
       return { message: "Хадгалж чадсангүй.", fieldErrors: { cover: problem }, values };
     }
-    const bytes = new Uint8Array(await cover.arrayBuffer());
-    coverPatch = { coverKey: putMedia(bytes, cover.type) };
-  } else if (parsed.data.removeCover) {
-    coverPatch = { coverKey: null };
   }
 
-  const { removeCover: _removeCover, ...fields } = parsed.data;
+  let slug: string;
+  let previousSlug: string | null = null;
+  // The key of a cover uploaded by *this* save, so a failure after the upload
+  // can take it back instead of leaving chunks no story points at.
+  let uploadedKey: string | null = null;
+  try {
+    const existing = id ? await getArticleById(id) : null;
+    if (id && !existing) {
+      return { message: "Мэдээ олдсонгүй.", values };
+    }
+    previousSlug = existing?.slug ?? null;
 
-  // There is one lead slot, so promoting from the editor has to demote the
-  // incumbent the same way the star in the list does. Done before the save so
-  // the article being saved is never one of the ones demoted.
-  if (fields.featured) demoteFeatured(id);
+    /**
+     * File, URL, "remove", or nothing — `chooseCover` owns the order. The
+     * difference matters to the store: a new key replaces the cover, `null`
+     * clears it, and leaving `coverKey` out keeps the existing one, so "keep"
+     * omits the key rather than setting it.
+     */
+    const choice = chooseCover({
+      hasUpload: Boolean(upload),
+      url: values.coverUrl,
+      remove: parsed.data.removeCover,
+      currentKey: existing?.coverKey ?? null,
+    });
+    if (choice.kind === "error") {
+      return {
+        message: "Хадгалж чадсангүй.",
+        fieldErrors: { coverUrl: choice.message },
+        values,
+      };
+    }
 
-  const article = saveArticle({
-    id,
-    ...fields,
-    ...coverPatch,
-  });
+    let coverPatch: { coverKey?: string | null } = {};
+    if (choice.kind === "upload" && upload) {
+      const bytes = new Uint8Array(await upload.arrayBuffer());
+      uploadedKey = await putMedia(bytes, upload.type);
+      coverPatch = { coverKey: uploadedKey };
+    } else if (choice.kind === "url") {
+      coverPatch = { coverKey: choice.key };
+    } else if (choice.kind === "remove") {
+      coverPatch = { coverKey: null };
+    }
 
-  revalidateNews(article.slug);
-  redirect(`/admin/news?saved=${encodeURIComponent(article.slug)}`);
+    const { removeCover: _removeCover, ...fields } = parsed.data;
+
+    // There is one lead slot, so promoting from the editor has to demote the
+    // incumbent the same way the star in the list does. Done before the save so
+    // the article being saved is never one of the ones demoted.
+    if (fields.featured) await demoteFeatured(id);
+
+    const article = await saveArticle({ id, ...fields, ...coverPatch });
+    slug = article.slug;
+  } catch (error) {
+    logDbError("save", error);
+    if (uploadedKey) await discardUpload(uploadedKey);
+    return { message: NEWS_DB_ERROR, values };
+  }
+
+  revalidateNews(slug, previousSlug);
+  redirect(`/admin/news?saved=${encodeURIComponent(slug)}`);
 }
 
 export async function deleteArticleAction(formData: FormData): Promise<void> {
   await requireAdmin();
 
   const id = String(formData.get("id") ?? "");
-  const article = getArticleById(id);
-  if (article) {
-    deleteArticle(id);
-    revalidateNews(article.slug);
+  let deleted: string | null = null;
+  try {
+    const article = await getArticleById(id);
+    if (article && (await deleteArticle(id))) deleted = article.slug;
+  } catch (error) {
+    logDbError("delete", error);
+    redirect("/admin/news?error=db");
   }
 
-  redirect(article ? "/admin/news?deleted=1" : "/admin/news");
+  if (deleted) revalidateNews(deleted);
+  redirect(deleted ? "/admin/news?deleted=1" : "/admin/news");
 }
 
 /** Publish or unpublish, from the list — the one edit worth doing in one click. */
 export async function setStatusAction(formData: FormData): Promise<void> {
   await requireAdmin();
 
-  const article = getArticleById(String(formData.get("id") ?? ""));
+  const id = String(formData.get("id") ?? "");
   const status = formData.get("status") === "published" ? "published" : "draft";
 
-  if (article) {
-    saveArticle({ ...article, status });
-    revalidateNews(article.slug);
+  let slug: string | null = null;
+  try {
+    const article = await getArticleById(id);
+    if (article) slug = (await saveArticle({ ...article, status })).slug;
+  } catch (error) {
+    logDbError("status", error);
+    redirect("/admin/news?error=db");
   }
 
+  if (slug) revalidateNews(slug);
   redirect("/admin/news");
 }
 
@@ -160,13 +245,21 @@ export async function setStatusAction(formData: FormData): Promise<void> {
 export async function setFeaturedAction(formData: FormData): Promise<void> {
   await requireAdmin();
 
-  const article = getArticleById(String(formData.get("id") ?? ""));
-  if (!article) redirect("/admin/news");
-
+  const id = String(formData.get("id") ?? "");
   const featured = formData.get("featured") === "on";
 
-  if (featured) demoteFeatured(article.id);
-  saveArticle({ ...article, featured });
-  revalidateNews(article.slug);
+  let slug: string | null = null;
+  try {
+    const article = await getArticleById(id);
+    if (article) {
+      if (featured) await demoteFeatured(article.id);
+      slug = (await saveArticle({ ...article, featured })).slug;
+    }
+  } catch (error) {
+    logDbError("featured", error);
+    redirect("/admin/news?error=db");
+  }
+
+  if (slug) revalidateNews(slug);
   redirect("/admin/news");
 }

@@ -34,6 +34,29 @@ const TONE = [
 ];
 
 /**
+ * How the panel draws itself as the scroll brings it up.
+ *
+ * The band is the policy's own proportion, so it is worth watching arrive:
+ * it is clipped from the left and uncovered over the first half of the
+ * panel's entrance, which reads as the seventy running out first and the
+ * twenty and the ten following it - the order the policy is written in.
+ *
+ * Each card then comes up behind the point the band has reached, so the
+ * number, its name and its paragraph arrive as the run passes them rather
+ * than all three at once. Under reduced motion the section hands this
+ * component a 1 and everything is simply drawn.
+ */
+const clamp = (value: number) => Math.min(Math.max(value, 0), 1);
+/** easeOutCubic: quick off the mark, settled well before the end. */
+const ease = (value: number) => 1 - Math.pow(1 - value, 3);
+
+/** The share of the entrance the band takes to draw itself. */
+const RUN = 0.55;
+/** Where each card starts coming up, and how long it takes. */
+const CARD_FROM = [0.26, 0.4, 0.54];
+const CARD_SPAN = 0.3;
+
+/**
  * Хөгжлийн 70/20/10 зарчим - the policy drawn at the size it claims.
  *
  * The band is one row split by the shares themselves - `flex-grow` off the
@@ -56,11 +79,16 @@ export function PrinciplePanel({
   className,
   style,
   inert,
+  progress = 1,
 }: {
   className?: string;
   style?: React.CSSProperties;
   inert?: boolean;
+  /** 0 while the panel is still off, 1 once it has fully arrived. */
+  progress?: number;
 }) {
+  const run = ease(clamp(progress / RUN));
+
   return (
     <div
       inert={inert}
@@ -74,7 +102,7 @@ export function PrinciplePanel({
           it arrives in is the company speaking, and a kicker above it was one
           line of scaffolding between the two. */}
       <h2 className="type-section font-semibold tracking-[-0.02em]">
-        Сургалт хөгжлийн зарчим 70/20/10
+        Сургалт хөгжлийн зарчим
       </h2>
       <p className="mt-5 hidden max-w-2xl type-lead text-ink-muted text-pretty md:block">
         Сургалт, хөгжлийн бодлого нь ажилтныг зөвхөн сургалтад хамруулах бус,
@@ -85,7 +113,16 @@ export function PrinciplePanel({
       {/* Decorative: every share it draws is printed as a number on the card
           under it, so there is nothing here for a reader who cannot see it to
           miss. */}
-      <div aria-hidden className="mt-8 flex h-2.5 gap-1.5 md:mt-10">
+      <div
+        aria-hidden
+        className="mt-8 flex h-2.5 gap-1.5 md:mt-10"
+        style={{
+          // Clipped, not scaled: the segments keep the widths the policy
+          // gives them and the band is uncovered over them, so what runs is
+          // the drawing of it rather than the proportion itself.
+          clipPath: `inset(0 ${((1 - run) * 100).toFixed(2)}% 0 0)`,
+        }}
+      >
         {developmentShares.map((share, index) => (
           <div
             key={share.share}
@@ -103,6 +140,17 @@ export function PrinciplePanel({
           <div
             key={share.share}
             className="flex flex-wrap items-baseline gap-x-4 md:block"
+            style={(() => {
+              const up = ease(
+                clamp(
+                  (progress - CARD_FROM[index % CARD_FROM.length]) / CARD_SPAN,
+                ),
+              );
+              return {
+                opacity: up,
+                transform: `translate3d(0, ${((1 - up) * 14).toFixed(2)}px, 0)`,
+              };
+            })()}
           >
             {/* `tabular-nums` for the same reason the landing figures take it:
                 three numbers read as one set only if the digits are the same

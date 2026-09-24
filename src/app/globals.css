@@ -1,3 +1,16 @@
+/* Clerk's stylesheet comes down from its CDN at runtime, and unlayered CSS
+   beats every layered rule - the trap `.news-body` documents at the foot of
+   this file. Naming a layer for it here is what lets the Tailwind utilities in
+   `src/lib/clerk/appearance.ts` reach the sign-in card at all.
+
+   The position in the order is the whole rule. Ahead of `base`, Tailwind's
+   preflight wins instead, and the card arrives with no padding, transparent
+   buttons and `currentColor` borders - preflight resets exactly those three.
+   Behind `utilities`, nothing in `elements` would apply. Between the two is
+   the only place it works. Clerk only puts its rules in this layer because
+   `appearance.ts` asks it to with `cssLayerName`; the two are one mechanism. */
+@layer theme, base, components, clerk, utilities;
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -127,6 +140,29 @@
   --fluid-display: clamp(2.125rem, 1.0833rem + 4.6296vw, 5.25rem);
   --fluid-section-space: clamp(3rem, 1.6667rem + 5.9259vw, 7rem);
   --fluid-block-space: clamp(2rem, 1.3333rem + 2.963vw, 4rem);
+}
+
+/* Above the window the scale was solved for, the page scales instead of
+   standing still.
+
+   Every step above is a clamp solved over 360 to 1440, so at 1440 they all
+   reach their ceiling and from there nothing grows again: on a 2880 window
+   the whole design sat at its 1440 size in the middle of twice the room,
+   which reads as a page that was stretched rather than one that was made
+   bigger. Scaling the root instead multiplies everything the design is
+   measured in - the ceilings of those clamps included, since they are rem -
+   so a wide window gets the same page it gets at 1440, drawn larger.
+
+   Capped at twice, which is 2880 and past any monitor this is read on.
+
+   Media queries are not affected: `rem` inside one resolves against the
+   browser's own initial 16px, not against this, so every breakpoint in the
+   project - Tailwind's own and the `matchMedia` strings in the pinned
+   sections - still falls at the width it always did. */
+@media (min-width: 90rem) {
+  :root {
+    font-size: min(calc(100vw / 90), 32px);
+  }
 }
 
 /* The roles, named after the job rather than the size. Each carries its own
@@ -777,10 +813,20 @@
   animation: brand-marquee var(--marquee-duration, 40s) linear infinite reverse;
 }
 
-/* Pause the rails on hover so a reader can actually read a quote. */
+/* Pause the rails on hover so a reader can actually read a quote - and on
+   focus, which is the same promise for anyone tabbing along one. */
 .brand-marquee-group:hover .brand-marquee,
-.brand-marquee-group:hover .brand-marquee-reverse {
+.brand-marquee-group:hover .brand-marquee-reverse,
+.brand-marquee-group:focus-within .brand-marquee,
+.brand-marquee-group:focus-within .brand-marquee-reverse {
   animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-marquee,
+  .brand-marquee-reverse {
+    animation: none !important;
+  }
 }
 
 /* The word that swaps inside the hero headline. */
@@ -1175,10 +1221,6 @@
   font-family: var(--app-font-sans);
   font-size: var(--fluid-copy);
   line-height: 1.6;
-}
-
-.news-measure {
-  max-width: 34em;
 }
 
 /* The opening capital. `initial-letter` is the property that actually sinks
