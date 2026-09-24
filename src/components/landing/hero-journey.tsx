@@ -13,14 +13,13 @@ import { SectionRule } from "@/components/brand/section-rule";
  * How much of the runway the sentence simply holds for, filling the screen,
  * before anything begins to move.
  *
- * Without it the sentence started dissolving on the first notch of the wheel,
- * so the one thing on the page that is meant to be read was leaving before it
- * had been. 70svh of the 490svh runway — long enough to read the sentence on,
- * short of the screen and a bit that first held it, which read as the page
- * having stopped responding. The section carries exactly this much extra
- * length, so everything after the hold keeps the length it was tuned at.
+ * Kept to a sliver: at 70svh the sentence needed about three swipes to leave,
+ * which read as the page having stopped responding, so it now holds for a
+ * fraction of one and is gone by the end of the first. The section carries
+ * exactly this much extra length, so everything after the hold keeps the
+ * length it was tuned at.
  */
-const HOLD = 70 / 490;
+const HOLD = 10 / 430;
 
 /**
  * The rest of the runway, in shares of its own length. The three overlap on
@@ -31,9 +30,10 @@ const HOLD = 70 / 490;
  * The shares are small because the section is long: the opening takes about a
  * screen of scroll and everything after it is the drive. They were tuned
  * against a 320svh section, and lengthening that stretched the opening along
- * with the run — which left the ink band empty far too long.
+ * with the run — which left the ink band empty far too long. The sentence's
+ * share is the smallest: it leaves within about 30svh, one swipe.
  */
-const STATEMENT_OUT = [0, 0.16] as const;
+const STATEMENT_OUT = [0, 0.07] as const;
 const TANKER_IN = [0.05, 0.22] as const;
 const INSTRUMENTS_IN = [0.15, 0.26] as const;
 
@@ -89,7 +89,7 @@ export function HeroJourney() {
   }, []);
 
   // Everything is driven off the runway past the hold, so the scene is exactly
-  // as it opened until the reader has had the sentence for a screen or so.
+  // as it opened for the brief hold at the top.
   const run = clamp((progress - HOLD) / (1 - HOLD));
 
   const enter = isReduced ? 1 : easeOut(ramp(run, TANKER_IN));
@@ -104,7 +104,7 @@ export function HeroJourney() {
     <section
       ref={sectionRef}
       data-statement-shown={isShown}
-      className={cn("relative", isReduced ? "h-auto" : "h-[590svh]")}
+      className={cn("relative", isReduced ? "h-auto" : "h-[530svh]")}
     >
       <SectionRule />
       <h1 className="sr-only">Хүчирхэг монголын хөгжлийн хүрд</h1>

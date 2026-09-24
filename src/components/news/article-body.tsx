@@ -1,6 +1,13 @@
 import * as React from "react";
 
-import type { BlockNode, InlineNode, ListItemNode, Mark, RichDoc } from "@/lib/news/shared/rich-text";
+import type {
+  BlockNode,
+  ImageAttrs,
+  InlineNode,
+  ListItemNode,
+  Mark,
+  RichDoc,
+} from "@/lib/news/shared/rich-text";
 
 /**
  * An article body, node by node.
@@ -204,35 +211,105 @@ function Block({
       );
     }
 
-    case "image": {
-      const { src, alt, title, width, height } = block.attrs;
-      return (
-        <figure className="my-8">
-          {/* A plain <img>: the source may be any https host the editor chose,
-              and next/image refuses hosts that are not in next.config. The
-              source has already passed `safeImageSrc`. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={src}
-            alt={alt}
-            width={width ?? undefined}
-            height={height ?? undefined}
-            loading="lazy"
-            decoding="async"
-            className="h-auto max-w-full border border-border"
-          />
-          {title && (
-            <figcaption className="mt-2 font-sans text-[0.8125rem] leading-snug text-muted-foreground">
-              {title}
-            </figcaption>
-          )}
-        </figure>
-      );
-    }
+    case "image":
+      return <Figure image={block.attrs} className="my-8" />;
 
     case "horizontalRule":
       return <hr className="my-10 h-px border-0 bg-[var(--rule-strong)]" />;
   }
+}
+
+/**
+ * One picture. Alone it runs the width of the column; as a tile in a gallery
+ * it is cropped to the shape the grid gives it, so a run of pictures filed at
+ * different sizes lines up as one block rather than a ragged stack.
+ */
+function Figure({
+  image,
+  tile,
+  className,
+}: {
+  image: ImageAttrs;
+  /** The tile's aspect ratio; left out, the picture keeps its own. */
+  tile?: string;
+  className?: string;
+}) {
+  const { src, alt, title, width, height } = image;
+  return (
+    <figure className={className}>
+      {/* A plain <img>: the source may be any https host the editor chose,
+          and next/image refuses hosts that are not in next.config. The
+          source has already passed `safeImageSrc`. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        width={width ?? undefined}
+        height={height ?? undefined}
+        loading="lazy"
+        decoding="async"
+        style={tile ? { aspectRatio: tile } : undefined}
+        className={`h-auto w-full border border-border ${tile ? "object-cover" : ""}`}
+      />
+      {title && (
+        <figcaption className="mt-2 font-sans text-[0.8125rem] leading-snug text-muted-foreground">
+          {title}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
+/**
+ * Pictures filed one after another, as a grid of squares: three sit in one
+ * row, and any other count goes two to a row. An odd count other than three
+ * opens on one wide picture across both columns, so no square is left alone
+ * on the last row.
+ */
+function Gallery({ images }: { images: ImageAttrs[] }) {
+  const three = images.length === 3;
+  const wide = !three && images.length % 2 === 1;
+  return (
+    <div className={`my-8 grid gap-2 sm:gap-3 ${three ? "grid-cols-3" : "grid-cols-2"}`}>
+      {images.map((image, index) => {
+        const lead = wide && index === 0;
+        return (
+          <Figure
+            key={index}
+            image={image}
+            tile={lead ? "2 / 1" : "1 / 1"}
+            className={lead ? "col-span-2" : undefined}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+type Run =
+  | { kind: "block"; block: BlockNode; index: number }
+  | { kind: "gallery"; images: ImageAttrs[]; index: number };
+
+/** Top-level blocks, with each run of two or more images taken as one gallery. */
+function runsOf(blocks: BlockNode[]): Run[] {
+  const runs: Run[] = [];
+  blocks.forEach((block, index) => {
+    const last = runs[runs.length - 1];
+    if (block.type !== "image") {
+      runs.push({ kind: "block", block, index });
+    } else if (last?.kind === "gallery") {
+      last.images.push(block.attrs);
+    } else if (last?.kind === "block" && last.block.type === "image") {
+      runs[runs.length - 1] = {
+        kind: "gallery",
+        images: [last.block.attrs, block.attrs],
+        index: last.index,
+      };
+    } else {
+      runs.push({ kind: "block", block, index });
+    }
+  });
+  return runs;
 }
 
 function Blocks({ blocks, inItem = false }: { blocks: BlockNode[]; inItem?: boolean }) {
@@ -259,9 +336,18 @@ export function ArticleBody({ doc }: { doc: RichDoc }) {
     // the page's container, so the copy is given the same edges and the two
     // end on the same line down both sides.
     <div className="news-body">
-      {doc.content.map((block, index) => (
-        <Block key={index} block={block} dropCap={index === opening} inItem={false} />
-      ))}
+      {runsOf(doc.content).map((run) =>
+        run.kind === "gallery" ? (
+          <Gallery key={run.index} images={run.images} />
+        ) : (
+          <Block
+            key={run.index}
+            block={run.block}
+            dropCap={run.index === opening}
+            inItem={false}
+          />
+        ),
+      )}
     </div>
   );
 }
