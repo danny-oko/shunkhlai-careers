@@ -3,8 +3,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { hashPassword } from "@/lib/auth/password";
 import type { TestDatabase } from "@/lib/db/testing";
 
-
-
 import {
   EMAIL_FREE_ATTEMPTS,
   MAX_IP_FAILURES,
@@ -42,14 +40,18 @@ import { hashSessionToken } from "./tokens";
 const memory = vi.hoisted(() => ({ db: null as TestDatabase | null }));
 
 vi.mock("@/lib/db", async () => {
-  const schema = await vi.importActual<typeof import("@/lib/db/schema")>("@/lib/db/schema");
+  const schema =
+    await vi.importActual<typeof import("@/lib/db/schema")>("@/lib/db/schema");
   const { createTestDatabase } = await import("@/lib/db/testing");
 
   memory.db = await createTestDatabase();
   return { ...schema, getDb: () => memory.db!.db };
 });
 
-const legacy = vi.hoisted(() => ({ available: true, password: "the-old-shared-password" }));
+const legacy = vi.hoisted(() => ({
+  available: true,
+  password: "the-old-shared-password",
+}));
 
 vi.mock("./session", async () => {
   const actual = await vi.importActual<typeof import("./session")>("./session");
@@ -88,7 +90,12 @@ let passwordHash = "";
 let waited: number[] = [];
 
 async function addUser(
-  overrides: Partial<{ id: string; email: string; isActive: boolean; role: string }> = {},
+  overrides: Partial<{
+    id: string;
+    email: string;
+    isActive: boolean;
+    role: string;
+  }> = {},
 ) {
   const schema = await import("@/lib/db/schema");
   await memory.db!.db.insert(schema.appUser).values({
@@ -157,7 +164,8 @@ describe("a real account", () => {
       user: { id: "usr_test", email: EMAIL, role: "admin", source: "app_user" },
     });
 
-    if (!outcome.ok || outcome.kind !== "session") throw new Error("expected a session");
+    if (!outcome.ok || outcome.kind !== "session")
+      throw new Error("expected a session");
     expect((await loadSession(outcome.token, NOW))?.user.id).toBe("usr_test");
   });
 
@@ -169,7 +177,8 @@ describe("a real account", () => {
   it("hands back a token that is not what the database holds", async () => {
     await addUser();
     const outcome = await attempt();
-    if (!outcome.ok || outcome.kind !== "session") throw new Error("expected a session");
+    if (!outcome.ok || outcome.kind !== "session")
+      throw new Error("expected a session");
 
     const schema = await import("@/lib/db/schema");
     const [row] = await memory.db!.db.select().from(schema.adminSession);
@@ -189,7 +198,11 @@ describe("a real account", () => {
   it("refuses a near miss — a prefix, a trailing space, a case flip", async () => {
     await addUser();
 
-    for (const password of [PASSWORD.slice(0, -1), `${PASSWORD} `, PASSWORD.toUpperCase()]) {
+    for (const password of [
+      PASSWORD.slice(0, -1),
+      `${PASSWORD} `,
+      PASSWORD.toUpperCase(),
+    ]) {
       expect((await attempt({ password })).ok, password).toBe(false);
       resetRateLimit();
     }
@@ -198,7 +211,10 @@ describe("a real account", () => {
   it("refuses an empty password AND counts it — it is not a free attempt", async () => {
     await addUser();
 
-    expect(await attempt({ password: "" })).toEqual({ ok: false, message: SIGN_IN_FAILED });
+    expect(await attempt({ password: "" })).toEqual({
+      ok: false,
+      message: SIGN_IN_FAILED,
+    });
     // The point of the early return is that it still costs an attempt. Without
     // this assertion the test passes with that whole branch deleted.
     expect(emailFailureCount(EMAIL, NOW.getTime())).toBe(1);
@@ -224,7 +240,11 @@ describe("a real account", () => {
 
 describe("the message never says which thing was wrong", () => {
   it("uses one sentence for an unknown email, a wrong password and a switched-off account", async () => {
-    await addUser({ id: "usr_off", email: "off@shunkhlai.mn", isActive: false });
+    await addUser({
+      id: "usr_off",
+      email: "off@shunkhlai.mn",
+      isActive: false,
+    });
     await addUser();
 
     const unknown = await attempt({ email: "nobody@shunkhlai.mn" });
@@ -249,7 +269,10 @@ describe("the message never says which thing was wrong", () => {
     await addUser();
 
     expect(
-      await attempt({ email: "nobody@shunkhlai.mn", password: legacy.password }),
+      await attempt({
+        email: "nobody@shunkhlai.mn",
+        password: legacy.password,
+      }),
     ).toEqual({ ok: false, message: SIGN_IN_FAILED });
   });
 });
@@ -265,7 +288,9 @@ describe("the timing oracle", () => {
     // address takes about seventeen, which is a second failure message told
     // with a stopwatch.
     expect(verifications.hashes).toHaveLength(1);
-    expect(verifications.hashes[0]).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1\$/u);
+    expect(verifications.hashes[0]).toMatch(
+      /^\$argon2id\$v=19\$m=19456,t=2,p=1\$/u,
+    );
   });
 
   it("does the same amount of work for a known address", async () => {
@@ -302,12 +327,17 @@ describe("the exploits the reviewer demonstrated", () => {
     // counter per request, so 100 wrong passwords went through untouched at
     // ~50 a second. Now the email brake does not care what the address says.
     for (let i = 0; i < 100; i += 1) {
-      const outcome = await attempt({ password: `guess-${i}`, ip: `203.0.113.${i % 254}` });
+      const outcome = await attempt({
+        password: `guess-${i}`,
+        ip: `203.0.113.${i % 254}`,
+      });
       expect(refusal(outcome)).toBe(SIGN_IN_FAILED);
     }
 
     const throttled = waited.filter((ms) => ms > 0);
-    expect(throttled.length).toBeGreaterThanOrEqual(100 - EMAIL_FREE_ATTEMPTS - 1);
+    expect(throttled.length).toBeGreaterThanOrEqual(
+      100 - EMAIL_FREE_ATTEMPTS - 1,
+    );
     expect(waited.at(-1)).toBe(MAX_THROTTLE_MS);
 
     // Two seconds a try instead of twenty milliseconds: the run that took two
@@ -343,7 +373,9 @@ describe("the exploits the reviewer demonstrated", () => {
       await attempt({ password: `guess-${i}`, ip: "203.0.113.9" });
     }
 
-    expect(refusal(await attempt({ ip: "203.0.113.9" }))).toBe(SIGN_IN_RATE_LIMITED);
+    expect(refusal(await attempt({ ip: "203.0.113.9" }))).toBe(
+      SIGN_IN_RATE_LIMITED,
+    );
     expect((await attempt({ ip: "198.51.100.44" })).ok).toBe(true);
   });
 });
@@ -354,7 +386,11 @@ describe("the address brake", () => {
 
     for (let i = 0; i < MAX_IP_FAILURES; i += 1) {
       // Spread across accounts, which is the spraying this half is for.
-      await attempt({ email: `nobody-${i}@shunkhlai.mn`, password: "wrong", ip: IP });
+      await attempt({
+        email: `nobody-${i}@shunkhlai.mn`,
+        password: "wrong",
+        ip: IP,
+      });
     }
 
     expect(refusal(await attempt({ ip: IP }))).toBe(SIGN_IN_RATE_LIMITED);
@@ -376,7 +412,11 @@ describe("the address brake", () => {
   it("does not refuse a different address", async () => {
     await addUser();
     for (let i = 0; i < MAX_IP_FAILURES; i += 1) {
-      await attempt({ email: `nobody-${i}@shunkhlai.mn`, password: "wrong", ip: IP });
+      await attempt({
+        email: `nobody-${i}@shunkhlai.mn`,
+        password: "wrong",
+        ip: IP,
+      });
     }
 
     expect((await attempt({ ip: "198.51.100.1" })).ok).toBe(true);
@@ -385,13 +425,21 @@ describe("the address brake", () => {
   it("is forgiven after a successful sign-in from that address", async () => {
     await addUser();
     for (let i = 0; i < MAX_IP_FAILURES - 1; i += 1) {
-      await attempt({ email: `nobody-${i}@shunkhlai.mn`, password: "wrong", ip: IP });
+      await attempt({
+        email: `nobody-${i}@shunkhlai.mn`,
+        password: "wrong",
+        ip: IP,
+      });
     }
 
     expect((await attempt({ ip: IP })).ok).toBe(true);
 
     for (let i = 0; i < MAX_IP_FAILURES - 1; i += 1) {
-      const outcome = await attempt({ email: `x-${i}@shunkhlai.mn`, password: "wrong", ip: IP });
+      const outcome = await attempt({
+        email: `x-${i}@shunkhlai.mn`,
+        password: "wrong",
+        ip: IP,
+      });
       expect(refusal(outcome)).toBe(SIGN_IN_FAILED);
     }
   });
@@ -405,7 +453,9 @@ describe("the empty-table fallback", () => {
       ok: true,
       kind: "admin-password",
     });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("ADMIN_PASSWORD"));
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("ADMIN_PASSWORD"),
+    );
     warn.mockRestore();
   });
 
@@ -436,7 +486,10 @@ describe("the empty-table fallback", () => {
   it("says so, rather than refusing, when there is no way in at all", async () => {
     legacy.available = false;
 
-    expect(await attempt()).toEqual({ ok: false, message: SIGN_IN_UNAVAILABLE });
+    expect(await attempt()).toEqual({
+      ok: false,
+      message: SIGN_IN_UNAVAILABLE,
+    });
   });
 });
 
