@@ -47,13 +47,16 @@ export type EraEntry = {
   title: string;
   body: string;
   /**
-   * The record's own archive photograph, where the group's history poster
-   * (doc/tuuh.pdf) carries one for that year.
+   * The record's own photograph, shown in the stage frame in place of the
+   * span's. The frame is 3:4 and every photograph fills it, so each record
+   * reads at the same size.
    *
-   * Small on purpose: these are lifted from the poster at the size the poster
-   * itself holds them, 245 to 400px across, so they are shown as a strip
-   * beside the record rather than blown up into the stage frame, which is
-   * where the span's own photograph goes.
+   * 1998, 2003 and 2023 are HR's own photographs (the September 2026 drop),
+   * cut to 900x1200 when they were put in `public`. 2011 and 2014 are still
+   * lifted off the group's history poster (doc/tuuh.pdf) at the size the
+   * poster holds them - about 300px across and landscape - so the frame
+   * crops and enlarges them, and they are the soft ones until HR sends
+   * larger copies.
    */
   image?: string;
   /** Read in place of `image`. Required alongside it. */
@@ -74,10 +77,8 @@ export type Era = {
   /** The span, as the group's own history page labels it. */
   period: string;
   /**
-   * The group's own photograph of the business that span opened, already
-   * cropped to the frame it hangs in. The section changes photographs a tile
-   * at a time and the tiles are cut from the frame, so a photograph that had
-   * to be cover-cropped in the browser would not line up with them.
+   * The group's own photograph of the business that span opened, shown in
+   * the same 3:4 frame as a record's own, centre-cropped to fill it.
    *
    * Shown for a record that carries no archive photograph of its own, which
    * since the section was cut to six records is 1993 alone. The other three
@@ -121,8 +122,8 @@ export const eras: Era[] = [
         title: "Анхны нефть бааз",
         year: "1998",
         body: "1998 онд Шунхлай ХХК анхны шатахуун түгээх станц, анхны нефть баазаа барилаа. Энэ нь газрын тосны бүтээгдэхүүн хадгалах, хүлээн авах 5000 метр куб багтаамжтай, найман вагонцистернийг зэрэг ачиж буулгах хүчин чадалтай байв.",
-        image: "/history/archive-1998-station.webp",
-        imageAlt: "Улаанбаатарт байгуулсан анхны шатахуун түгээх станцын саравчны дор хэдэн хүн зогсож буй хуучин гэрэл зураг.",
+        image: "/history/photo-1998-station.webp",
+        imageAlt: "“Шунхлай” бичигтэй тоосгон байшин бүхий анхны шатахуун түгээх станцын саравчны дор таван ажилтан зогсож буй хуучин гэрэл зураг.",
       },
     ],
   },
@@ -135,8 +136,8 @@ export const eras: Era[] = [
         title: "Өөрийн лаборатори",
         year: "2003",
         body: "Бүтээгдэхүүнд шинжилгээ хийх, чанар стандартын шаардлагыг баталгаажуулах иж бүрэн лабораторийг ашиглалтад оруулав.",
-        image: "/history/archive-2003-laboratory.webp",
-        imageAlt: "Цагаан халаадтай шинжээгч лабораторийн багаж дээр түлшний дээж шинжилж байна.",
+        image: "/history/photo-2003-laboratory.webp",
+        imageAlt: "Шунхлайн лабораторийн ширээн дээр эгнүүлэн тавьсан шатахууны чанар шинжлэх багаж төхөөрөмжүүд.",
       },
     ],
   },
@@ -175,8 +176,8 @@ export const eras: Era[] = [
         title: "Шинэ агуулахууд",
         year: "2023",
         body: "26000 м.куб багтаамжтай “Таван толгой” агуулах, 1200 м.куб багтаамжтай “Шивээ хүрэн” агуулах тус тус ашиглалтад орлоо.",
-        image: "/history/archive-2023-depot.webp",
-        imageAlt: "Говийн талд шинээр ашиглалтад орсон агуулахын савнууд, хажууд нь төмөр замын цистернүүд.",
+        image: "/history/photo-2023-depot.webp",
+        imageAlt: "Хамгаалалтын хувцастай хоёр ажилтан шатахууны агуулахын цистерн дээр алгаа ташиж байна, ард нь агуулахын савнууд.",
       },
     ],
   },

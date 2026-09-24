@@ -183,6 +183,11 @@ export const clubs: Club[] = [
   {
     name: "Шинжлэх ухааны клуб",
     logo: "/clubs/science.png",
+    photos: [
+      "/clubs/photos/science-2.jpg",
+      "/clubs/photos/science.jpg",
+      "/clubs/photos/science-3.jpg",
+    ],
     body: "Шинэ технологи, салбарын судалгаа, сонирхолтой нээлтүүдийг хамтдаа судалж, хамт олондоо танилцуулдаг.",
   },
   {

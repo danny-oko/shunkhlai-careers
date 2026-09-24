@@ -41,26 +41,6 @@ const SCATTER_MS = 170;
 /** The whole change, to the last tile settling. */
 const REVEAL_MS = SWEEP_MS + SCATTER_MS / 2 + TILE_MS;
 
-/**
- * And how long the photograph being replaced takes to clear, where the one
- * arriving will not cover it.
- *
- * A tile carries the arriving photograph and nothing else, so where that
- * photograph is not - the band an archive picture leaves at the top and
- * bottom of the frame, or down its sides - an opened tile is transparent and
- * what shows through it is the photograph underneath. Against a span
- * photograph, which fills the frame, that left the old picture standing
- * around the new one for the length of the sweep: two photographs in one
- * frame, which is the one thing this change is supposed to avoid.
- *
- * So it is faded out under the sweep rather than dropped at the end of it,
- * and it is gone before the last tiles open. Only against an arriving picture
- * that does not cover the frame: where the next one does, the tiles wipe it
- * themselves, and holding it intact underneath is what makes the change read
- * as one photograph being drawn over another.
- */
-const CLEAR_MS = SWEEP_MS + TILE_MS / 2;
-
 /** Degrees the rings turn over the whole run. */
 const RING_TURN = 120;
 
@@ -72,17 +52,6 @@ const slides = eras.flatMap((era, eraIndex) =>
 type Photo = {
   src: string;
   alt: string;
-  /**
-   * How it sits in the frame.
-   *
-   * The span photographs were cropped to the frame's shape when they were put
-   * in `public`, so they fill it. A record's own archive photograph came off
-   * the history poster at the size and shape the poster held it - 245 to
-   * 400px across, portrait or landscape - so it is shown whole on the frame's
-   * plate instead. Cropping one to a tall frame would throw away most of the
-   * picture and then enlarge what was left.
-   */
-  fit: "cover" | "contain";
 };
 
 /**
@@ -105,7 +74,6 @@ const { photos, photoOf } = (() => {
     photos.push({
       src,
       alt: entry.image ? (entry.imageAlt ?? "") : era.alt,
-      fit: entry.image ? "contain" : "cover",
     });
     seen.set(src, index);
     return index;
@@ -227,11 +195,6 @@ export function HistoryTimeline() {
   const runProgress = isPinned ? progress : picked / (slides.length - 1);
 
   const { shown, incoming } = usePhotographChange(photoOf[active], isReduced);
-
-  // Whether the arriving photograph leaves a band of the frame uncovered, and
-  // therefore whether the one it replaces has to clear rather than be wiped.
-  // See CLEAR_MS.
-  const clearing = incoming !== null && photos[incoming].fit !== "cover";
 
   /**
    * Take the reader to a record. While the stage is pinned the scroll owns
@@ -363,12 +326,7 @@ export function HistoryTimeline() {
             >
               <div
                 className={cn(
-                  "relative aspect-[900/1114] w-[min(var(--photo),52svh)] overflow-hidden rounded-[4px] [--photo:15.5rem] sm:[--photo:19rem] lg:[--photo:21rem] xl:[--photo:24rem]",
-                  // The loading plate is for a photograph that fills the
-                  // frame. An archive one is shown whole, and the rings
-                  // behind the stage should carry on through the band it
-                  // leaves rather than stopping at a grey rectangle.
-                  photos[shown].fit === "cover" && "bg-muted",
+                  "relative aspect-[3/4] w-[min(var(--photo),52svh)] overflow-hidden rounded-[4px] bg-muted [--photo:15.5rem] sm:[--photo:19rem] lg:[--photo:21rem] xl:[--photo:24rem]",
                   // Height first and width off the shape, which is the other
                   // way round from the laptop: there the width is what is
                   // scarce, here it is the height.
@@ -382,10 +340,10 @@ export function HistoryTimeline() {
                     whose background is still downloading opens onto nothing,
                     and the change is over in under a second.
 
-                    The span photographs were cropped to this frame's shape
-                    when they were put in `public`, so they need no
-                    object-position and the tiles over them line up with them
-                    exactly. The archive ones are shown whole; see `fit`. */}
+                    Every photograph fills the 3:4 frame, whatever shape it
+                    was delivered in, so each record reads at the same size.
+                    The img and the tiles both centre-crop, so the tiles over
+                    a photograph line up with it exactly. */}
                 {photos.map((photo, index) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -396,18 +354,9 @@ export function HistoryTimeline() {
                     decoding="async"
                     fetchPriority={index === 0 ? "high" : "low"}
                     className={cn(
-                      "absolute inset-0 size-full",
-                      photo.fit === "cover" ? "object-cover" : "object-contain",
+                      "absolute inset-0 size-full object-cover",
                       index === shown ? "opacity-100" : "opacity-0",
                     )}
-                    style={
-                      clearing && index === shown
-                        ? {
-                            opacity: 0,
-                            transition: `opacity ${CLEAR_MS}ms cubic-bezier(0.33, 1, 0.68, 1)`,
-                          }
-                        : undefined
-                    }
                   />
                 ))}
 
@@ -420,12 +369,7 @@ export function HistoryTimeline() {
                     {tiles.map((tile) => (
                       <div
                         key={tile.index}
-                        className={cn(
-                          "history-tile absolute inset-0 bg-center bg-no-repeat",
-                          photos[incoming].fit === "cover"
-                            ? "bg-cover"
-                            : "bg-contain",
-                        )}
+                        className="history-tile absolute inset-0 bg-cover bg-center bg-no-repeat"
                         style={{
                           backgroundImage: `url(${photos[incoming].src})`,
                           clipPath: tile.clip,
