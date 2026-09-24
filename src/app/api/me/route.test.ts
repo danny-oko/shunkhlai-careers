@@ -148,6 +148,28 @@ describe("account document", () => {
     expect((await rows("select * from applicant_account"))).toHaveLength(1);
   });
 
+  it("saves a row whose updated_at carries microseconds", async () => {
+    as("u1", "micro@x.mn");
+    await post("SaveHrApplicant", { ...IDENTITY, addr2: "Эхний хаяг" });
+
+    // What `now()` writes, and what any hand-run SQL or a future import script
+    // would write. A JavaScript Date cannot hold the last three digits, so the
+    // version this code reads back is already rounded; comparing it against
+    // the column as stored matched nothing, and every later save of the row
+    // failed as a conflict that no retry could clear.
+    await rows(
+      "update applicant_account set updated_at = updated_at + interval '456 microseconds' where email = $1",
+      ["micro@x.mn"],
+    );
+    const [before] = await rows("select updated_at from applicant_account where email = $1", [
+      "micro@x.mn",
+    ]);
+    expect(String(before.updated_at)).not.toMatch(/000$/);
+
+    await post("SaveHrApplicant", { ...IDENTITY, addr2: "Шинэ хаяг" });
+    expect((await profileOf()).addr2).toBe("Шинэ хаяг");
+  });
+
   it("email is case-insensitive: Foo@X.com and foo@x.com share one doc", async () => {
     as("u1", "Foo@X.com");
     await post("SaveHrApplicant", { ...IDENTITY, addr2: "Улаанбаатар, 1-р хороо" });

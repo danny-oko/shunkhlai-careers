@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { applicantAccount, applicantFile, applicantProfile, getDb } from "@/lib/db";
 import { mimeFromName } from "@/lib/file-type";
@@ -294,7 +294,25 @@ export async function saveAccount(
       updatedAt,
     })
     .where(
-      and(eq(applicantAccount.email, email), eq(applicantAccount.updatedAt, account.version)),
+      and(
+        eq(applicantAccount.email, email),
+        /**
+         * Compared at millisecond precision, not as stored.
+         *
+         * `timestamptz` keeps microseconds; a JavaScript `Date` cannot hold
+         * them, so the driver hands us a value already rounded. Comparing that
+         * against the column as written means a row whose `updated_at` carries
+         * microseconds — anything inserted by `now()` in SQL rather than by
+         * this code — never matches its own version, and every save of it
+         * fails as a conflict that no retry can clear.
+         *
+         * Truncating both sides costs the lock nothing: two saves a
+         * millisecond apart are not a race anyone can produce through a form,
+         * and the guard below already refuses to write a stamp that is not
+         * strictly newer than the one loaded.
+         */
+        sql`date_trunc('milliseconds', ${applicantAccount.updatedAt}) = ${account.version}`,
+      ),
     )
     .returning({ id: applicantAccount.id });
   if (written.length === 0) throw new AccountConflictError();
