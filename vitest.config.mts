@@ -13,5 +13,8 @@ export default defineConfig({
     // needs a browser global; everything else runs in node.
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Points UPLOAD_DIR at a throwaway directory per test file, so no test can
+    // write uploaded bytes into the checkout. See the file for why.
+    setupFiles: ["./vitest.setup.ts"],
   },
 });

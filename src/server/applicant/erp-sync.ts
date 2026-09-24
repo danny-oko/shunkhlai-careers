@@ -39,6 +39,7 @@ import {
 } from "./erp-model";
 import { fetchSnapshot } from "./erp-pull";
 import { type ApplicationErp, NOT_READY, type PushResult, type Step, isDue, loginFor } from "./erp-push";
+import { MAX_ATTEMPTS, idempotencyKey, isRetryableReason, isWaitingReason } from "./erp-retry";
 import type { ApplicantDoc, DocErp, Row } from "./handlers";
 
 /**
@@ -85,9 +86,29 @@ const pushIdentity = (identity: ClerkIdentity) => ({
   email: identity.email,
 });
 
-/** A freshly submitted row's `erp`: claimed as attempt 1. */
-export function pendingErp(now = new Date()): ApplicationErp {
-  return { status: "pending", attempts: 1, lastAttemptAt: now.toISOString() };
+/**
+ * A freshly submitted row's `erp`: durable here, nothing sent yet, claimed as
+ * attempt 1.
+ *
+ * `submittedAt` is stamped now and never moved again — it is what the
+ * applicant is shown as "илгээсэн огноо" and what the admin list ages rows by.
+ * It is deliberately not `lastAttemptAt`, which the retries overwrite: the two
+ * answer different questions ("when did this become ours" vs "when did we last
+ * try the ERP"), and conflating them would make a row that has been retried
+ * for a day look like it arrived a minute ago.
+ */
+export function pendingErp(
+  email: string,
+  recruitmentorderid: unknown,
+  now = new Date(),
+): ApplicationErp {
+  return {
+    status: "pending",
+    attempts: 1,
+    lastAttemptAt: now.toISOString(),
+    submittedAt: now.toISOString(),
+    key: idempotencyKey(email, recruitmentorderid),
+  };
 }
 
 const appErp = (row: Row) => row.erp as ApplicationErp | undefined;
@@ -164,13 +185,10 @@ async function recordLoginFailure(
     for (const row of doc.applications) {
       if (!isDue(row, now.getTime())) continue;
       const state = appErp(row)!;
-      row.erp = {
-        ...state,
-        status: "failed",
-        error,
-        attempts: (state.attempts ?? 0) + 1,
-        lastAttemptAt: now.toISOString(),
-      };
+      // The attempt is spent here (the login is part of the push), then the
+      // same transition function decides whether that was the last one.
+      const spent = { ...state, attempts: (state.attempts ?? 0) + 1, lastAttemptAt: now.toISOString() };
+      row.erp = nextAppErp(spent, { status: "failed", error });
     }
     if (flushDue(doc, now.getTime())) {
       erp.flush = { attempts: (erp.flush?.attempts ?? 0) + 1, lastAttemptAt: now.toISOString(), error };
@@ -394,15 +412,44 @@ function applyOutcome(
 /** ERP ids of the applications queued for DeleteOrderApp. */
 const queuedCancels = (doc: ApplicantDoc) => deletedIds(doc.erp?.pendingDeletes, "DeleteOrderApp");
 
+/**
+ * The one transition function for an application row: previous state + push
+ * result → next state. Every path that settles a row goes through it, so the
+ * rules below hold everywhere rather than in whichever branch remembered them.
+ *
+ * A row becomes `terminal` — stops being retried, starts being visible on the
+ * admin desk — when either is true:
+ *
+ * - the ERP refused the payload (`retryable: false`, or a reason already known
+ *   to be terminal). Retrying a rejected application forever buries it.
+ * - the attempts ran out. `MAX_ATTEMPTS` is counted, not guessed: `attempts`
+ *   is incremented when work is *claimed*, so a run that crashed between the
+ *   claim and the result still spent its attempt.
+ *
+ * "Waiting" reasons (`profile_incomplete`, `erp_withdraw_pending`, …) are
+ * never terminal and never spend an attempt: nothing was sent, and the row
+ * goes by itself once the applicant or the other work clears.
+ *
+ * The claim (`claimedAt`) is always dropped: this run is finished with the row
+ * either way, and leaving the lease behind would idle it for CLAIM_TTL_MS.
+ */
 function nextAppErp(previous: ApplicationErp | undefined, result: PushResult): ApplicationErp {
+  const attempts = previous?.attempts ?? 1;
   const erp: ApplicationErp = {
     status: result.status,
-    attempts: previous?.attempts ?? 1,
+    attempts,
     lastAttemptAt: previous?.lastAttemptAt ?? new Date().toISOString(),
   };
+  if (previous?.key) erp.key = previous.key;
+  if (previous?.submittedAt) erp.submittedAt = previous.submittedAt;
   if (result.error) erp.error = result.error;
   const erpEntryId = result.erpEntryId ?? previous?.erpEntryId;
   if (erpEntryId) erp.erpEntryId = erpEntryId;
+
+  if (result.status === "failed" && !isWaitingReason(result.error)) {
+    const refused = result.retryable === false || !isRetryableReason(result.error);
+    if (refused || attempts >= MAX_ATTEMPTS) erp.terminal = true;
+  }
   return erp;
 }
 

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { LoginForm } from "@/components/admin/login-form";
 import { isAdminRequest } from "@/server/admin/guard";
-import { adminLoginAvailable } from "@/server/admin/session";
+import { signInAvailable } from "@/server/admin/sign-in";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,13 @@ export default async function AdminLoginPage({
   const requested = Array.isArray(params.next) ? params.next[0] : params.next;
   const next =
     requested && requested.startsWith("/admin/") ? requested : "/admin/news";
+
+  // There is a way in if a staff account exists, or — on a deployment where
+  // nobody has created one yet — if ADMIN_PASSWORD is set. A database that
+  // cannot be reached is not a reason to hide the form: let the attempt fail
+  // with its own message rather than accusing the operator of misconfiguring
+  // something they did not.
+  const available = await signInAvailable().catch(() => true);
 
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
@@ -32,19 +39,31 @@ export default async function AdminLoginPage({
         </p>
 
         <div className="mt-8 border-t border-border pt-8">
-          {adminLoginAvailable() ? (
+          {available ? (
             <LoginForm next={next} />
           ) : (
+<<<<<<< HEAD
+=======
+            /* No staff account and no ADMIN_PASSWORD: there is no way in at
+               all, and the operator has to be able to see that rather than
+               guess at a rejection. */
+>>>>>>> 02abb24cc2377df5e4c58ac985222193672df235
             <div className="border border-border bg-muted/50 p-4">
               <p className="text-sm font-medium">
                 Админ нэвтрэлт тохируулаагүй байна.
               </p>
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+<<<<<<< HEAD
                 Серверийн тохиргоонд{" "}
                 <code className="font-mono text-xs">ADMIN_PASSWORD</code> нэмнэ
                 үү. Дэлгэрэнгүйг{" "}
                 <code className="font-mono text-xs">docs/newsroom.md</code>-ээс
                 уншина уу.
+=======
+                <code className="font-mono text-xs">bun run user:create</code>-ээр ажилтны
+                бүртгэл үүсгэнэ үү. Дэлгэрэнгүйг{" "}
+                <code className="font-mono text-xs">docs/postgres.md</code>-ээс уншина уу.
+>>>>>>> 02abb24cc2377df5e4c58ac985222193672df235
               </p>
             </div>
           )}

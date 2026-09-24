@@ -18,7 +18,24 @@ const store = vi.hoisted(() => ({
 }));
 
 vi.mock("@/server/news/store", () => store);
-vi.mock("@/server/admin/guard", () => ({ requireAdmin: vi.fn(async () => undefined) }));
+/** Who the action thinks is signed in. Flipped per case by the role tests. */
+const signedIn = vi.hoisted(() => ({
+  role: "admin",
+}));
+
+vi.mock("@/server/admin/guard", () => ({
+  requireAdmin: vi.fn(async () => undefined),
+  requireAdminUser: vi.fn(async () => ({
+    id: "usr_test",
+    name: "Б. Энхжаргал",
+    email: "admin@shunkhlai.mn",
+    role: signedIn.role,
+    source: "app_user" as const,
+  })),
+  // The real rule, not a stub of it: the point of these tests is that the
+  // action asks it and obeys the answer.
+  mayDeleteArticles: (user: { role: string }) => user.role === "admin",
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((to: string) => {
@@ -26,7 +43,7 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-const { saveArticleAction } = await import("./actions");
+const { deleteArticleAction, saveArticleAction } = await import("./actions");
 
 function form(fields: Record<string, string>, cover?: File): FormData {
   const data = new FormData();
@@ -99,5 +116,48 @@ describe("saveArticleAction — a failed save takes its upload back", () => {
       "NEXT_REDIRECT /admin/news?saved=garchig",
     );
     expect(store.dropMedia).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteArticleAction — who may destroy a story", () => {
+  beforeEach(() => {
+    signedIn.role = "admin";
+    store.getArticleById.mockResolvedValue({ id: "art_1", slug: "surgalt", title: "Гарчиг" });
+    store.deleteArticle.mockResolvedValue(true);
+  });
+
+  it("lets an admin delete", async () => {
+    const data = new FormData();
+    data.append("id", "art_1");
+
+    await expect(deleteArticleAction(data)).rejects.toThrow("NEXT_REDIRECT /admin/news?deleted=1");
+    expect(store.deleteArticle).toHaveBeenCalledWith("art_1");
+  });
+
+  it("refuses an editor, and does not reach the store at all", async () => {
+    signedIn.role = "editor";
+    const data = new FormData();
+    data.append("id", "art_1");
+
+    // An editor may write and rewrite; deleting is the one irreversible
+    // control, so it is checked here rather than only hidden in the UI — a
+    // POST does not come through the UI.
+    await expect(deleteArticleAction(data)).rejects.toThrow(
+      "NEXT_REDIRECT /admin/news?error=forbidden",
+    );
+    expect(store.deleteArticle).not.toHaveBeenCalled();
+    expect(store.getArticleById).not.toHaveBeenCalled();
+  });
+
+  it("refuses any role that is not admin", async () => {
+    for (const role of ["viewer", "", "ADMIN", "admin "]) {
+      signedIn.role = role;
+      store.deleteArticle.mockClear();
+      const data = new FormData();
+      data.append("id", "art_1");
+
+      await expect(deleteArticleAction(data), role).rejects.toThrow("error=forbidden");
+      expect(store.deleteArticle, role).not.toHaveBeenCalled();
+    }
   });
 });

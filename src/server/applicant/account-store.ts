@@ -2,13 +2,23 @@ import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 
 import { applicantAccount, applicantFile, applicantProfile, getDb } from "@/lib/db";
+import { mimeFromName } from "@/lib/file-type";
+import { parseDataUrl, toDataUrl } from "@/server/files/data-url";
+import { type OwnerKind, dropOwnedFile, putOwnedFile, readOwnedFile } from "@/server/files/records";
 import { LOCAL_ID_BASE } from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
 /**
- * D1 persistence for `/api/me`: one `applicant_account` row per lowercased
- * Clerk email, holding the applicant document as JSON. The CV and photo are
- * kept out of that JSON, in chunked `applicant_file` rows (see schema.ts).
+ * PostgreSQL persistence for `/api/me`: one `applicant_account` row per
+ * lowercased Clerk email, holding the applicant document as JSON.
+ *
+ * The CV and the photo are kept out of that JSON and out of the database
+ * entirely: their bytes are files under `UPLOAD_DIR` with a `stored_file` row
+ * for the metadata (`src/server/files`). They used to be base64 chunks in
+ * `applicant_file`, which inflated them by a third and pulled every one of
+ * them through Postgres into this process's heap — on a 1.9 GB server, for a
+ * 5 MB CV. Those rows are still read for accounts the migration has not moved
+ * yet; nothing writes them any more.
  */
 
 /** What `data_json` holds: the document minus file contents. */
@@ -36,8 +46,15 @@ export class AccountConflictError extends Error {
 
 type FileKind = "cv" | "picture";
 
-/** D1 caps a row at 2 MB; stay well under it per chunk. */
-const CHUNK_CHARS = 500_000;
+/**
+ * `applicant_file.kind` as `stored_file.owner_kind` spells it. The two names
+ * differ because `owner_kind` is shared with the newsroom, where a bare "cv"
+ * would say nothing about whose.
+ */
+const OWNER_KIND: Readonly<Record<FileKind, OwnerKind>> = {
+  cv: "applicant_cv",
+  picture: "applicant_picture",
+};
 /**
  * Rows created on this site get ids from `LOCAL_ID_BASE` up, so they can never
  * collide with the ERP's own entry ids (which rows pulled from the ERP keep).
@@ -298,6 +315,15 @@ async function readFile(
   email: string,
   kind: FileKind,
 ): Promise<{ filename: string | null; data: string } | null> {
+  // Where files go now.
+  const stored = await readOwnedFile(OWNER_KIND[kind], email);
+  if (stored) {
+    return { filename: stored.filename, data: encodeStored(kind, stored) };
+  }
+
+  // Not moved yet. Every account whose CV or photo predates this change is
+  // read from its chunks exactly as before, so nothing 404s while
+  // `scripts/files/move-to-disk.ts` works through them.
   const rows = await getDb()
     .select()
     .from(applicantFile)
@@ -307,7 +333,33 @@ async function readFile(
   return { filename: rows[0].filename, data: rows.map((row) => row.data).join("") };
 }
 
+/**
+ * The two kinds keep the string shape their callers have always seen: a CV is
+ * bare base64 (`cvResponse` and the ERP push both decode it themselves), a
+ * photo is a whole `data:` URL the account page drops into an `<img src>`.
+ * Only the storage underneath changed, so neither conversion may.
+ */
+function encodeStored(kind: FileKind, stored: { bytes: Buffer; contentType: string }): string {
+  const base64 = stored.bytes.toString("base64");
+  return kind === "picture" ? toDataUrl(stored.contentType, base64) : base64;
+}
+
+function decodeStored(
+  kind: FileKind,
+  filename: string | null,
+  data: string,
+): { contentType: string; base64: string } {
+  // A photo carries its own type in the data URL; a CV's is its extension's,
+  // which is the same answer `/api/me/cv` has always served it with.
+  if (kind === "picture") return parseDataUrl(data);
+  return { contentType: mimeFromName(filename), base64: data };
+}
+
 async function deleteFile(email: string, kind: FileKind): Promise<void> {
+  await dropOwnedFile(OWNER_KIND[kind], email);
+  // The legacy chunks too. A delete that left them behind would be undone by
+  // the fallback in `readFile`: the applicant removes their CV, and the next
+  // download hands back the one they thought was gone.
   await getDb()
     .delete(applicantFile)
     .where(and(eq(applicantFile.email, email), eq(applicantFile.kind, kind)));
@@ -319,21 +371,18 @@ async function writeFile(
   filename: string | null,
   data: string,
 ): Promise<void> {
+  // Clears both homes first, so a replacement can never leave the old chunks
+  // shadowing the new file.
   await deleteFile(email, kind);
-  const now = new Date();
-  for (let index = 0, offset = 0; offset < data.length; index += 1, offset += CHUNK_CHARS) {
-    await getDb()
-      .insert(applicantFile)
-      .values({
-        id: crypto.randomUUID(),
-        email,
-        kind,
-        filename,
-        chunkIndex: index,
-        data: data.slice(offset, offset + CHUNK_CHARS),
-        createdAt: now,
-      });
-  }
+
+  const { contentType, base64 } = decodeStored(kind, filename, data);
+  await putOwnedFile({
+    ownerKind: OWNER_KIND[kind],
+    ownerKey: email,
+    bytes: Buffer.from(base64, "base64"),
+    contentType,
+    filename,
+  });
 }
 
 /** The stored CV (base64) for this account, or null — the download and the ERP push. */

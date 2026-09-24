@@ -57,8 +57,9 @@ describe("verifyAdminPassword", () => {
     expect(session.verifyAdminPassword("")).toBe(false);
   });
 
-  it("falls back to the dev password outside production", async () => {
+  it("falls back to the dev password under `next dev`", async () => {
     const session = await load({
+      NODE_ENV: "development",
       ADMIN_PASSWORD: undefined,
       ADMIN_SESSION_SECRET: undefined,
     });
@@ -66,6 +67,22 @@ describe("verifyAdminPassword", () => {
     expect(session.adminLoginAvailable()).toBe(true);
     expect(session.verifyAdminPassword("shunkhlai-dev")).toBe(true);
     expect(session.verifyAdminPassword("shunkhlai-prod")).toBe(false);
+  });
+
+  it("does NOT fall back in an environment that is merely not production", async () => {
+    // `next start` under a service manager that never set NODE_ENV, a staging
+    // box calling itself "staging", a test runner: none of these are `next
+    // dev`, and with `app_user` empty this constant would open everything.
+    for (const nodeEnv of ["test", "staging", undefined]) {
+      const session = await load({
+        NODE_ENV: nodeEnv,
+        ADMIN_PASSWORD: undefined,
+        ADMIN_SESSION_SECRET: undefined,
+      });
+
+      expect(session.adminLoginAvailable(), String(nodeEnv)).toBe(false);
+      expect(session.verifyAdminPassword("shunkhlai-dev"), String(nodeEnv)).toBe(false);
+    }
   });
 
   it("fails closed in production with no password configured", async () => {

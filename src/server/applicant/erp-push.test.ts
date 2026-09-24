@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import type { ApplicantDoc } from "./handlers";
-import { findErpEntryId, isDue, loginFor, profileOverlay, pushApplication } from "./erp-push";
+import { CLAIM_TTL_MS } from "./erp-model";
+import { MAX_ATTEMPTS, findErpEntryId, isDue, loginFor, profileOverlay, pushApplication } from "./erp-push";
 
 type Call = { endpoint: string; body: unknown; auth: string | null };
 
@@ -229,12 +230,24 @@ describe("pushApplication", () => {
     expect(calls.some((c) => c.endpoint === "SaveAppCV")).toBe(false);
   });
 
-  it("reports a failed application without throwing", async () => {
+  it("a refusal from the ERP is reported, not thrown — and not retried", async () => {
     answer("auth/login", { access_token: "tok" });
+    // rettype ≠ 0 on a 200: the ERP read the payload and said no.
     answer("SaveHrRecruitmentOrderApp", fail("ORA-01438"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await pushApplication(doc(), app, deps());
-    expect(result).toMatchObject({ status: "failed", error: "erp_apply_failed" });
+    expect(result).toMatchObject({ status: "failed", error: "erp_apply_rejected", retryable: false });
+    // The upstream text never leaves the transport layer.
+    expect(JSON.stringify(result)).not.toContain("ORA-01438");
+  });
+
+  it("a 500 is the ERP's problem, so it stays retryable", async () => {
+    answer("auth/login", { access_token: "tok" });
+    answer("SaveHrRecruitmentOrderApp", null);
+    statuses.SaveHrRecruitmentOrderApp = 503;
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await pushApplication(doc(), app, deps());
+    expect(result).toMatchObject({ status: "failed", error: "erp_unavailable", retryable: true });
   });
 });
 
@@ -269,18 +282,44 @@ describe("helpers", () => {
     ).toBeUndefined();
   });
 
-  it("retries pending after 1 min, failed after 10, up to 5 attempts", () => {
+  it("pending waits a flat minute; failed waits its backoff; sent and capped rows never", () => {
     const now = Date.parse("2026-09-21T12:00:00Z");
     const at = (msAgo: number) => new Date(now - msAgo).toISOString();
     const row = (status: string, attempts: number, msAgo: number) => ({
-      erp: { status, attempts, lastAttemptAt: at(msAgo) },
+      entryid: 1001,
+      erp: { status, attempts, lastAttemptAt: at(msAgo), key: "k1" },
     });
     expect(isDue(row("pending", 1, 61_000), now)).toBe(true);
     expect(isDue(row("pending", 1, 30_000), now)).toBe(false);
-    expect(isDue(row("failed", 2, 5 * 60_000), now)).toBe(false);
-    expect(isDue(row("failed", 2, 11 * 60_000), now)).toBe(true);
-    expect(isDue(row("failed", 5, 60 * 60_000), now)).toBe(false);
+    // Attempt 2's wait is ~2 min ±25%: under a minute is never due, and an
+    // hour always is, whichever way the jitter fell.
+    expect(isDue(row("failed", 2, 30_000), now)).toBe(false);
+    expect(isDue(row("failed", 2, 60 * 60_000), now)).toBe(true);
+    // Out of attempts: terminal, so never due again however long it waits.
+    expect(isDue(row("failed", MAX_ATTEMPTS, 24 * 60 * 60_000), now)).toBe(false);
     expect(isDue(row("sent", 1, 60 * 60_000), now)).toBe(false);
     expect(isDue({}, now)).toBe(false);
+  });
+
+  it("a refused row is terminal however few attempts it has spent", () => {
+    const now = Date.parse("2026-09-21T12:00:00Z");
+    const old = new Date(now - 24 * 60 * 60_000).toISOString();
+    const erp = { status: "failed", attempts: 1, lastAttemptAt: old, key: "k2" };
+    expect(isDue({ entryid: 1, erp }, now)).toBe(true);
+    expect(isDue({ entryid: 1, erp: { ...erp, terminal: true } }, now)).toBe(false);
+    expect(isDue({ entryid: 1, erp: { ...erp, error: "erp_apply_rejected" } }, now)).toBe(false);
+    // A transient code keeps its retries.
+    expect(isDue({ entryid: 1, erp: { ...erp, error: "erp_unavailable" } }, now)).toBe(true);
+  });
+
+  it("the claim lease keeps a second run off a row another one is pushing", () => {
+    const now = Date.parse("2026-09-21T12:00:00Z");
+    const old = new Date(now - 24 * 60 * 60_000).toISOString();
+    const base = { status: "failed", attempts: 1, lastAttemptAt: old, key: "k3" };
+    const fresh = new Date(now - 10_000).toISOString();
+    const stale = new Date(now - (CLAIM_TTL_MS + 1_000)).toISOString();
+    expect(isDue({ entryid: 1, erp: { ...base, claimedAt: fresh } }, now)).toBe(false);
+    // A claim older than the lease is reclaimed: the instance holding it died.
+    expect(isDue({ entryid: 1, erp: { ...base, claimedAt: stale } }, now)).toBe(true);
   });
 });
