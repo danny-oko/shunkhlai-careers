@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, Inbox, LogOut, Plus } from "lucide-react";
+import { ExternalLink, Inbox, LogOut, Plus, UserRound } from "lucide-react";
 
 import { logoutAction } from "@/app/admin/login/actions";
 import { ThemeToggle } from "@/components/theme-toggle";

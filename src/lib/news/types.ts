@@ -12,10 +12,7 @@ import {
   docText,
   excerpt,
   readingMinutes as readingMinutesOf,
-<<<<<<< HEAD
-=======
   safeImageSrc,
->>>>>>> 4e7c7a953d017d7f84d1630cadfbd8346bd975d6
 } from "./shared/rich-text";
 
 export type NewsCategory = "company" | "industry" | "society" | "people";
@@ -96,9 +93,7 @@ export const NEWS_CATEGORIES: ReadonlyArray<{
 ];
 
 export function categoryLabel(value: NewsCategory): string {
-  return (
-    NEWS_CATEGORIES.find((category) => category.value === value)?.label ?? ""
-  );
+  return NEWS_CATEGORIES.find((category) => category.value === value)?.label ?? "";
 }
 
 export function isNewsCategory(value: unknown): value is NewsCategory {
@@ -128,9 +123,7 @@ const MONTH_SUFFIX = [
 ] as const;
 
 /** Splits `YYYY-MM-DD` without going through `Date`, which shifts by timezone. */
-function parts(
-  isoDate: string,
-): { year: string; month: number; day: number } | null {
+function parts(isoDate: string): { year: string; month: number; day: number } | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate ?? "");
   if (!match) return null;
 

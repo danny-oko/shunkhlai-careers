@@ -10,12 +10,12 @@ export const dynamic = "force-dynamic";
 export default async function AdminLoginPage({
   searchParams,
 }: PageProps<"/admin/login">) {
+  // Already signed in: the form would be a dead end, so skip it.
   if (await isAdminRequest()) redirect("/admin/news");
 
   const params = await searchParams;
   const requested = Array.isArray(params.next) ? params.next[0] : params.next;
-  const next =
-    requested && requested.startsWith("/admin/") ? requested : "/admin/news";
+  const next = requested && requested.startsWith("/admin/") ? requested : "/admin/news";
 
   // There is a way in if a staff account exists, or — on a deployment where
   // nobody has created one yet — if ADMIN_PASSWORD is set. A database that
@@ -42,28 +42,15 @@ export default async function AdminLoginPage({
           {available ? (
             <LoginForm next={next} />
           ) : (
-<<<<<<< HEAD
-=======
             /* No staff account and no ADMIN_PASSWORD: there is no way in at
                all, and the operator has to be able to see that rather than
                guess at a rejection. */
->>>>>>> 02abb24cc2377df5e4c58ac985222193672df235
             <div className="border border-border bg-muted/50 p-4">
-              <p className="text-sm font-medium">
-                Админ нэвтрэлт тохируулаагүй байна.
-              </p>
+              <p className="text-sm font-medium">Админ нэвтрэлт тохируулаагүй байна.</p>
               <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-<<<<<<< HEAD
-                Серверийн тохиргоонд{" "}
-                <code className="font-mono text-xs">ADMIN_PASSWORD</code> нэмнэ
-                үү. Дэлгэрэнгүйг{" "}
-                <code className="font-mono text-xs">docs/newsroom.md</code>-ээс
-                уншина уу.
-=======
                 <code className="font-mono text-xs">bun run user:create</code>-ээр ажилтны
                 бүртгэл үүсгэнэ үү. Дэлгэрэнгүйг{" "}
                 <code className="font-mono text-xs">docs/postgres.md</code>-ээс уншина уу.
->>>>>>> 02abb24cc2377df5e4c58ac985222193672df235
               </p>
             </div>
           )}
