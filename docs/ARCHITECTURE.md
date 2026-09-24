@@ -4,7 +4,7 @@ Read this before exploring the tree. It exists so a new session (human or agent)
 can find the right file without grepping the whole repo, and so the invariants
 below don't have to be rediscovered the expensive way — by breaking one.
 
-Last verified: 2026-09-23.
+Last verified: 2026-09-24.
 
 ## What this is
 
@@ -47,6 +47,8 @@ Breaking one of these is how outages happen here. They are not style preferences
 src/app/
   news/, news/[slug]/          public newsroom          → src/lib/news/service.ts
   admin/news/**                editor desk              → src/app/admin/news/actions.ts
+  admin/applications/**        every incoming application
+                                                        → src/server/applicant/application-desk.ts
   admin/login/                 staff sign-in            → src/server/admin/session.ts
   account/**                   applicant area (Clerk)   → src/app/api/me/*
   careers/, careers/[id]/      job listings             → src/lib/jobs/*
@@ -89,6 +91,13 @@ it is unreachable. Applicant files (CV, photo) are chunked base64 rows.
 **Admin.** `requireAdmin()` in `src/server/admin/guard.ts` gates every admin page
 and every server action. Today it verifies an HMAC cookie signed from
 `ADMIN_PASSWORD`; there are no user accounts yet.
+
+`/admin/applications` lists every application in the mirror and says on screen
+that the mirror — not the ERP — is what it is showing, because the ERP exposes
+no cross-applicant listing (see `docs/applications.md`). It makes one public
+ERP read for liveness and posting state, and falls back with a banner when that
+fails. Reading is open to both roles; the retry is `admin` only
+(`mayRetryApplications`, the same shape as `mayDeleteArticles`).
 
 ## Environment
 

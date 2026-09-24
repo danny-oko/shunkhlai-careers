@@ -7,6 +7,7 @@ import {
   currentAdmin,
   isAdminRequest,
   mayDeleteArticles,
+  mayRetryApplications,
   requireAdmin,
   requireAdminUser,
 } from "./guard";
@@ -266,5 +267,45 @@ describe("mayDeleteArticles", () => {
     const identity = await requireAdminUser();
     expect(identity.role).toBe("editor");
     expect(mayDeleteArticles(identity)).toBe(false);
+  });
+});
+
+/**
+ * The applications desk splits the same way the newsroom does, and for the
+ * same reason: reading is open to both roles, and the one control with an
+ * effect outside this site — pushing an applicant's record at the ERP — is not.
+ */
+describe("mayRetryApplications", () => {
+  const user = (role: string) => ({ ...ADMIN_PASSWORD_IDENTITY, role });
+
+  it("is true for an admin and false for an editor", () => {
+    expect(mayRetryApplications(user("admin"))).toBe(true);
+    expect(mayRetryApplications(user("editor"))).toBe(false);
+  });
+
+  it("is false for anything else, including near misses", () => {
+    for (const role of ["", "ADMIN", "admin ", "administrator", "superuser"]) {
+      expect(mayRetryApplications(user(role)), role).toBe(false);
+    }
+  });
+
+  it("is true for the ADMIN_PASSWORD fallback, the only way into a fresh box", () => {
+    expect(mayRetryApplications(ADMIN_PASSWORD_IDENTITY)).toBe(true);
+  });
+
+  it("lets an editor read the desk but not press retry", async () => {
+    await addUser(); // created as an editor
+    const { token } = await startSession("usr_test");
+    memory.cookie = token;
+
+    // The read gate is the same `requireAdmin()` every admin screen uses, and
+    // it does not redirect an editor — the list is theirs to see.
+    await expect(requireAdmin()).resolves.toBeUndefined();
+    expect(mayRetryApplications(await requireAdminUser())).toBe(false);
+  });
+
+  it("redirects a caller with no session, before any role is considered", async () => {
+    memory.cookie = null;
+    await expect(requireAdmin()).rejects.toThrow("REDIRECT /admin/login");
   });
 });

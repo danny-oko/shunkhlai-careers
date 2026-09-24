@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   ExternalLink,
   Globe,
+  Inbox,
   LayoutTemplate,
   LogOut,
   Menu,
@@ -45,13 +46,14 @@ import { cn } from "@/lib/utils";
 type Destination = { href: string; label: string; icon: LucideIcon };
 
 /**
- * The two working desks. The labels are the pages' own `<h1>`s, not shorter
+ * The three working desks. The labels are the pages' own `<h1>`s, not shorter
  * paraphrases of them: a nav item that says something different from the
  * heading it lands on is a second name for the same screen to learn.
  */
 const DESKS: readonly Destination[] = [
   { href: "/admin/news", label: "Мэдээний удирдлага", icon: Newspaper },
   { href: "/admin/content", label: "Хуудасны контент", icon: LayoutTemplate },
+  { href: "/admin/applications", label: "Ирсэн өргөдөл", icon: Inbox },
 ];
 
 /**

@@ -154,19 +154,49 @@ sees the fresh `claimedAt`, and claims nothing. So **two sweeps do not both
 push the same application** — except in the reclaimed-lease window described
 above, which is the at-least-once caveat and not a second mechanism.
 
-## No screen, for now
+## The desk
 
-`/admin/applications` was a desk that listed stuck applications and offered a
-retry and a sweep. It was removed: it showed nothing the owner wanted to act
-on. **The machinery behind it is untouched** — `listStuckApplications`,
+`/admin/applications` lists **every** application this site has seen, newest
+first, with a detail view per row and a filter for status and posting. It
+replaces the screen that was removed for showing only the failures: that one
+was empty on a good day, and there was nowhere at all to answer "did Батболд's
+application arrive".
+
+**Where the rows come from, and the thing the page says out loud.** The ERP is
+the system of record, and this desk would rather read it. It cannot. Every
+endpoint in the collection that carries an application — `getRecruitmenRequestList`,
+and the `recruitmentorders` inside `get` — answers for **one applicant**,
+addressed by a bearer token `auth/login` mints from that applicant's регистр and
+phone. There is no admin-scoped listing, and `/api/system/*` is the CMS, not
+recruitment. So the list is the mirror (`applicant_account.data_json`), and the
+page carries a banner saying so, together with the caveat that follows from it:
+an application made straight to the ERP is not in this list.
+
+The desk does make **one** ERP read — `getRecruitmentOrderList`, the public
+posting list the careers pages use, no token and no applicant's credentials.
+It answers whether the ERP is up at all and whether the posting somebody
+applied to is still advertised. When it fails, every row stays on screen and
+the banner changes to say the ERP was not reached; the reason is classified by
+`classifyPushError`, exactly as a push failure is.
+
+**PII.** The list shows a name, a posting, a date and the push state. No
+регистр, no phone, no email — the detail view is addressed by the row's
+idempotency key rather than by email so that no URL, bookmark or access log
+carries one. The detail view adds the account email (HR's way to reach them)
+and states whether a CV exists, without its file name and without a link: the
+bytes stay behind `/api/me/cv`, which serves the signed-in applicant their own
+file. Nothing upstream is ever rendered — `erp.withdrawRefused` in the document
+and `application_log.error_message` in the legacy table both hold raw `retmsg`
+text, and both are dropped by `application-desk.ts`.
+
+**Roles.** Reading is open to `editor` and `admin`. «Дахин илгээх» — the only
+control with an effect outside this site — is `admin` only
+(`mayRetryApplications` in `src/server/admin/guard.ts`), checked in the action
+and not only in the UI.
+
+The machinery behind it is unchanged: `listStuckApplications`,
 `retryApplication` and `sweepStuckApplications` are still exported from
-`src/server/applicant/stuck.ts` and still tested, because they are the retry
-policy's home and the next caller (a cron on the customer's server — a
-`systemd` timer, or a `pm2` job hitting an authenticated route) needs them
-exactly as they are.
-
-Until that caller exists, the sweep has no scheduler: an application whose
-applicant never returns is picked up the next time that applicant loads
-`/api/me`, and `terminal` rows wait for a person. Retrying is a person's
-decision on purpose: a row is terminal because the ERP refused it or because
-five pushes failed, and an automatic retry would just re-bury it.
+`src/server/applicant/stuck.ts`, still tested, and still the retry policy's
+home. The sweep still has no scheduler — an application whose applicant never
+returns is picked up the next time that applicant loads `/api/me`, and
+`terminal` rows wait for a person, on purpose.

@@ -109,6 +109,20 @@ export function erpGet<T>(endpoint: string, token: string, query = ""): Promise<
   return call<T>(endpoint, { headers: headers(token) }, query);
 }
 
+/**
+ * A read that needs no applicant.
+ *
+ * The posting endpoints are public — that is what lets the careers pages
+ * render on the server without a token (`lib/api/jobs.ts` passes `skipAuth`),
+ * and it is the only part of the ERP this process can ask about without
+ * borrowing somebody's регистр and phone to log in as them. The admin
+ * applications desk uses it, and nothing else should: every endpoint that
+ * carries applicant data is scoped to one applicant's token by design.
+ */
+export function erpPublicGet<T>(endpoint: string, query = ""): Promise<T> {
+  return call<T>(endpoint, { headers: headers() }, query);
+}
+
 export function erpPost<T>(
   endpoint: string,
   token: string,

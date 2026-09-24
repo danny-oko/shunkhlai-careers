@@ -85,6 +85,21 @@ export function mayDeleteArticles(user: AdminIdentity): boolean {
   return user.role === "admin";
 }
 
+/**
+ * May this user push an application back at the ERP?
+ *
+ * Same shape as `mayDeleteArticles`, same reasoning. Reading the applications
+ * desk is open to both roles — an `editor` who can see that a push is stuck is
+ * an `editor` who can tell somebody. Pressing «Дахин илгээх» is not reading:
+ * it sends an applicant's record to Shunkhlai's ERP under their own ERP
+ * identity, and it is the only control on that screen with an effect outside
+ * this site. So it belongs to `admin`, and the action checks this itself
+ * rather than trusting the button not to be drawn.
+ */
+export function mayRetryApplications(user: AdminIdentity): boolean {
+  return user.role === "admin";
+}
+
 /** The same gate, for callers that need the name, the email or the role. */
 export async function requireAdminUser(): Promise<AdminIdentity> {
   const user = await currentAdmin();
