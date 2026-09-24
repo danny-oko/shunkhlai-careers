@@ -867,6 +867,21 @@ export function SphereGallery({
                     pad="p-[6%]"
                   />
                 )}
+
+                {/* A photograph's name, on the photograph and always there.
+                    The Academy and benefits walls are rooms of people, one
+                    much like the next, and with the name only on hover a
+                    phone - which has no hover - never said which course or
+                    which benefit a picture was. A lockup names itself, so it
+                    keeps the hover caption below instead.
+
+                    In rem, so it scales with the root above 1440 the way the
+                    tiles do; the perspective still doubles it at the front. */}
+                {!item.logo && (
+                  <p className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/55 to-transparent px-1.5 pt-5 pb-1.5 text-[0.5625rem] leading-tight font-medium text-pretty text-white">
+                    <span className="line-clamp-3">{item.title}</span>
+                  </p>
+                )}
               </div>
 
               {/* Under its own picture rather than at the foot of the stage:
@@ -882,9 +897,11 @@ export function SphereGallery({
                   lands at about eighteen where it is read, and the scale's own
                   floor could not go low enough to allow for a doubling it knows
                   nothing about. */}
-              <p className="absolute inset-x-[-3rem] top-full mt-1.5 text-center text-[9px] leading-snug tracking-[0.03em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                {item.title}
-              </p>
+              {item.logo && (
+                <p className="absolute inset-x-[-3rem] top-full mt-1.5 text-center text-[9px] leading-snug tracking-[0.03em] text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                  {item.title}
+                </p>
+              )}
             </div>
           );
         })}
