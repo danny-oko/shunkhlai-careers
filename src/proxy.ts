@@ -26,6 +26,15 @@ export const proxy = clerkMiddleware((_auth, request) => {
 
 export const config = {
   matcher: [
+    /**
+     * Clerk serves its own browser bundle from this origin, under `/__clerk`,
+     * and `clerkMiddleware` is what answers those requests. They have to be
+     * listed before the rule below, which excludes everything ending in `.js`
+     * — `clerk.browser.js` does, so it was being filtered out, 404ing, and
+     * leaving Clerk unable to load. The visible symptom is a sign-in button
+     * that does nothing at all, because no handler was ever attached.
+     */
+    "/__clerk/:path*",
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],

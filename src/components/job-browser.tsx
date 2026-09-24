@@ -334,25 +334,30 @@ export function JobBrowser({
                         {[job.company, job.location].filter(Boolean).join(" · ")}
                       </p>
                     </div>
-                    {/* "үлдсэн" is dropped under `sm`: at 390px the full phrase
-                        takes enough width to wrap the job title beside it. A
-                        closed advert says so plainly — its own status (in
-                        selection, selection finished) is the tooltip, since
-                        the column is too narrow for the sentence. */}
-                    <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
-                      {job.isOpen ? (
-                        job.remainingDays != null ? (
-                          <>
-                            <span className="text-foreground font-medium">
-                              {job.remainingDays}
-                            </span>{" "}
-                            хоног<span className="hidden sm:inline"> үлдсэн</span>
-                          </>
-                        ) : null
-                      ) : (
-                        <span title={job.status}>Хаагдсан</span>
-                      )}
-                    </span>
+                    {/* A `span`, not a `Button` — the whole row is already the
+                        link, and an anchor inside an anchor is invalid markup
+                        that screen readers and middle-click both trip over.
+                        This is the affordance only: it says the row leads
+                        somewhere, and the click it appears to accept is the
+                        one the row was always accepting.
+
+                        A closed advert keeps its own word instead, because
+                        "Дэлгэрэнгүй" on something nobody can apply to reads
+                        as an invitation. Its precise status (in selection,
+                        selection finished) stays the tooltip — the column is
+                        too narrow for the sentence. */}
+                    {job.isOpen ? (
+                      <span className="shrink-0 rounded-md border border-border px-3.5 py-2 text-[0.8125rem] font-medium text-muted-foreground transition-colors duration-200 group-hover:border-foreground/30 group-hover:text-foreground">
+                        Дэлгэрэнгүй
+                      </span>
+                    ) : (
+                      <span
+                        title={job.status}
+                        className="shrink-0 text-sm text-muted-foreground"
+                      >
+                        Хаагдсан
+                      </span>
+                    )}
                   </Link>
                 </li>
               ))}
