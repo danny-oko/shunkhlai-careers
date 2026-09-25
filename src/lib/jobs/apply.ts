@@ -18,11 +18,20 @@ import type { Job } from "./types";
 
 export type SalaryBand = { key: number; text: string };
 
-/** The bands the applicant may pick, as the API sent them. */
+/** A band's lower bound in tögrög — "1,200,000-1,500,000" → 1200000. */
+function bandFloor(band: SalaryBand): number {
+  const digits = band.text.match(/^\s*([\d,]+)/)?.[1]?.replace(/,/g, "");
+  return digits ? Number(digits) : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * The bands the applicant may pick, cheapest first. The API sends them sorted
+ * by key as a string (1, 10, 11, …, 2, 20, …), so they are re-ordered here.
+ */
 export function salaryBands(filterData: JobFilterData | null): SalaryBand[] {
-  return (filterData?.salarylevel ?? []).filter(
-    (band) => band && Number.isInteger(band.key) && typeof band.text === "string",
-  );
+  return (filterData?.salarylevel ?? [])
+    .filter((band) => band && Number.isInteger(band.key) && typeof band.text === "string")
+    .sort((a, b) => bandFloor(a) - bandFloor(b) || a.key - b.key);
 }
 
 const SALARY_ERROR = "Цалингийн түвшингээ жагсаалтаас сонгоно уу.";

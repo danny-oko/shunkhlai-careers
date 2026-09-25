@@ -1,6 +1,7 @@
 import { stripCode } from "@/lib/api/core/factories";
 import type { JobFilterData } from "@/lib/api/jobs";
 
+import { salaryBands } from "./apply";
 import { ALL, type FacetOption, type Job } from "./types";
 
 /**
@@ -219,7 +220,7 @@ export function locationOptions(filterData: JobFilterData | null): FacetOption[]
 export function salaryOptions(filterData: JobFilterData | null): FacetOption[] {
   return [
     { value: ALL, label: "Бүх цалингийн түвшин" },
-    ...(filterData?.salarylevel ?? []).map((level) => ({
+    ...salaryBands(filterData).map((level) => ({
       value: String(level.key),
       label: `${level.text}₮`,
     })),

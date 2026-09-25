@@ -29,6 +29,19 @@ describe("salaryBands", () => {
     expect(salaryBands({ salarylevel: bands } as unknown as JobFilterData)).toEqual(bands);
     expect(salaryBands(null)).toEqual([]);
   });
+
+  it("orders the bands by amount, not by the API's string-sorted keys", () => {
+    const shuffled = [
+      { key: 1, text: "792,000-1,000,000" },
+      { key: 10, text: "4,000,000-4,500,000" },
+      { key: 2, text: "1,000,000-1,200,000" },
+      { key: 23, text: "20,000,000-с дээш" },
+      { key: 3, text: "1,200,000-1,500,000" },
+    ];
+    expect(
+      salaryBands({ salarylevel: shuffled } as unknown as JobFilterData).map((b) => b.key),
+    ).toEqual([1, 2, 3, 10, 23]);
+  });
 });
 
 describe("parseSalaryChoice", () => {
