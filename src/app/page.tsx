@@ -22,7 +22,7 @@ import { getFilterData, listJobsSafe } from "@/lib/jobs";
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "Шунхлай ХХК - Хүчирхэг монголын хөгжлийн хүрд",
+  title: "Шунхлай | Careers",
   description:
     "Шунхлай ХХК-ийн карьерын сайт. 21 аймагт 99 гаруй ШТС, 8 агуулах, итгэмжлэгдсэн лаборатори - хүний нөөцөөс мэдээллийн технологи хүртэл олон салбарын нээлттэй ажлын байр.",
   openGraph: {
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     siteName: "Шунхлай ХХК - Careers",
     locale: "mn_MN",
     title: "Шунхлай ХХК - Careers",
-    description: `${SHARE_MOTTO} Зөвхөн шатахуунчин биш - 30 гаруй жил Монголыг хөдөлгөж ирсэн багт нэгдээрэй.`,
+    description: `${SHARE_MOTTO}`,
     images: [SHARE_IMAGE],
   },
 };
