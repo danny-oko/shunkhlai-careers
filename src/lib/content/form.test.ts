@@ -136,3 +136,59 @@ describe("formDocument — footer and about_stats", () => {
     expect(document.items).toEqual([]);
   });
 });
+
+describe("formDocument — culture", () => {
+  const labels = {
+    heading: "Бидэнтэй нэгдсэнээр та",
+    "walls.academy.label": "Сургалт, хөгжил",
+    "walls.benefits.label": "Хөнгөлөлт, хангамж",
+    "walls.clubs.label": "Хобби клубууд",
+  };
+
+  it("reads tiles and their photographs in index order, gaps and all", () => {
+    const document = formDocument(
+      "culture",
+      form({
+        ...labels,
+        "walls.academy.items.2.title": "Хоёр дахь",
+        "walls.academy.items.2.images.0": "/b.jpg",
+        "walls.academy.items.0.title": "Эхний",
+        "walls.academy.items.0.body": "Тайлбар",
+        "walls.academy.items.0.images.3": "/a-2.jpg",
+        "walls.academy.items.0.images.1": "/a-1.jpg",
+        "walls.academy.items.0.images.2": "",
+      }),
+    ) as { walls: Record<string, { label: string; items: unknown[] }> };
+
+    expect(document.walls.academy.items).toEqual([
+      { title: "Эхний", subtitle: "", body: "Тайлбар", images: ["/a-1.jpg", "/a-2.jpg"], logo: "" },
+      { title: "Хоёр дахь", subtitle: "", body: "", images: ["/b.jpg"], logo: "" },
+    ]);
+    expect(document.walls.benefits).toEqual({ label: "Хөнгөлөлт, хангамж", items: [] });
+  });
+
+  it("drops a tile left entirely blank rather than refusing the save", () => {
+    const document = formDocument(
+      "culture",
+      form({
+        ...labels,
+        "walls.clubs.items.0.title": "Спорт клуб",
+        "walls.clubs.items.0.logo": "/clubs/sport.png",
+        "walls.clubs.items.1.title": " ",
+        "walls.clubs.items.1.images.0": "",
+      }),
+    ) as { walls: Record<string, { items: unknown[] }> };
+
+    expect(document.walls.clubs.items).toHaveLength(1);
+  });
+
+  it("does not let one wall's tiles leak into another's", () => {
+    const document = formDocument(
+      "culture",
+      form({ ...labels, "walls.benefits.items.0.title": "Спорт", "walls.benefits.items.0.images.0": "/s.jpg" }),
+    ) as { walls: Record<string, { items: unknown[] }> };
+
+    expect(document.walls.academy.items).toEqual([]);
+    expect(document.walls.benefits.items).toHaveLength(1);
+  });
+});

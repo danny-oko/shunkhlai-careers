@@ -3,7 +3,13 @@
 import Image from "next/image";
 import { ImageOff } from "lucide-react";
 
-import type { AboutStatsContent, FooterContent, HeroContent } from "@/lib/content/schema";
+import type {
+  AboutStatsContent,
+  CultureContent,
+  CultureWall,
+  FooterContent,
+  HeroContent,
+} from "@/lib/content/schema";
 import { cn } from "@/lib/utils";
 
 /**
@@ -162,6 +168,71 @@ export function AboutStatsPreview({ value }: { value: AboutStatsContent }) {
             <p className="mt-1 text-[0.6875rem] leading-snug text-ink-muted">{item.label}</p>
           </div>
         ))}
+      </div>
+    </Stage>
+  );
+}
+
+/** How many tiles the strip shows before it says "and N more". */
+const WALL_STRIP = 14;
+
+/**
+ * The culture wall: the heading, the rail, and the wall that is open.
+ *
+ * The real thing is a sphere that turns with the scroll, which no two-inch
+ * band can be. What is worth checking at a glance is which picture each tile
+ * opens on and whether it is a photograph or a club's plated lockup — so the
+ * strip is the tiles in order, drawn the way the wall draws each kind.
+ */
+export function CulturePreview({
+  value,
+  active,
+  walls,
+}: {
+  value: CultureContent;
+  active: CultureWall;
+  walls: readonly CultureWall[];
+}) {
+  const items = value.walls[active].items;
+  const shown = items.slice(0, WALL_STRIP);
+
+  return (
+    <Stage>
+      <p className="text-[0.9375rem] leading-tight font-semibold tracking-[-0.02em]">
+        {value.heading || "—"}
+      </p>
+
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {walls.map((wall) => (
+          <span
+            key={wall}
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-[0.6875rem]",
+              wall === active ? "bg-brand text-brand-foreground" : "border border-white/20 text-ink-muted",
+            )}
+          >
+            {value.walls[wall].label || "—"}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-3 flex items-end gap-1.5 overflow-hidden">
+        {shown.map((item, index) =>
+          // The wall shows a club's lockup even where the club sent photographs:
+          // those open in the dialog behind it.
+          item.logo ? (
+            <div key={index} className="flex h-10 w-16 shrink-0 items-center bg-white p-1">
+              <Thumb src={item.logo} className="h-full w-full border-0 bg-white [&_img]:object-contain" />
+            </div>
+          ) : (
+            <Thumb key={index} src={item.images[0] ?? ""} className="h-14 w-11" />
+          ),
+        )}
+        {items.length > shown.length && (
+          <span className="shrink-0 pb-1 text-[0.6875rem] text-ink-muted">
+            +{items.length - shown.length}
+          </span>
+        )}
       </div>
     </Stage>
   );

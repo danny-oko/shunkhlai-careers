@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { ApplicationCard } from "@/components/account/application-card";
+import { useApplicationCount } from "@/components/account/application-count";
 import { FormMessage } from "@/components/ui/field";
 import { applications, toApiError } from "@/lib/api";
 import type { ApplicationRow } from "@/lib/api/applications";
@@ -14,6 +15,7 @@ import type { ApplicationRow } from "@/lib/api/applications";
 /** Everything the applicant has sent, with the stage each one has reached. */
 export default function ApplicationsPage() {
   const [error, setError] = React.useState<string | null>(null);
+  const { setCount } = useApplicationCount();
 
   const [token, setToken] = React.useState(0);
   const [loaded, setLoaded] = React.useState<{ token: number; rows: ApplicationRow[] } | null>(null);
@@ -25,6 +27,7 @@ export default function ApplicationsPage() {
       .then((rows) => {
         if (cancelled) return;
         setLoaded({ token, rows });
+        setCount(rows.length);
         setError(null);
       })
       .catch((loadError) => {
@@ -36,7 +39,7 @@ export default function ApplicationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, setCount]);
 
   const rows = loaded?.rows ?? [];
   const isLoading = loaded?.token !== token;

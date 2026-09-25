@@ -322,257 +322,6 @@
   --ring: var(--brand);
 }
 
-/* -------------------------------------------------------------------------
-   Colour schemes (the header's palette button)
-
-   Each scheme below re-casts the same three roles the site is already built
-   on - 60% ground, 30% ink panel, 10% accent - and changes nothing else. No
-   component names a colour of its own, so swapping the tokens here swaps the
-   whole site.
-
-   `shunkhlai` is the brandbook palette in :root above and has no block here:
-   with no `data-palette` on <html>, or with `data-palette="shunkhlai"`, none
-   of these selectors match and the defaults stand.
-
-   Specificity, since it is the whole trick: `:root[data-palette=…]` and
-   `.dark[data-palette=…]` both score (0,2,0), which beats plain `:root` and
-   plain `.dark` at (0,1,0). The two are tied with each other, so the dark
-   block wins by coming second in the file - and it only matches at all once
-   next-themes has put `dark` on <html>.
-
-   Every pair that carries text was measured rather than eyeballed. Each
-   scheme's body text, muted text, ink panels and CTA clear WCAG AA, and each
-   scheme's CTA contrast is higher than the brandbook palette's own 3.54.
-   The three alternates are drawn from the Dunn-Edwards 2026 Color Trends
-   collection, cited per scheme by name and code; see docs/brand.md §1.1.
-   ---------------------------------------------------------------------- */
-
-/* Виридиан - Viridian Odyssey DE1925 (#2e484f) on the ink panels, Country Air
-   DET581 (#9fb6c6) as the page's edges over a tint of itself, Cedar Grove
-   DE5152 (#bf6955) as the accent, used exactly as published. --ink is a
-   deepened cut of Viridian rather than the colour itself: see docs/brand.md
-   §1.1 for why a paint colour cannot usually be the panel it looks like. */
-:root[data-palette="viridian"] {
-  --brand: #bf6955;
-  --brand-2: #d4826d;
-  --brand-blue: #2e484f;
-  --brand-navy: #4c6473;
-  --brand-foreground: #ffffff;
-
-  --ink: #16292e;
-  --ink-2: #2e484f;
-  --ink-foreground: #f4f9fa;
-  --ink-muted: #a7c0c6;
-
-  --background: #eef4f7;
-  --foreground: #102026;
-  --card: #f8fbfc;
-  --popover: #f8fbfc;
-  --secondary: #dbe7ee;
-  --muted: #dbe7ee;
-  --muted-foreground: #4c6473;
-  --accent: #e4eef3;
-  --border: #9fb6c6;
-  --input: #8aa5b8;
-}
-
-.dark[data-palette="viridian"] {
-  --brand: #d9836c;
-  --brand-2: #e8a793;
-  --brand-blue: #5f9aa5;
-  --brand-navy: #6b8790;
-  --brand-foreground: #2a0f08;
-
-  --ink: #0a1114;
-  --ink-2: #2e484f;
-  --ink-foreground: #f2f9fa;
-  --ink-muted: #a7c0c6;
-
-  --background: #0e1518;
-  --foreground: #eaf2f5;
-  --card: #141d21;
-  --popover: #141d21;
-  --secondary: #1d282d;
-  --muted: #1d282d;
-  --muted-foreground: #9fb4bc;
-  --accent: #1d282d;
-  --border: #27343a;
-  --input: #2f3f46;
-}
-
-/* Лондон - London Fashion Week Fall/Winter 2025-26. Deep plum #4e2b3a on the
-   panels, the palette's pale lavender #c5c4d8 as the muted surfaces over a
-   tint of itself, and its ochre as the accent re-cut to #c57100, which is the
-   same hue at the lightness an accent needs. The gradient partner is the
-   palette's red #e23744 exactly as shown, so every brand rule and shimmer
-   sweeps ochre through red.
-
-   Unlike the Dunn-Edwards schemes there are no published codes behind this
-   one: the collection is circulated as artwork, so these values are read off
-   the swatches themselves. Treat them as this file's own, not as citable
-   brand values. */
-:root[data-palette="london"] {
-  --brand: #c57100;
-  --brand-2: #e23744;
-  --brand-blue: #6b5a80;
-  --brand-navy: #4e2b3a;
-  --brand-foreground: #ffffff;
-
-  --ink: #2c1821;
-  --ink-2: #4e2b3a;
-  --ink-foreground: #faf5f7;
-  --ink-muted: #c9aebb;
-
-  --background: #eeeef5;
-  --foreground: #1b1a24;
-  --card: #f9f9fc;
-  --popover: #f9f9fc;
-  --secondary: #c5c4d8;
-  --muted: #c5c4d8;
-  --muted-foreground: #494659;
-  --accent: #e2e1ec;
-  --border: #b0aec6;
-  --input: #9c99b5;
-}
-
-.dark[data-palette="london"] {
-  --brand: #e09a34;
-  --brand-2: #e8616c;
-  --brand-blue: #9d8ab5;
-  --brand-navy: #6b5566;
-  --brand-foreground: #241503;
-
-  --ink: #150b11;
-  --ink-2: #4e2b3a;
-  --ink-foreground: #faf5f7;
-  --ink-muted: #c9aebb;
-
-  --background: #16151b;
-  --foreground: #f0eef5;
-  --card: #1e1c25;
-  --popover: #1e1c25;
-  --secondary: #292733;
-  --muted: #292733;
-  --muted-foreground: #aaa6bb;
-  --accent: #292733;
-  --border: #35323f;
-  --input: #403d4d;
-}
-
-/* Нүүрсэн саарал - Eagle's View DE6394 (#d4cbcc) as the muted surfaces over a
-   tint of itself, deep charcoal panels, and Viridian Odyssey DE1925's hue
-   re-cut at accent lightness (#0090ac).
-
-   This scheme carried Gothic Revival Green DET507 as its panels until the
-   olive read as drab at full-bleed size. Green is gone from it entirely now:
-   --border is a neutral greige cut of Eagle's View rather than Antique Coin,
-   and --ink-muted is a plain grey. */
-:root[data-palette="charcoal"] {
-  --brand: #0090ac;
-  --brand-2: #35b0c9;
-  --brand-blue: #0090ac;
-  --brand-navy: #4a4d52;
-  --brand-foreground: #ffffff;
-
-  --ink: #17181a;
-  --ink-2: #2c2e31;
-  --ink-foreground: #f7f7f8;
-  --ink-muted: #b2b6ba;
-
-  --background: #f0ecec;
-  --foreground: #1a1819;
-  --card: #faf8f8;
-  --popover: #faf8f8;
-  --secondary: #d4cbcc;
-  --muted: #d4cbcc;
-  --muted-foreground: #554e50;
-  --accent: #e5dfdf;
-  --border: #bdb3b4;
-  --input: #aaa0a1;
-}
-
-.dark[data-palette="charcoal"] {
-  --brand: #2fc0dc;
-  --brand-2: #7fd8ea;
-  --brand-blue: #2fc0dc;
-  --brand-navy: #4a4d52;
-  --brand-foreground: #04212a;
-
-  --ink: #0c0d0e;
-  --ink-2: #212326;
-  --ink-foreground: #f7f7f8;
-  --ink-muted: #b2b6ba;
-
-  --background: #131415;
-  --foreground: #f1f1f2;
-  --card: #1a1b1d;
-  --popover: #1a1b1d;
-  --secondary: #252729;
-  --muted: #252729;
-  --muted-foreground: #a4a8ac;
-  --accent: #252729;
-  --border: #303336;
-  --input: #3b3f43;
-}
-
-/* Дарсан улаан - London Fashion Week FW 2025-26, the second scheme from that
-   palette. Four of its colours land exactly as shown: the off-white #f0f0ee is
-   the page, the light grey #adacaa is the edge, the maroon #5f3232 is
-   --ink-2, and the mustard #9c8438 is the accent, with the ochre #ce8125 as
-   its gradient partner.
-
-   The only move is --ink: at #5f3232 the accent window measured 0.253 .. 0.250
-   - shut by three thousandths - so the panels take a deepened cut at #3a1f1f
-   and the maroon itself stays one layer up. This is the one wine-coloured
-   scheme; no other palette here puts a chromatic warm dark on the panels. */
-:root[data-palette="wine"] {
-  --brand: #9c8438;
-  --brand-2: #ce8125;
-  --brand-blue: #7a5e5e;
-  --brand-navy: #5f3232;
-  --brand-foreground: #ffffff;
-
-  --ink: #3a1f1f;
-  --ink-2: #5f3232;
-  --ink-foreground: #faf4f3;
-  --ink-muted: #cbaeab;
-
-  --background: #f0f0ee;
-  --foreground: #1e1a19;
-  --card: #f9f9f8;
-  --popover: #f9f9f8;
-  --secondary: #e0dfdc;
-  --muted: #e0dfdc;
-  --muted-foreground: #575250;
-  --accent: #e9e8e5;
-  --border: #adacaa;
-  --input: #96948f;
-}
-
-.dark[data-palette="wine"] {
-  --brand: #d4b054;
-  --brand-2: #e0a04a;
-  --brand-blue: #a08a86;
-  --brand-navy: #6b4f4c;
-  --brand-foreground: #241b03;
-
-  --ink: #170d0d;
-  --ink-2: #5f3232;
-  --ink-foreground: #faf4f3;
-  --ink-muted: #cbaeab;
-
-  --background: #1a1514;
-  --foreground: #f4ece9;
-  --card: #221b19;
-  --popover: #221b19;
-  --secondary: #2e2522;
-  --muted: #2e2522;
-  --muted-foreground: #b3a49e;
-  --accent: #2e2522;
-  --border: #3b2f2c;
-  --input: #473a36;
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -755,8 +504,26 @@
   animation: brand-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* The lighter sibling for content that swaps in place, like a filtered list:
+   long enough to read as a change, short enough not to hold up the reader. */
+@keyframes brand-settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.brand-settle {
+  animation: brand-settle 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .brand-rise {
+  .brand-rise,
+  .brand-settle {
     animation: none;
   }
 }

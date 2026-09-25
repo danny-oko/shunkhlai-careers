@@ -4,6 +4,7 @@ import { SiteLoader } from "@/components/landing/site-loader";
 import { HeroStage } from "@/components/landing/hero-stage";
 import { HeroJourney } from "@/components/landing/hero-journey";
 import { getContent } from "@/lib/content/service";
+import { SHARE_IMAGE, SHARE_MOTTO } from "@/lib/share";
 import { getFilterData, listJobsSafe } from "@/lib/jobs";
 
 /**
@@ -25,11 +26,13 @@ export const metadata: Metadata = {
   description:
     "Шунхлай ХХК-ийн карьерын сайт. 21 аймагт 99 гаруй ШТС, 8 агуулах, итгэмжлэгдсэн лаборатори - хүний нөөцөөс мэдээллийн технологи хүртэл олон салбарын нээлттэй ажлын байр.",
   openGraph: {
-    title: "Шунхлай ХХК - Careers",
-    description:
-      "Зөвхөн шатахуунчин биш. 30 гаруй жил Монголыг хөдөлгөж ирсэн багт нэгдээрэй.",
-    images: ["/brand/kv-amjilt.jpg"],
     type: "website",
+    url: "/",
+    siteName: "Шунхлай ХХК - Careers",
+    locale: "mn_MN",
+    title: "Шунхлай ХХК - Careers",
+    description: `${SHARE_MOTTO} Зөвхөн шатахуунчин биш - 30 гаруй жил Монголыг хөдөлгөж ирсэн багт нэгдээрэй.`,
+    images: [SHARE_IMAGE],
   },
 };
 

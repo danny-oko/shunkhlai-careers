@@ -39,6 +39,13 @@ export const CONTENT_LIMITS = {
   slides: 8,
   contacts: 10,
   stats: 8,
+  tileTitle: 120,
+  tileSubtitle: 160,
+  tileBody: 1500,
+  /** A wall is a sphere of tiles; past this the tiles are too small to read. */
+  tiles: 60,
+  /** The dialog runs a tile's photographs as a strip. */
+  tileImages: 12,
 } as const;
 
 /** What the admin sees when the section could not be written. */
@@ -199,15 +206,86 @@ export const aboutStatsSchema = z.object({
     .max(CONTENT_LIMITS.stats, `${CONTENT_LIMITS.stats} үзүүлэлтээс олон байж болохгүй.`),
 });
 
+/* --- culture wall (about) -------------------------------------------------- */
+
+/** A line that may be left blank, stored as absent rather than as "". */
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `${max} тэмдэгтээс урт байж болохгүй.`)
+    .transform((value) => (value === "" ? undefined : value))
+    .optional();
+
+const optionalImage = z
+  .union([imageSrc, z.literal("")])
+  .transform((value) => (value === "" ? undefined : value))
+  .optional();
+
+/**
+ * One tile on the sphere, and what its dialog says when it is opened.
+ *
+ * `images` is the run the dialog steps through; the first is the one the wall
+ * shows. `logo` is a club's wide lockup, drawn whole on a light plate instead
+ * of a cropped photograph. A tile needs one or the other: with neither, the
+ * wall turns a placeholder picture that has nothing to do with the tile —
+ * which is why two benefits were hidden rather than shipped without one.
+ */
+const cultureTileSchema = z
+  .object({
+    title: text(CONTENT_LIMITS.tileTitle, "Гарчиг шаардлагатай."),
+    subtitle: optionalText(CONTENT_LIMITS.tileSubtitle),
+    body: optionalText(CONTENT_LIMITS.tileBody),
+    images: z
+      .array(imageSrc)
+      .max(CONTENT_LIMITS.tileImages, `${CONTENT_LIMITS.tileImages} зургаас олон байж болохгүй.`),
+    logo: optionalImage,
+  })
+  .refine((tile) => tile.images.length > 0 || tile.logo !== undefined, {
+    message: "Дор хаяж нэг зураг эсвэл лого шаардлагатай.",
+    path: ["images"],
+  });
+
+const cultureWallSchema = z.object({
+  label: text(CONTENT_LIMITS.label, "Хэсгийн нэр шаардлагатай."),
+  items: z
+    .array(cultureTileSchema)
+    .min(1, "Дор хаяж нэг зураг шаардлагатай.")
+    .max(CONTENT_LIMITS.tiles, `${CONTENT_LIMITS.tiles} зургаас олон байж болохгүй.`),
+});
+
+/**
+ * "Бидэнтэй нэгдсэнээр та" on `/about`: the heading, and the three walls the
+ * rail under it switches between.
+ *
+ * The walls are named, not a list. Their keys are the hashes the site footer
+ * links to (`/about#clubs`), and `academy` is the one wall that closes into
+ * the Academy's figures — so an admin can rename a wall or change every tile
+ * on it, but cannot add a fourth or delete one out from under those links.
+ */
+export const CULTURE_WALLS = ["academy", "benefits", "clubs"] as const;
+
+export type CultureWall = (typeof CULTURE_WALLS)[number];
+
+export const cultureSchema = z.object({
+  heading: text(CONTENT_LIMITS.heading, "Гарчиг шаардлагатай."),
+  walls: z.object({
+    academy: cultureWallSchema,
+    benefits: cultureWallSchema,
+    clubs: cultureWallSchema,
+  }),
+});
+
 /* --- the registry --------------------------------------------------------- */
 
 export const CONTENT_SCHEMAS = {
   hero: heroSchema,
   footer: footerSchema,
   "about_stats": aboutStatsSchema,
+  culture: cultureSchema,
 } as const;
 
-export const CONTENT_KEYS = ["hero", "footer", "about_stats"] as const;
+export const CONTENT_KEYS = ["hero", "footer", "about_stats", "culture"] as const;
 
 export type ContentKey = (typeof CONTENT_KEYS)[number];
 
@@ -216,6 +294,8 @@ export type ContentValue<K extends ContentKey> = z.output<(typeof CONTENT_SCHEMA
 export type HeroContent = z.output<typeof heroSchema>;
 export type FooterContent = z.output<typeof footerSchema>;
 export type AboutStatsContent = z.output<typeof aboutStatsSchema>;
+export type CultureContent = z.output<typeof cultureSchema>;
+export type CultureTile = CultureContent["walls"][CultureWall]["items"][number];
 
 export function isContentKey(value: string): value is ContentKey {
   return (CONTENT_KEYS as readonly string[]).includes(value);

@@ -1,11 +1,13 @@
 "use client";
 
 import * as React from "react";
+import { ArrowDown, ArrowUp, ChevronDown, X } from "lucide-react";
 
 import { saveSectionAction, type ContentActionState } from "@/app/admin/content/actions";
 import { ImageUpload } from "@/components/admin/image-upload";
 import {
   AboutStatsPreview,
+  CulturePreview,
   FooterPreview,
   HeroPreview,
   Thumb,
@@ -18,8 +20,17 @@ import {
   SectionShell,
   useRows,
 } from "@/components/admin/content/section-shell";
-import { CONTENT_LIMITS } from "@/lib/content/schema";
-import type { AboutStatsContent, FooterContent, HeroContent } from "@/lib/content/schema";
+import { Button } from "@/components/ui/button";
+import { CONTENT_LIMITS, CULTURE_WALLS } from "@/lib/content/schema";
+import type {
+  AboutStatsContent,
+  CultureContent,
+  CultureTile,
+  CultureWall,
+  FooterContent,
+  HeroContent,
+} from "@/lib/content/schema";
+import { cn } from "@/lib/utils";
 import { CONTENT_SECTIONS } from "@/lib/content/defaults";
 
 /**
@@ -420,6 +431,351 @@ export function AboutStatsForm({
           onClick={() => items.add({ value: "", label: "" })}
         />
       </FieldGroup>
+    </SectionShell>
+  );
+}
+
+/* --- culture wall -------------------------------------------------------- */
+
+/**
+ * One tile of a culture wall: folded to its picture and title until it is
+ * opened, because a wall is a dozen of these and three walls unfolded are a
+ * page nobody can find anything on.
+ *
+ * Folded is `hidden`, not unmounted — the inputs still post, so a save sends
+ * every tile whether or not it was opened. A tile the last save refused
+ * opens by itself, so the message is never inside a fold.
+ */
+function TileEditor({
+  base,
+  tile,
+  errors,
+  onChange,
+}: {
+  /** The input-name prefix, `walls.academy.items.3`. */
+  base: string;
+  tile: CultureTile;
+  errors: Record<string, string>;
+  onChange: (patch: Partial<CultureTile>) => void;
+}) {
+  const failed = Object.keys(errors).some((key) => key.startsWith(`${base}.`));
+  const [open, setOpen] = React.useState(!tile.title);
+  const shown = open || failed;
+  const cover = tile.logo ?? tile.images[0] ?? "";
+
+  const setImage = (index: number, src: string) =>
+    onChange({ images: tile.images.map((image, at) => (at === index ? src : image)) });
+  const moveImage = (index: number, to: number) => {
+    if (to < 0 || to >= tile.images.length) return;
+    const images = [...tile.images];
+    const [moved] = images.splice(index, 1);
+    images.splice(to, 0, moved);
+    onChange({ images });
+  };
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <Thumb
+          src={cover}
+          className={cn("h-12 w-10", tile.logo && "w-16 bg-white [&_img]:object-contain")}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[0.8125rem] font-medium">{tile.title || "Гарчиггүй"}</p>
+          <p className="text-[0.75rem] text-muted-foreground">
+            {tile.images.length} зураг{tile.logo ? " · лого" : ""}
+            {tile.body ? "" : " · тайлбаргүй"}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={shown}
+          aria-controls={`${base}-fields`}
+          disabled={failed}
+          className="h-[38px] text-[0.8125rem]"
+        >
+          {shown ? "Хураах" : "Засах"}
+          <ChevronDown aria-hidden className={cn("transition-transform", shown && "rotate-180")} />
+        </Button>
+      </div>
+
+      <div id={`${base}-fields`} hidden={!shown} className="flex flex-col gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field
+            name={`${base}.title`}
+            label="Гарчиг"
+            value={tile.title}
+            onChange={(title) => onChange({ title })}
+            error={errors[`${base}.title`]}
+          />
+          <Field
+            name={`${base}.subtitle`}
+            label="Дэд гарчиг"
+            value={tile.subtitle ?? ""}
+            onChange={(subtitle) => onChange({ subtitle })}
+            error={errors[`${base}.subtitle`]}
+            hint="Заавал биш. Цонхонд гарчгийн доор гарна."
+          />
+        </div>
+
+        <Field
+          name={`${base}.body`}
+          label="Тайлбар"
+          value={tile.body ?? ""}
+          onChange={(body) => onChange({ body })}
+          error={errors[`${base}.body`]}
+          hint="Зураг дээр дарахад нээгдэх цонхны бичвэр. Хоосон бол «удахгүй нэмэгдэнэ» гэж гарна."
+          multiline
+        />
+
+        <div className="flex flex-col gap-2">
+          <p className="text-[0.6875rem] tracking-[0.14em] uppercase">Зурагнууд</p>
+          <p className="-mt-1 text-[0.75rem] leading-snug text-muted-foreground">
+            Эхний зураг хананд харагдана, бусад нь цонхонд дараалан гүйнэ.
+          </p>
+
+          {tile.images.map((src, index) => (
+            <div key={index} className="flex items-end gap-2">
+              <Thumb src={src} className="size-[38px]" />
+              <Field
+                name={`${base}.images.${index}`}
+                label={`${index + 1}-р зураг`}
+                value={src}
+                onChange={(next) => setImage(index, next)}
+                error={errors[`${base}.images.${index}`]}
+                placeholder="/academy/hall.jpg"
+                className="min-w-0 flex-1"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-lg"
+                disabled={index === 0}
+                onClick={() => moveImage(index, index - 1)}
+                aria-label={`${index + 1}-р зургийг дээш зөөх`}
+                title="Дээш зөөх"
+                className="text-muted-foreground"
+              >
+                <ArrowUp aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-lg"
+                disabled={index === tile.images.length - 1}
+                onClick={() => moveImage(index, index + 1)}
+                aria-label={`${index + 1}-р зургийг доош зөөх`}
+                title="Доош зөөх"
+                className="text-muted-foreground"
+              >
+                <ArrowDown aria-hidden />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-lg"
+                onClick={() => onChange({ images: tile.images.filter((_, at) => at !== index) })}
+                aria-label={`${index + 1}-р зургийг хасах`}
+                title="Хасах"
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X aria-hidden />
+              </Button>
+            </div>
+          ))}
+
+          {errors[`${base}.images`] && (
+            <p role="alert" className="text-[0.8125rem] text-destructive">
+              {errors[`${base}.images`]}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-start gap-2">
+            <RowAdd
+              label="Холбоосоор нэмэх"
+              disabled={tile.images.length >= CONTENT_LIMITS.tileImages}
+              onClick={() => onChange({ images: [...tile.images, ""] })}
+            />
+            {tile.images.length < CONTENT_LIMITS.tileImages && (
+              <ImageUpload
+                folder="culture"
+                label="Зураг байршуулах"
+                onUploaded={(url) => onChange({ images: [...tile.images, url] })}
+              />
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <Field
+            name={`${base}.logo`}
+            label="Лого"
+            value={tile.logo ?? ""}
+            onChange={(logo) => onChange({ logo })}
+            error={errors[`${base}.logo`]}
+            hint="Заавал биш. Клубын өргөн лого - хананд зургийн оронд цагаан дэвсгэр дээр бүтнээрээ гарна."
+            placeholder="/clubs/sport.png"
+            className="min-w-56 flex-1"
+          />
+          <ImageUpload
+            folder="culture"
+            label="Лого байршуулах"
+            onUploaded={(logo) => onChange({ logo })}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * "Бидэнтэй нэгдсэнээр та": the heading, and the three walls behind the rail.
+ *
+ * One form and one save for all three walls, switched between by tabs the way
+ * the public section switches them. The walls that are not showing are
+ * `hidden`, not unmounted, so saving from the Academy tab still posts the
+ * benefits and the clubs as they stand — the section is one row, and a save
+ * that dropped two thirds of it would empty them. A wall holding a refused
+ * field says so on its tab.
+ *
+ * The three `useRows` are written out rather than looped: they are hooks, and
+ * there are exactly three walls, fixed by the schema.
+ */
+export function CultureForm({ value, stored }: { value: CultureContent; stored: boolean }) {
+  const { state, action, isPending, errors, dirty, markDirty } = useSection("culture");
+  const [heading, setHeading] = React.useState(value.heading);
+  const [labels, setLabels] = React.useState<Record<CultureWall, string>>({
+    academy: value.walls.academy.label,
+    benefits: value.walls.benefits.label,
+    clubs: value.walls.clubs.label,
+  });
+  const lists = {
+    academy: useRows(value.walls.academy.items, markDirty),
+    benefits: useRows(value.walls.benefits.items, markDirty),
+    clubs: useRows(value.walls.clubs.items, markDirty),
+  };
+  const [active, setActive] = React.useState<CultureWall>("academy");
+
+  const current: CultureContent = {
+    heading,
+    walls: {
+      academy: { label: labels.academy, items: lists.academy.rows.map((row) => row.value) },
+      benefits: { label: labels.benefits, items: lists.benefits.rows.map((row) => row.value) },
+      clubs: { label: labels.clubs, items: lists.clubs.rows.map((row) => row.value) },
+    },
+  };
+
+  const failing = (wall: CultureWall) =>
+    Object.keys(errors).some((key) => key.startsWith(`walls.${wall}.`));
+
+  return (
+    <SectionShell
+      section="culture"
+      title={CONTENT_SECTIONS.culture.title}
+      blurb={CONTENT_SECTIONS.culture.blurb}
+      href={pageHref("culture")}
+      stored={stored}
+      state={state}
+      isPending={isPending}
+      dirty={dirty}
+      onDirty={markDirty}
+      action={action}
+      preview={<CulturePreview value={current} active={active} walls={CULTURE_WALLS} />}
+    >
+      <Field
+        name="heading"
+        label="Гарчиг"
+        value={heading}
+        onChange={setHeading}
+        error={errors.heading}
+        hint="Хэсгийн дээд талд, хэсгүүдийн сонголтын дээр гарна."
+      />
+
+      <div role="tablist" aria-label="Хананууд" className="flex flex-wrap gap-1.5 border-t border-border pt-5">
+        {CULTURE_WALLS.map((wall) => (
+          <button
+            key={wall}
+            type="button"
+            role="tab"
+            id={`culture-tab-${wall}`}
+            aria-selected={wall === active}
+            aria-controls={`culture-wall-${wall}`}
+            onClick={() => setActive(wall)}
+            className={cn(
+              "flex h-[38px] items-center gap-1.5 rounded-full border px-3.5 text-[0.8125rem] transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+              wall === active
+                ? "border-foreground bg-foreground text-background"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {labels[wall] || wall}
+            <span className="tabular-nums opacity-60">{lists[wall].rows.length}</span>
+            {failing(wall) && (
+              <span aria-label="алдаатай" className="size-1.5 rounded-full bg-destructive" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {CULTURE_WALLS.map((wall) => {
+        const list = lists[wall];
+        return (
+          <div
+            key={wall}
+            id={`culture-wall-${wall}`}
+            role="tabpanel"
+            aria-labelledby={`culture-tab-${wall}`}
+            hidden={wall !== active}
+            className="flex flex-col gap-5"
+          >
+            <Field
+              name={`walls.${wall}.label`}
+              label="Хэсгийн нэр"
+              value={labels[wall]}
+              onChange={(label) => setLabels((current) => ({ ...current, [wall]: label }))}
+              error={errors[`walls.${wall}.label`]}
+              hint="Хэсгүүдийн сонголт дээр гарах нэр."
+            />
+
+            <FieldGroup
+              legend="Зурагнууд"
+              hint="Бөмбөрцөг хананд энэ дарааллаар байрлана. Зураг бүр дээр дарахад гарчиг, тайлбар, бүх зураг нь нээгдэнэ."
+            >
+              {errors[`walls.${wall}.items`] && (
+                <p role="alert" className="text-[0.8125rem] text-destructive">
+                  {errors[`walls.${wall}.items`]}
+                </p>
+              )}
+
+              {list.rows.map((row, index) => (
+                <Row
+                  key={row.id}
+                  index={index}
+                  total={list.rows.length}
+                  removeLabel={`${row.value.title || index + 1}-г хасах`}
+                  onRemove={() => list.remove(row.id)}
+                  onMove={(to) => list.move(row.id, to)}
+                >
+                  <TileEditor
+                    base={`walls.${wall}.items.${index}`}
+                    tile={row.value}
+                    errors={errors}
+                    onChange={(patch) => list.update(row.id, patch)}
+                  />
+                </Row>
+              ))}
+
+              <RowAdd
+                label="Зураг нэмэх"
+                disabled={list.rows.length >= CONTENT_LIMITS.tiles}
+                onClick={() => list.add({ title: "", images: [] })}
+              />
+            </FieldGroup>
+          </div>
+        );
+      })}
     </SectionShell>
   );
 }

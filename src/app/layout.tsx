@@ -4,13 +4,13 @@ import { clerkAppearance } from "@/lib/clerk/appearance";
 import { clerkLocalizationMn } from "@/lib/clerk/localization-mn";
 import { PT_Serif, Ubuntu_Sans, Ubuntu_Sans_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
-import { PaletteProvider } from "@/components/palette-provider";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { CursorRing } from "@/components/cursor-ring";
 import { ChromeSlot } from "@/components/chrome-slot";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { Toaster } from "@/components/ui/sonner";
+import { SHARE_IMAGE, SHARE_MOTTO } from "@/lib/share";
 import "./globals.css";
 
 const sans = Ubuntu_Sans({
@@ -36,14 +36,36 @@ const ptSerif = PT_Serif({
   display: "swap",
 });
 
+/**
+ * The origin relative Open Graph URLs resolve against. It must be this site:
+ * careers.shunkhlai.mn is the company's older careers page, so resolving
+ * against it pointed every link preview at an image that 404s there.
+ * `NEXT_PUBLIC_SITE_URL` wins once a custom domain is live; until then
+ * Vercel's production hostname is used.
+ */
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://careers.shunkhlai.mn"),
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Шунхлай ХХК - Careers",
     template: "%s - Шунхлай Careers",
   },
   description:
     "Шунхлай ХХК-ийн карьерын сайт. Хүний нөөц, санхүү, лаборатори, логистик, борлуулалт, маркетинг, мэдээллийн технологийн нээлттэй ажлын байр.",
+  // Pages without their own `openGraph` (careers, news) share with this.
+  openGraph: {
+    type: "website",
+    siteName: "Шунхлай ХХК - Careers",
+    locale: "mn_MN",
+    title: "Шунхлай ХХК - Careers",
+    description: SHARE_MOTTO,
+    images: [SHARE_IMAGE],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -66,7 +88,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             enableSystem
             disableTransitionOnChange
           >
-            <PaletteProvider>
               <SessionProvider>
                 {/* `/admin` brings its own bar; the fixed site header would
                     otherwise sit on top of it and the footer under the desk. */}
@@ -80,7 +101,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 <Toaster position="bottom-right" />
                 <CursorRing />
               </SessionProvider>
-            </PaletteProvider>
           </ThemeProvider>
         </body>
       </html>

@@ -133,8 +133,6 @@ export function syncState(row: { erp?: unknown }): SyncState | null {
   switch (erp?.status) {
     case "pending":
       return { tone: "pending", label: "Хадгалагдсан — ERP-д илгээгдэж байна" };
-    case "sent":
-      return { tone: "positive", label: "Илгээгдсэн" };
     case "failed": {
       // Waiting on something, not failing: it goes by itself once that is done.
       if (erp.error === "profile_incomplete") {
@@ -157,6 +155,7 @@ export function syncState(row: { erp?: unknown }): SyncState | null {
       // Still being retried: the row is safe and nothing is asked of them.
       return { tone: "pending", label: "Хадгалагдсан — дахин илгээхийг оролдож байна" };
     }
+    // "sent" is the normal case: the status pill already says enough.
     default:
       return null;
   }

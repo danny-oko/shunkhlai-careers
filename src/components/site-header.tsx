@@ -8,7 +8,6 @@ import { Menu, X } from "lucide-react";
 
 import { BrandMark } from "@/components/brand/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { PaletteToggle } from "@/components/palette-toggle";
 import { ProfileMenu } from "@/components/auth/profile-menu";
 import { useSession } from "@/components/auth/session-provider";
 import { Button } from "@/components/ui/button";
@@ -109,10 +108,6 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-1.5">
-          {/* Outside the signed-in branch, unlike ThemeToggle: that one moves
-              into ProfileMenu once you are signed in, and the palette has no
-              entry there. */}
-          <PaletteToggle />
           {isAuthenticated ? (
             <ProfileMenu />
           ) : (

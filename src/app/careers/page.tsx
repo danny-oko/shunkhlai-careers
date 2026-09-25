@@ -60,10 +60,6 @@ function toQuery(params: SearchParams): JobQuery {
   };
 }
 
-function countOpen(jobs: Job[] | null): number {
-  return (jobs ?? []).filter((job) => job.isOpen).length;
-}
-
 function Outage() {
   return (
     <p role="alert" className="text-muted-foreground px-6 py-16 text-center text-sm">
@@ -80,7 +76,7 @@ export default async function CareersPage({ searchParams }: PageProps<"/careers"
 
   return (
     <main className="flex-1 pt-16">
-      <CareersHero roleCount={countOpen(jobs)} />
+      <CareersHero />
 
       <div className="mx-auto w-full max-w-6xl">
         {jobs ? <JobBrowser jobs={jobs} filterData={filterData} /> : <Outage />}

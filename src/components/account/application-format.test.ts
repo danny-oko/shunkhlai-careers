@@ -106,7 +106,7 @@ describe("syncState", () => {
       tone: "pending",
       label: "Хадгалагдсан — ERP-д илгээгдэж байна",
     });
-    expect(syncState({ erp: { status: "sent" } })).toEqual({ tone: "positive", label: "Илгээгдсэн" });
+    expect(syncState({ erp: { status: "sent" } })).toBeNull();
     // Still being retried: pending tone, and the word "хадгалагдсан" stays,
     // because the row is durable here whatever the ERP is doing.
     expect(syncState({ erp: { status: "failed", attempts: 1 } })).toEqual({
