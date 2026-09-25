@@ -122,7 +122,9 @@ export function verifyAdminSession(
  * so a value that only looks right buys an attacker nothing but a redirect to
  * a page that refuses them.
  */
-export function adminCookiePlausible(value: string | null | undefined): boolean {
+export function adminCookiePlausible(
+  value: string | null | undefined,
+): boolean {
   if (!value) return false;
   return looksLikeSessionToken(value) || verifyAdminSession(value);
 }
@@ -140,8 +142,5 @@ export function adminCookieOptions(): {
     path: "/admin",
     secure: isProduction,
     maxAge: SESSION_TTL_SECONDS,
-
-
-
   };
 }
