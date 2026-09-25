@@ -32,7 +32,7 @@ const SLIDES = [
   },
 ] as const;
 
-const SLIDE_MS = 7000;
+const SLIDE_MS = 5000;
 
 /**
  * The photograph's own paper white, laid back over the corner the walkers

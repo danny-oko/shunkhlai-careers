@@ -196,7 +196,7 @@ export function DotWordmark({
       </text>
     </svg>
 
-      {/* Only mounted where the pointer can actually reach it; see useScatter. */}
+      {/* Not mounted under reduced motion; see useScatter. */}
       {mounted && (
         <canvas
           aria-hidden
@@ -212,8 +212,7 @@ export function DotWordmark({
  * The same mark again as loose dots, so the pointer can push through it.
  *
  * A pattern fill cannot do this: it is one repeating tile, and there is no
- * such thing as the nth dot of it to move. So on a pointer device the SVG
- * hands over to a canvas holding every dot as its own body — a few thousand of
+ * such thing as the nth dot of it to move. So the SVG hands over to a canvas holding every dot as its own body — a few thousand of
  * them, which is why this is a canvas and not a few thousand elements.
  *
  * Where the ink is, is not worked out from the letterforms. The word is
@@ -221,8 +220,14 @@ export function DotWordmark({
  * so the dots land exactly where the pattern would have shown them, whatever
  * the font turns out to be.
  *
- * `mounted` says a canvas is wanted at all — false on a touch screen and under
- * reduced motion, where the SVG is left alone. `painted` says it has the mark
+ * A finger works it as well as a mouse: touching the mark throws the dots
+ * from under it, dragging carries the throw along, and lifting lets them
+ * settle. Nothing here claims the gesture, so a drag that starts on the mark
+ * still scrolls the page - the footer is the last thing on it and a phone
+ * reader has to be able to scroll back up off it.
+ *
+ * `mounted` says a canvas is wanted at all — false under reduced motion,
+ * where the SVG is left alone. `painted` says it has the mark
  * on it and the SVG may step aside; the two are separate because a copy of
  * this that is display:none at the current breakpoint has no width to build
  * against, and hiding its SVG on intent alone would leave nothing behind when
@@ -250,13 +255,9 @@ function useScatter({
     const frame = frameRef.current;
     if (!frame || typeof window.matchMedia !== "function") return;
 
-    // A scatter that answers the pointer is nothing on a screen that has no
-    // pointer to answer, and is exactly the kind of thing reduced motion is
-    // asking not to be given. Both keep the SVG and cost nothing.
-    const wanted =
-      window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!wanted) return;
+    // A scatter is exactly the kind of thing reduced motion is asking not to
+    // be given. That keeps the SVG and costs nothing.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     // A one-shot capability probe, not a render-driven update: `matchMedia` is
     // unavailable during SSR, so this cannot be lazy initial state, and the
@@ -421,14 +422,24 @@ function useScatter({
       if (!raf) raf = requestAnimationFrame(step);
     };
 
-    const onMove = (event: PointerEvent) => {
+    const aim = (clientX: number, clientY: number) => {
       const box = frame.getBoundingClientRect();
       if (!box.width || !box.height) return;
       pointer = {
-        x: ((event.clientX - box.left) / box.width) * BOX_WIDTH,
-        y: ((event.clientY - box.top) / box.height) * boxHeight,
+        x: ((clientX - box.left) / box.width) * BOX_WIDTH,
+        y: ((clientY - box.top) / box.height) * boxHeight,
       };
       run();
+    };
+
+    const onMove = (event: PointerEvent) => aim(event.clientX, event.clientY);
+
+    // Once the browser takes a touch drag for a scroll it stops sending
+    // pointer moves and cancels the pointer, but touch moves keep coming, so
+    // the throw follows the finger for as long as it is down.
+    const onTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (touch) aim(touch.clientX, touch.clientY);
     };
 
     const onLeave = () => {
@@ -436,9 +447,20 @@ function useScatter({
       run();
     };
 
+    // A mouse that lets go of its button is still over the mark; a finger
+    // that lifts is not.
+    const onRelease = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") onLeave();
+    };
+
     build();
+    frame.addEventListener("pointerdown", onMove);
     frame.addEventListener("pointermove", onMove);
     frame.addEventListener("pointerleave", onLeave);
+    frame.addEventListener("pointerup", onRelease);
+    frame.addEventListener("touchmove", onTouchMove, { passive: true });
+    frame.addEventListener("touchend", onLeave);
+    frame.addEventListener("touchcancel", onLeave);
 
     const observer = new ResizeObserver(build);
     observer.observe(frame);
@@ -454,8 +476,13 @@ function useScatter({
     return () => {
       live = false;
       cancelAnimationFrame(raf);
+      frame.removeEventListener("pointerdown", onMove);
       frame.removeEventListener("pointermove", onMove);
       frame.removeEventListener("pointerleave", onLeave);
+      frame.removeEventListener("pointerup", onRelease);
+      frame.removeEventListener("touchmove", onTouchMove);
+      frame.removeEventListener("touchend", onLeave);
+      frame.removeEventListener("touchcancel", onLeave);
       observer.disconnect();
       theme.disconnect();
       setPainted(false);

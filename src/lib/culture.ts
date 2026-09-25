@@ -33,7 +33,8 @@ export const stories: Story[] = [
     name: "Г. Батжаргал",
     role: "Цэнэглэх машины жолооч",
     headline: "Монгол улсыг олон тойрсон хүн",
-    highlight: "2018 оноос хойш 250,000 км зам туулж, 2,158,000 литр ачаа тээвэрлэсэн.",
+    highlight:
+      "2018 оноос хойш 250,000 км зам туулж, 2,158,000 литр ачаа тээвэрлэсэн.",
     alt: "Цэнэглэх машины жолооч Г. Батжаргал автоцистерн машины дэргэд зогсож байна",
   },
   {
@@ -51,7 +52,8 @@ export const stories: Story[] = [
     name: "Х. Батчулуун",
     role: "Автын инженер",
     headline: "Шидэт гартай хүн",
-    highlight: "2016 оноос хойш 500 гаруй ачааны машиныг засаж, дээд амжилт тогтоосон.",
+    highlight:
+      "2016 оноос хойш 500 гаруй ачааны машиныг засаж, дээд амжилт тогтоосон.",
     alt: "Автын инженер Х. Батчулуун засварын нүхэнд ачааны машины доор зогсож байна",
   },
   {
@@ -107,7 +109,6 @@ export const benefits: Benefit[] = [
   },
 ];
 
-
 export type Club = {
   name: string;
   /** The club's own lockup: the Shunkhlai mark beside its wordmark. */
@@ -143,9 +144,8 @@ export type Club = {
  * count and nothing else. Replace them with the clubs' own words; they are
  * marked in one place so the whole set can be swapped in one pass.
  *
- * TODO(HR): Innovation has no lockup yet, so it stands on the company lockup.
- * Drop the file into `public/clubs` and point `logo` at it; nothing else
- * changes.
+ * There was an Innovation club here too, standing on the company lockup for
+ * want of its own. It was taken out at the client's request.
  */
 export const clubs: Club[] = [
   {
@@ -178,11 +178,16 @@ export const clubs: Club[] = [
   {
     name: "Бүжгийн клуб",
     logo: "/clubs/dance.png",
-    body: "Долоо хоног бүр бэлтгэл хийж, компанийн баяр ёслол, арга хэмжээнд тоглолтоо үзүүлдэг.",
+    body: "Бүжгийн бэлтгэлээ хийж, компанийн баяр ёслол, арга хэмжээнд тоглолтоо үзүүлдэг.",
   },
   {
     name: "Шинжлэх ухааны клуб",
     logo: "/clubs/science.png",
+    photos: [
+      "/clubs/photos/science-2.jpg",
+      "/clubs/photos/science.jpg",
+      "/clubs/photos/science-3.jpg",
+    ],
     body: "Шинэ технологи, салбарын судалгаа, сонирхолтой нээлтүүдийг хамтдаа судалж, хамт олондоо танилцуулдаг.",
   },
   {
@@ -200,11 +205,6 @@ export const clubs: Club[] = [
       "/clubs/photos/vogue-3.jpg",
     ],
     body: "Гоо зүй, хувцаслалт, өөрийгөө илэрхийлэх сэдвээр уулзалт, фото төсөл зохион байгуулдаг.",
-  },
-  {
-    name: "Инновацийн клуб",
-    logo: "/brand/logo-lockup.png",
-    body: "Ажлын байрны шинэ санаа, сайжруулалтыг дэвшүүлж, туршилтын төслүүдийг хамт олонтойгоо хамтран хэрэгжүүлдэг.",
   },
 ];
 
