@@ -140,5 +140,8 @@ export function adminCookieOptions(): {
     path: "/admin",
     secure: isProduction,
     maxAge: SESSION_TTL_SECONDS,
+
+
+
   };
 }
