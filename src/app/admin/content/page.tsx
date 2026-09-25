@@ -2,6 +2,7 @@ import { AlertTriangle } from "lucide-react";
 
 import {
   AboutStatsForm,
+  CultureForm,
   FooterForm,
   HeroForm,
 } from "@/components/admin/content/section-forms";
@@ -11,7 +12,7 @@ import { CONTENT_DB_ERROR, CONTENT_KEYS } from "@/lib/content/schema";
 
 /**
  * The content desk: the marketing copy of `/` and `/about`, and the foot of
- * every page, in three forms.
+ * every page, in four forms.
  *
  * `force-dynamic` for the same reason the newsroom desk has it — the values
  * shown are rows an admin may have changed a second ago on another machine,
@@ -100,6 +101,7 @@ export default async function AdminContentPage() {
               value={sections.about_stats.value}
               stored={sections.about_stats.stored}
             />
+            <CultureForm value={sections.culture.value} stored={sections.culture.stored} />
           </div>
         </>
       ) : (

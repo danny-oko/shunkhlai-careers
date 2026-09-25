@@ -6,6 +6,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Loader2 } from "lucide-react";
 
+import {
+  ApplicationCountProvider,
+  useApplicationCount,
+} from "@/components/account/application-count";
 import { IdentityLock, IdentityPanel } from "@/components/account/identity-gate";
 import { useSession } from "@/components/auth/session-provider";
 import { cn } from "@/lib/utils";
@@ -46,6 +50,16 @@ export default function AccountLayout({ children }: LayoutProps<"/account">) {
   }
 
   return (
+    <ApplicationCountProvider>
+      <AccountShell pathname={pathname}>{children}</AccountShell>
+    </ApplicationCountProvider>
+  );
+}
+
+function AccountShell({ pathname, children }: { pathname: string; children: React.ReactNode }) {
+  const { count } = useApplicationCount();
+
+  return (
     <main className="flex-1 pt-16">
       <div className="mx-auto w-full max-w-6xl px-6 py-12 lg:px-10">
         <h1 className="text-3xl font-semibold tracking-[-0.03em]">Миний анкет</h1>
@@ -57,6 +71,7 @@ export default function AccountLayout({ children }: LayoutProps<"/account">) {
           <nav aria-label="Анкетын хэсгүүд">
             <ul className="flex gap-1 overflow-x-auto pb-2 lg:sticky lg:top-24 lg:flex-col lg:overflow-visible lg:pb-0">
               {sections.map((section) => {
+                const badge = section.href === "/account/applications" ? count : null;
                 const isActive =
                   section.href === "/account"
                     ? pathname === "/account"
@@ -67,13 +82,24 @@ export default function AccountLayout({ children }: LayoutProps<"/account">) {
                     <Link
                       href={section.href}
                       className={cn(
-                        "block shrink-0 rounded-full px-4 py-2 text-sm whitespace-nowrap transition-colors lg:whitespace-normal",
+                        "flex shrink-0 items-center justify-between gap-2 rounded-full px-4 py-2 text-sm whitespace-nowrap transition-colors lg:whitespace-normal",
                         isActive
                           ? "bg-foreground text-background font-medium"
                           : "hover:bg-muted text-muted-foreground hover:text-foreground",
                       )}
                     >
                       {section.label}
+                      {badge ? (
+                        <span
+                          aria-label={`${badge} хүсэлт`}
+                          className={cn(
+                            "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] leading-none font-semibold tabular-nums",
+                            isActive ? "bg-background text-foreground" : "bg-foreground text-background",
+                          )}
+                        >
+                          {badge}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 );

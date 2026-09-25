@@ -6,6 +6,7 @@ import {
   CONTENT_SCHEMAS,
   aboutStatsSchema,
   contentFieldErrors,
+  cultureSchema,
   footerSchema,
   heroSchema,
   isContentKey,
@@ -27,8 +28,8 @@ describe("the defaults are valid documents", () => {
     expect(CONTENT_SCHEMAS[key].safeParse(CONTENT_DEFAULTS[key]).success).toBe(true);
   });
 
-  it("names exactly the three sections the desk edits", () => {
-    expect([...CONTENT_KEYS]).toEqual(["hero", "footer", "about_stats"]);
+  it("names exactly the four sections the desk edits", () => {
+    expect([...CONTENT_KEYS]).toEqual(["hero", "footer", "about_stats", "culture"]);
     expect(isContentKey("hero")).toBe(true);
     expect(isContentKey("__proto__")).toBe(false);
     expect(isContentKey("news")).toBe(false);
@@ -169,6 +170,54 @@ describe("about statistics", () => {
   it("refuses a value that is not a string, rather than coercing it", () => {
     const items = [{ value: 10029, label: "хамрагдалт" }];
     expect(aboutStatsSchema.safeParse({ ...valid, items }).success).toBe(false);
+  });
+});
+
+describe("culture wall", () => {
+  const wall = (items: unknown[]) => ({ label: "Сургалт, хөгжил", items });
+  const doc = (items: unknown[]) => ({
+    heading: "Бидэнтэй нэгдсэнээр та",
+    walls: { academy: wall(items), benefits: wall(items), clubs: wall(items) },
+  });
+  const tile = { title: "Power BI", images: ["/academy/power-bi-class.jpg"] };
+
+  it("keeps a tile and stores its blank optional lines as absent", () => {
+    const parsed = cultureSchema.parse(
+      doc([{ ...tile, subtitle: "  ", body: "", logo: "" }]),
+    );
+    expect(parsed.walls.academy.items[0]).toEqual({
+      title: "Power BI",
+      subtitle: undefined,
+      body: undefined,
+      images: ["/academy/power-bi-class.jpg"],
+      logo: undefined,
+    });
+  });
+
+  it("accepts a club tile that is a lockup and nothing else", () => {
+    const result = cultureSchema.safeParse(
+      doc([{ title: "Спорт клуб", images: [], logo: "/clubs/sport.png" }]),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it("refuses a tile with neither a photograph nor a logo", () => {
+    const result = cultureSchema.safeParse(doc([{ title: "Гэр бүлийн өдөр", images: [] }]));
+    expect(result.success).toBe(false);
+    expect(contentFieldErrors(result.error!)["walls.academy.items.0.images"]).toBe(
+      "Дор хаяж нэг зураг эсвэл лого шаардлагатай.",
+    );
+  });
+
+  it("refuses a picture from an off-site http address", () => {
+    const result = cultureSchema.safeParse(doc([{ title: "x", images: ["http://a.mn/x.jpg"] }]));
+    expect(result.success).toBe(false);
+  });
+
+  it("refuses an empty wall, and a missing one", () => {
+    expect(cultureSchema.safeParse(doc([])).success).toBe(false);
+    const { clubs: _clubs, ...two } = doc([tile]).walls;
+    expect(cultureSchema.safeParse({ heading: "x", walls: two }).success).toBe(false);
   });
 });
 

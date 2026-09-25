@@ -19,16 +19,19 @@ export const metadata: Metadata = {
 };
 
 /**
- * The Academy's figures are a row in `site_content` now, so this page reads
- * the database on every render rather than being baked at build: an admin
- * saving them sees the change on the next load. The read itself cannot fail
- * the page — `getContent` answers with the figures the page shipped with when
- * the database is unreachable.
+ * The Academy's figures and the culture wall are rows in `site_content`, so
+ * this page reads the database on every render rather than being baked at
+ * build: an admin saving them sees the change on the next load. The reads
+ * cannot fail the page — `getContent` answers with what the page shipped with
+ * when the database is unreachable.
  */
 export const dynamic = "force-dynamic";
 
 export default async function AboutPage() {
-  const stats = await getContent("about_stats");
+  const [stats, culture] = await Promise.all([
+    getContent("about_stats"),
+    getContent("culture"),
+  ]);
 
   return (
     <main className="flex-1">
@@ -45,7 +48,7 @@ export default async function AboutPage() {
       {/* Closes on itself: the wall turns, the pictures gather into the
           company's mark, and the Academy's figures for the year come up
           behind it. */}
-      <CultureSection stats={stats} />
+      <CultureSection stats={stats} content={culture} />
       <LifeGallery />
     </main>
   );

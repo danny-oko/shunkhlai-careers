@@ -5,12 +5,11 @@ import type { ClerkProvider } from "@clerk/nextjs";
  * How the hosted `<SignIn>` and `<SignUp>` cards wear the site's own skin.
  *
  * Everything here is spent as a CSS variable rather than a literal colour, and
- * that is the whole point: the site has five palettes on `data-palette` and a
- * light/dark class on top of them - ten combinations - and Clerk's card has to
- * be right in all ten. A hex value copied out of `globals.css` would be right
- * in exactly one. Clerk resolves these against the element it renders into, so
- * the card re-colours itself the moment the header's palette button is pressed,
- * with no JavaScript of ours involved.
+ * that is the whole point: the site has a light/dark class on <html>
+ * and Clerk's card has to be right in both. A hex value copied out of
+ * `globals.css` would be right in only one. Clerk resolves these against the
+ * element it renders into, so the card re-colours itself the moment the theme
+ * changes, with no JavaScript of ours involved.
  *
  * The other half of the mechanism is `cssLayerName`. Clerk ships its stylesheet
  * from its CDN at runtime and, unlayered, it would beat every Tailwind utility
@@ -85,7 +84,7 @@ export const clerkAppearance: ClerkAppearance = {
     modalBackdrop: "bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
     /* "Бүртгэл байхгүй юу? Бүртгүүлэх" sits on the footer's muted ground, and
        `colorPrimary` would paint the link brand orange there: measured 3.25:1
-       on the brandbook palette and 2.14:1 on Лондон, both under AA. The site's
+       on the brandbook palette, under AA. The site's
        own foreground carries it instead, with the brand kept for the hover. */
     footerActionLink: "font-medium text-foreground hover:text-primary",
   },

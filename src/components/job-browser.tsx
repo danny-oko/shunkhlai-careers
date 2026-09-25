@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpRight, SlidersHorizontal } from "lucide-react";
 
 import { FilterSection, JobSearch } from "@/components/job-filters";
+import { cn } from "@/lib/utils";
 import {
   applyFacets,
   companyOptions,
@@ -58,6 +59,11 @@ export function JobBrowser({
 
   const [facets, setFacets] = React.useState<JobFacets>(defaultFacets);
   const [isPanelOpen, setIsPanelOpen] = React.useState(false);
+  // A URL filter waits on the server; until it lands the old list stays, dimmed.
+  const [isPending, startTransition] = React.useTransition();
+  // The first paint gets the full entrance; a filter change only a short settle.
+  const [hasFiltered, setHasFiltered] = React.useState(false);
+  const resultsRef = React.useRef<HTMLDivElement>(null);
 
   const jobName = params.get("jobName") ?? "";
   const locationId = params.get("locationid") ?? "";
@@ -85,7 +91,27 @@ export function JobBrowser({
   const locations = React.useMemo(() => locationOptions(filterData), [filterData]);
   const salaryLevels = React.useMemo(() => salaryOptions(filterData), [filterData]);
 
-  /** Server-side filters live in the URL. */
+  /**
+   * A filter reshapes the list under the reader. Scrolled past its start, they
+   * would be left mid-way through a list they have not seen, so it glides back
+   * to the first result — never to the top of the page, and not at all when
+   * the start is already in view.
+   */
+  function onFilterChange() {
+    setHasFiltered(true);
+    const results = resultsRef.current;
+    if (!results || results.getBoundingClientRect().top >= 0) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    results.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }
+
+  /** Server-side filters live in the URL. `scroll: false` stops Next.js
+      jumping to the top of the page on every choice. */
+  function navigate(href: string) {
+    onFilterChange();
+    startTransition(() => router.push(href, { scroll: false }));
+  }
+
   function pushQuery(next: Record<string, string>) {
     const query = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(next)) {
@@ -93,12 +119,18 @@ export function JobBrowser({
       else query.delete(key);
     }
     const search = query.toString();
-    router.push(search ? `/careers?${search}` : "/careers");
+    navigate(search ? `/careers?${search}` : "/careers");
+  }
+
+  /** Client-side facets refine the rows already on the page. */
+  function setFacet(key: keyof JobFacets, value: string) {
+    onFilterChange();
+    setFacets((current) => ({ ...current, [key]: value }));
   }
 
   function clearEverything() {
     setFacets(defaultFacets);
-    router.push("/careers");
+    navigate("/careers");
   }
 
   const activeFilters = buildActiveFilters({
@@ -121,7 +153,7 @@ export function JobBrowser({
     if (key === "search") pushQuery({ jobName: "" });
     else if (key === "location") pushQuery({ locationid: "" });
     else if (key === "salary") pushQuery({ salaryLevelID: "" });
-    else setFacets((current) => ({ ...current, [key]: ALL }));
+    else setFacet(key, ALL);
   }
 
   // The drawer is a phone affordance: close it if the viewport grows to the
@@ -139,7 +171,7 @@ export function JobBrowser({
         title="Албан тушаалын бүлэг"
         options={groups}
         value={facets.group}
-        onChange={(value) => setFacets((current) => ({ ...current, group: value }))}
+        onChange={(value) => setFacet("group", value)}
         defaultOpen
       />
       <FilterSection
@@ -160,21 +192,19 @@ export function JobBrowser({
         title="Компани"
         options={companies}
         value={facets.company}
-        onChange={(value) => setFacets((current) => ({ ...current, company: value }))}
+        onChange={(value) => setFacet("company", value)}
       />
       <FilterSection
         title="Ажиллах хэлбэр"
         options={positionTypes}
         value={facets.positionType}
-        onChange={(value) =>
-          setFacets((current) => ({ ...current, positionType: value }))
-        }
+        onChange={(value) => setFacet("positionType", value)}
       />
       <FilterSection
         title="Ажлын төрөл"
         options={workTypes}
         value={facets.workType}
-        onChange={(value) => setFacets((current) => ({ ...current, workType: value }))}
+        onChange={(value) => setFacet("workType", value)}
       />
     </>
   );
@@ -280,7 +310,12 @@ export function JobBrowser({
           </div>
         </aside>
 
-        <div>
+        {/* scroll-mt clears the fixed site header. */}
+        <div
+          ref={resultsRef}
+          aria-busy={isPending}
+          className="scroll-mt-16"
+        >
           <ActiveFilterChips
             filters={activeFilters}
             onRemove={removeFilter}
@@ -301,16 +336,25 @@ export function JobBrowser({
               </button>
             </div>
           ) : (
-            /* Keyed on the active facets so the entrance replays whenever the
-               result set changes. */
+            /* Keyed on every active filter so each new result set settles in
+               the same way, whichever layer produced it. */
             <ul
-              key={`${facets.group}-${facets.company}-${facets.positionType}-${facets.workType}`}
+              key={`${params.toString()}|${facets.group}-${facets.company}-${facets.positionType}-${facets.workType}`}
+              className={cn(
+                "transition-opacity duration-200",
+                isPending && "opacity-50",
+              )}
             >
               {visibleJobs.map((job, index) => (
                 <li
                   key={job.id}
-                  style={{ animationDelay: `${Math.min(index, 6) * 60}ms` }}
-                  className="brand-rise border-b border-border/70"
+                  style={{
+                    animationDelay: `${Math.min(index, 6) * (hasFiltered ? 30 : 60)}ms`,
+                  }}
+                  className={cn(
+                    hasFiltered ? "brand-settle" : "brand-rise",
+                    "border-b border-border/70",
+                  )}
                 >
                   <Link
                     href={`/careers/${job.slug}`}
@@ -347,7 +391,7 @@ export function JobBrowser({
                         selection finished) stays the tooltip — the column is
                         too narrow for the sentence. */}
                     {job.isOpen ? (
-                      <span className="shrink-0 rounded-md border border-border px-3.5 py-2 text-[0.8125rem] font-medium text-muted-foreground transition-colors duration-200 group-hover:border-foreground/30 group-hover:text-foreground">
+                      <span className="shrink-0 rounded-full border border-border px-3.5 py-2 text-[0.8125rem] font-medium text-muted-foreground transition-colors duration-200 group-hover:border-foreground/30 group-hover:text-foreground">
                         Дэлгэрэнгүй
                       </span>
                     ) : (

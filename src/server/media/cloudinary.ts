@@ -30,9 +30,10 @@ import { IMAGE_FORMATS, IMAGE_TYPES, LIMITS } from "@/lib/news/shared/limits";
 /** Everything this app uploads lives under one folder in the account. */
 export const MEDIA_ROOT = "shunhlai";
 
-/** The two things an admin can upload a picture for. */
+/** The things an admin can upload a picture for. */
 export const MEDIA_FOLDERS = {
   hero: `${MEDIA_ROOT}/hero`,
+  culture: `${MEDIA_ROOT}/culture`,
   news: `${MEDIA_ROOT}/news`,
 } as const;
 

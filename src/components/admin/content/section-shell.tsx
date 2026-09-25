@@ -18,6 +18,7 @@ import type { ContentActionState } from "@/app/admin/content/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DISCARD_MESSAGE } from "@/components/admin/unsaved-guard";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,7 @@ export function Field({
   placeholder,
   className,
   inputClassName,
+  multiline,
 }: {
   name: string;
   label: string;
@@ -70,25 +72,38 @@ export function Field({
   placeholder?: string;
   className?: string;
   inputClassName?: string;
+  /** A paragraph rather than a line - it grows with what is typed. */
+  multiline?: boolean;
 }) {
   const id = `content-${name.replace(/\./gu, "-")}`;
+  const control = {
+    id,
+    name,
+    value,
+    placeholder,
+    autoComplete: "off",
+    "aria-invalid": error ? true : undefined,
+    "aria-describedby": error ? `${id}-error` : undefined,
+  } as const;
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       <Label htmlFor={id} className="text-[0.6875rem] tracking-[0.14em] uppercase">
         {label}
       </Label>
-      <Input
-        id={id}
-        name={name}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        autoComplete="off"
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
-        className={cn(CONTROL, inputClassName)}
-      />
+      {multiline ? (
+        <Textarea
+          {...control}
+          onChange={(event) => onChange(event.target.value)}
+          className={cn("text-[0.8125rem] md:text-[0.8125rem]", inputClassName)}
+        />
+      ) : (
+        <Input
+          {...control}
+          onChange={(event) => onChange(event.target.value)}
+          className={cn(CONTROL, inputClassName)}
+        />
+      )}
       {error ? (
         <p id={`${id}-error`} role="alert" className="text-[0.8125rem] text-destructive">
           {error}

@@ -95,5 +95,6 @@ export async function loadSectionsForAdmin(): Promise<AdminSections> {
     hero: section("hero"),
     footer: section("footer"),
     "about_stats": section("about_stats"),
+    culture: section("culture"),
   };
 }

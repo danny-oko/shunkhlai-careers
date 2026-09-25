@@ -365,7 +365,7 @@ export const adminSession = pgTable(
  * made it is removed — the content is the company's, not the editor's.
  */
 export const siteContent = pgTable("site_content", {
-  key: text("key").primaryKey(), // hero | footer | about_stats
+  key: text("key").primaryKey(), // hero | footer | about_stats | culture
   value: jsonb("value").notNull(),
   updatedAt: tstz("updated_at")
     .notNull()

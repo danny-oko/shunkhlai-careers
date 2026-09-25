@@ -55,7 +55,7 @@ const COLUMN_SCRIM =
 const COLUMN_MASK =
   "linear-gradient(to right, black 0%, black 44%, transparent 74%)";
 
-export function CareersHero({ roleCount }: { roleCount: number }) {
+export function CareersHero() {
   const [active, setActive] = React.useState(0);
 
   React.useEffect(() => {
@@ -173,14 +173,6 @@ export function CareersHero({ roleCount }: { roleCount: number }) {
             >
               <Rise delay={260} className="mt-[1.7cqw]">
                 <GradientRule className="w-[10cqw] max-w-[7rem] min-w-[2.5rem] rounded-full" />
-              </Rise>
-
-              <Rise delay={320} className="mt-[1.7cqw]">
-                <p className="text-[clamp(0.6rem,1.5cqw,1rem)] leading-[1.45] text-pretty text-ink/75">
-                  Монголыг хөдөлгөж буй эрчим хүч, тээвэр логистик, дижитал дэд
-                  бүтцийг бид бүтээж, найдвартай ажиллуулдаг. Одоогоор{" "}
-                  {roleCount} ажлын байр нээлттэй байна.
-                </p>
               </Rise>
             </div>
           </div>

@@ -5,6 +5,7 @@ import type {
   FooterContent,
   HeroContent,
 } from "./schema";
+import { CULTURE_DEFAULT } from "./culture-default";
 
 /**
  * What each section said before it was editable — and what it says again the
@@ -96,6 +97,7 @@ export const CONTENT_DEFAULTS: { [K in ContentKey]: ContentValue<K> } = {
   hero: HERO_DEFAULT,
   footer: FOOTER_DEFAULT,
   "about_stats": ABOUT_STATS_DEFAULT,
+  culture: CULTURE_DEFAULT,
 };
 
 /**
@@ -125,6 +127,11 @@ export const CONTENT_SECTIONS = {
   "about_stats": {
     title: "Бидний тухай - тоон үзүүлэлт",
     blurb: "/about хуудсыг хаах сургалтын тоон үзүүлэлтүүд.",
+    paths: [{ path: "/about", type: "page" }],
+  },
+  culture: {
+    title: "Бидний тухай - Бидэнтэй нэгдсэнээр та",
+    blurb: "Сургалт, хөнгөлөлт, клубуудын зурагт хана: гарчиг, хэсгийн нэр, зураг бүрийн бичвэр.",
     paths: [{ path: "/about", type: "page" }],
   },
 } as const satisfies {
