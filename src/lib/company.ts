@@ -51,12 +51,10 @@ export type EraEntry = {
    * span's. The frame is 3:4 and every photograph fills it, so each record
    * reads at the same size.
    *
-   * 1998, 2003 and 2023 are HR's own photographs (the September 2026 drop),
-   * cut to 900x1200 when they were put in `public`. 2011 and 2014 are still
-   * lifted off the group's history poster (doc/tuuh.pdf) at the size the
-   * poster holds them - about 300px across and landscape - so the frame
-   * crops and enlarges them, and they are the soft ones until HR sends
-   * larger copies.
+   * Every record now carries one of HR's own photographs (the September
+   * 2026 drops), cut to 3:4 when they were put in `public`. The ones lifted
+   * off the group's history poster (doc/tuuh.pdf) were only about 300px
+   * across and were all replaced; they are still in `public/history`.
    */
   image?: string;
   /** Read in place of `image`. Required alongside it. */
@@ -80,9 +78,9 @@ export type Era = {
    * The group's own photograph of the business that span opened, shown in
    * the same 3:4 frame as a record's own, centre-cropped to fill it.
    *
-   * Shown for a record that carries no archive photograph of its own, which
-   * since the section was cut to six records is 1993 alone. The other three
-   * spans keep theirs for the records HR may put back.
+   * Shown for a record that carries no photograph of its own. Since every
+   * record was given one, none of these is on screen; the spans keep them
+   * for the records HR may put back.
    */
   image: string;
   alt: string;
@@ -117,6 +115,8 @@ export const eras: Era[] = [
         title: "Бизнесийн гараа",
         year: "1993",
         body: "1993 онд автомашины баталгаат засвар үйлчилгээний цомхон үйл ажиллагаагаар Шунхлай групп бизнесийн гараагаа эхэлж байсан нь тухайн үедээ Монголд байгаагүй хамгийн хэрэгцээтэй үйлчилгээний салбар, шинэхэн стандарт байсан юм.",
+        image: "/history/photo-1993-price-board.webp",
+        imageAlt: "“Шунхлай” үнийн самбар дээрх А-76, Аи-93, ДТ шатахууны үнийг улбар шар хувцастай ажилтан шатаар авирч сольж буй хуучин гэрэл зураг.",
       },
       {
         title: "Анхны нефть бааз",
@@ -150,20 +150,19 @@ export const eras: Era[] = [
         title: "Аймаг бүрт салбартай",
         year: "2011",
         body: "Монгол орон даяар шатахуун түгээх станцын өргөн сүлжээг бий болгож, аймаг бүрт салбар нэгжтэй боллоо.",
-        image: "/history/archive-2011-network.webp",
-        imageAlt: "Улбар шар, цэнхэр өнгийн Шунхлай шатахуун түгээх станц цэлмэг тэнгэрийн дор.",
+        image: "/history/photo-2011-station.webp",
+        imageAlt: "Цэлмэг тэнгэрийн дор цэнхэр, улбар шар өнгийн саравчтай Шунхлай шатахуун түгээх станц, түгээгүүрүүд.",
       },
       {
         title: "Байгаль орчин, аюулгүй ажиллагаа",
         year: "2014",
         body: "Байгаль орчин, хөдөлмөрийн аюулгүй байдалд чиглэсэн цогц бодлогуудыг хэрэгжүүлж, олон улсын ISO14001, OHSAS18001 стандартуудыг үйл ажиллагаандаа нэвтрүүллээ.",
-        // The poster's own picture for 2014 is the two certification seals,
-        // which are logos rather than a photograph. This is the poster's
-        // photograph of the certificates themselves - it sat on the 2013
-        // ISO 9001 record, which is one of the ones HR cut - and it is what
-        // the standards this record is about are issued as.
-        image: "/history/archive-2013-iso.webp",
-        imageAlt: "Хүрээлсэн ISO гэрчилгээнүүд ширээн дээр эгнүүлэн тавиастай байна.",
+        // The photograph 1993 used to show, moved here at HR's request when
+        // 1993 was given the price-board picture. Hard hats in front of the
+        // tanks suits a safety-and-environment record better than it suited
+        // a repair workshop.
+        image: "/history/shunkhlai-depot.webp",
+        imageAlt: "Шунхлайн лого бүхий нефть савны өмнө гурван ажилтан хамгаалалтын малгайтай зогсож, зураг төслийн хавтсыг хамтдаа харж байна.",
       },
     ],
   },
