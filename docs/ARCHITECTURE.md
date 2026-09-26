@@ -4,7 +4,7 @@ Read this before exploring the tree. It exists so a new session (human or agent)
 can find the right file without grepping the whole repo, and so the invariants
 below don't have to be rediscovered the expensive way — by breaking one.
 
-Last verified: 2026-09-24.
+Last verified: 2026-09-26.
 
 ## What this is
 
@@ -17,8 +17,9 @@ Two identity systems, on purpose:
 - **Applicants** sign in with **Clerk**, and their data is pushed to Shunkhlai's
   **ERP** (the recruitment backend). The site keeps a mirror keyed by the Clerk
   email so a failed ERP call is never a lost form.
-- **Staff** sign in at `/admin` with a shared password today; the `app_user`
-  table is the replacement (see "In flight").
+- **Staff** sign in at `/admin` with an account in the `app_user` table
+  (argon2id). The shared `ADMIN_PASSWORD` is only a fallback while that table
+  is empty, and production leaves it unset.
 
 ## Invariants
 
@@ -49,7 +50,7 @@ src/app/
   admin/news/**                editor desk              → src/app/admin/news/actions.ts
   admin/applications/**        every incoming application
                                                         → src/server/applicant/application-desk.ts
-  admin/login/                 staff sign-in            → src/server/admin/session.ts
+  admin/login/                 staff sign-in            → src/server/admin/sign-in.ts
   account/**                   applicant area (Clerk)   → src/app/api/me/*
   careers/, careers/[id]/      job listings             → src/lib/jobs/*
   api/news                     public JSON feed
@@ -88,8 +89,9 @@ to the ERP. `src/lib/api/*` speaks to the ERP; `src/server/mock/` stands in when
 it is unreachable. Applicant files (CV, photo) are chunked base64 rows.
 
 **Admin.** `requireAdmin()` in `src/server/admin/guard.ts` gates every admin page
-and every server action. Today it verifies an HMAC cookie signed from
-`ADMIN_PASSWORD`; there are no user accounts yet.
+and every server action. It checks the session cookie against `admin_session`
+(which stores only a hash of the token) and the account behind it in
+`app_user`; deactivating an account ends its sessions.
 
 `/admin/applications` lists every application in the mirror and says on screen
 that the mirror — not the ERP — is what it is showing, because the ERP exposes
@@ -125,10 +127,18 @@ is the first thing to check when a page gets heavier.
 
 | Variable | Where | Notes |
 |---|---|---|
-| `DATABASE_URL` | server only | PostgreSQL. Never `NEXT_PUBLIC_*`. |
-| `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET` | server only | admin sign-in |
-| Clerk keys | mixed | applicant identity |
-| `NEXT_PUBLIC_API_URL` | client | ERP origin |
+| `DATABASE_URL` | server only | PostgreSQL. Never `NEXT_PUBLIC_*`. On a laptop, the SSH tunnel on `localhost:15432` (`docs/postgres.md`) — the production database. |
+| `ADMIN_SESSION_SECRET` | server only | signs the cookie of the `ADMIN_PASSWORD` fallback only; account sessions are random tokens in `admin_session` |
+| `ADMIN_PASSWORD` | server only | fallback while `app_user` is empty; unset in production |
+| `UPLOAD_DIR` | server only | uploaded files on disk; required under the systemd unit |
+| Clerk keys | mixed | applicant identity; production is the `pk_live_` instance for `shunkhlai.mn` |
+| `NEXT_PUBLIC_SITE_URL` | client | this site: `https://career.shunkhlai.mn` |
+| `NEXT_PUBLIC_API_URL` | client | ERP origin: `https://careers.shunkhlai.mn` (with an s — a different host) |
+
+Every `NEXT_PUBLIC_*` is compiled in at build time. A production build must be
+given the production values explicitly (`docs/deploy.md` step 3); a plain
+`bun run build` takes them from `.env.local`, which carries development keys.
+The full server list is `docs/deploy.md` step 5.
 
 ## Commands
 
@@ -143,18 +153,26 @@ bun run db:migrate     # apply migrations (needs a reachable database)
 
 ## Deployment
 
-Vercel serves the site today. The target is Shunkhlai's own Ubuntu host, which is
-where PostgreSQL lives — their database is on a private network that Vercel cannot
-reach, so the app has to move to the same network before it can use it. That host
-has 1.9 GB of RAM, so build elsewhere and copy `.next` over rather than running
-`next build` on it.
+The site is installed on Shunkhlai's own Ubuntu host, `192.168.2.23`, as the
+systemd service `shunhlai` behind nginx, on the same machine as its PostgreSQL
+14 — as of 2026-09-26 it runs there and answers `/api/health` with `ok`. Its
+public name will be `career.shunkhlai.mn`. The runbook is `docs/deploy.md`.
+
+**Vercel (with Neon) still serves the public site** until the switch-over:
+their network is private, and the new host is not reachable from outside until
+IT forwards ports 80/443 and sets up DNS. That host has 1.9 GB of RAM, so build
+elsewhere and copy `.next` over rather than running `next build` on it.
 
 ## In flight
 
-- **PostgreSQL migration.** The whole backend is being moved off Cloudflare D1.
-  Plan and status: `BACKEND_PG_QUEUE.md` in the parent folder (not in this repo).
-- **`app_user` table.** Staff accounts (argon2id) exist in the schema and have a
-  CLI, but the admin login still uses the shared password.
+- **Switch-over to the customer's host.** Waiting on IT for: port forwarding,
+  DNS for `career.shunkhlai.mn`, and the Clerk production DNS records under
+  `shunkhlai.mn` (applicant sign-in needs them). Then: TLS with certbot, a final
+  `scripts/db/copy-from-neon.sh`, and retiring Vercel and Neon. Details in
+  `docs/deploy.md` step 9 and `docs/postgres.md`.
+- **Backups of uploaded files.** `scripts/db/backup.sh` covers the database
+  only; `/srv/shunhlai/shared/uploads` is not backed up yet (`docs/deploy.md`
+  step 11).
 
 ## Gotchas
 

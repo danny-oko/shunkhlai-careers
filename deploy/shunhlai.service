@@ -23,6 +23,12 @@ Documentation=https://github.com/shunkhlai/shunhlai/blob/main/docs/deploy.md
 # `/api/health` reports 503 until the database answers.
 After=network-online.target postgresql.service
 Wants=network-online.target
+# Five failures in a minute is a broken release, not a blip — stop flapping and
+# let the journal show why. `systemctl reset-failed shunhlai` clears it. These
+# belong in [Unit]: systemd 249 (Ubuntu 22.04) ignores StartLimitIntervalSec
+# under [Service] with an "Unknown key name" warning.
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -43,7 +49,22 @@ WorkingDirectory=/srv/shunhlai/current
 # Absolute path: PATH is not what a login shell has, and `npm` alone will not
 # be found. Confirm with `command -v npm` on the server; Node 22 from NodeSource
 # installs to /usr/bin/npm.
-ExecStart=/usr/bin/npm run start
+#
+# `-H localhost` binds to loopback — on the customer's server that comes out as
+# 127.0.0.1:3000 (checked with `ss -ltnp`, even though `getent hosts localhost`
+# lists ::1 first) — because nginx is the only thing that should reach it and the
+# server has no firewall rule standing between port 3000 and the office LAN. It
+# has to be the flag: `next start` ignores a HOSTNAME environment variable and
+# listens on every interface without it.
+#
+# It has to be `localhost`, not `127.0.0.1`. Clerk's middleware answers every
+# request by rewriting it to the request's own URL, which Next builds with the
+# host `localhost`; Next compares that with its own origin, built from `-H`.
+# With `-H 127.0.0.1` the two differ, Next treats the rewrite as external and
+# proxies the request back to itself over HTTP — which rewrites again, forever.
+# Every page behind the proxy then hangs while static files still load
+# (reproduced with next 16.3.4 and @clerk/nextjs 7.9.4).
+ExecStart=/usr/bin/npm run start -- -H localhost
 
 # ── Environment ──────────────────────────────────────────────────────────────
 # DATABASE_URL, the Clerk keys, ADMIN_PASSWORD and APP_COMMIT live here — NOT
@@ -54,20 +75,14 @@ ExecStart=/usr/bin/npm run start
 # account cannot rewrite it.
 EnvironmentFile=/etc/shunhlai/app.env
 
-# Bound to loopback because nginx is the only thing that should reach it; the
-# server has no firewall rule standing between port 3000 and the office LAN.
 Environment=NODE_ENV=production
 Environment=PORT=3000
-Environment=HOSTNAME=127.0.0.1
 
 # ── Restarting ───────────────────────────────────────────────────────────────
 # on-failure, not always: `systemctl stop` during a release must stay stopped.
+# The start limit that stops it flapping is in [Unit] above.
 Restart=on-failure
 RestartSec=5
-# Five failures in a minute is a broken release, not a blip — stop flapping and
-# let the journal show why. `systemctl reset-failed shunhlai` clears it.
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 # The server has 1.9 GB of RAM and 6 GB of swap. This is a ceiling that turns
 # a runaway process into one killed service rather than a box that has to be
@@ -91,8 +106,13 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
 # Only the address families the app actually opens: TCP/UDP and unix sockets
-# (the Postgres connection may be either, depending on DATABASE_URL).
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# (the Postgres connection may be either, depending on DATABASE_URL), plus
+# netlink, which is how Node's os.networkInterfaces() reads the interface list.
+# Next calls that once listening when no hostname is given, to print a network
+# URL; blocked, it throws an unhandled rejection that leaves the server
+# accepting connections it never answers. ExecStart passes a hostname, so this
+# is the second line of defence rather than the fix.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 

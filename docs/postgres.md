@@ -28,7 +28,11 @@ the browser bundle, and this string carries the password.
 
 ## Local development
 
-`docker-compose.yml` runs the same major version as the server:
+`docker-compose.yml` runs PostgreSQL **16**, but the customer's server runs
+**14** (checked 2026-09-26; the compose file and older docs assumed 16). The
+committed migrations use nothing 14 lacks — plain tables, indexes, foreign keys,
+`jsonb` — but a future migration that did would pass here and fail there.
+Pinning the compose file to `postgres:14` closes that gap; it is not done yet.
 
 ```bash
 docker compose up -d
@@ -98,68 +102,88 @@ is still **completely empty** — otherwise a fresh install would have no way in
 to create the first account. It warns on every use and closes for good the
 moment one row exists.
 
-## Production (10.16.9.51)
+## Production (192.168.2.23)
 
 > **`docs/deploy.md` is the runbook** — the release layout, the systemd unit in
-> `deploy/`, nginx, backups and rollback, written for someone deploying this
-> for the first time. What follows is the database-shaped summary; where the
-> two disagree, deploy.md is the maintained one. In particular: the server has
-> 1.9 GB of RAM, so `bun run build` below must be run on a laptop or in CI and
-> the output copied across, not run on the server.
+> `deploy/`, nginx, backups and rollback. What follows is the database-shaped
+> summary; where the two disagree, deploy.md is the maintained one.
 
-Next.js runs as a normal Node server on their internal network:
+The app and PostgreSQL run on the same host, `192.168.2.23`, reached over SSH
+as `administrator` via `103.168.179.147`. Checked there on 2026-09-26:
 
-```bash
-bun install --production=false
-bun run build
-DATABASE_URL=postgresql://app_user:PASSWORD@192.168.2.23:5432/app_db bun run start
-```
+- **PostgreSQL 14.24**, not 16. Role `app_user` (login, no other attributes)
+  owns database `app_db` (UTF8).
+- `pg_hba.conf` accepts `app_user` from **`localhost` only**. A connection from
+  the host's own LAN address, `192.168.2.23`, is refused with `no pg_hba.conf
+  entry` — with or without TLS. So the app's `DATABASE_URL` uses `127.0.0.1`.
+- `10.16.9.51`, which the customer's first brief called the Next.js server, is
+  the ERP's careers site. It is not where this app runs, and it does not accept
+  SSH from inside the network.
 
-Put the variable in the service's environment, not in a file in the web root,
-and keep the file it does live in readable only by the service account
-(`chmod 600`).
+The app's settings live in `/etc/shunhlai/app.env` (root-owned, mode 640,
+group `shunhlai`) — deploy.md step 5 has the full list.
 
-### systemd
+## Reaching the database from a laptop
 
-```ini
-# /etc/systemd/system/shunhlai.service
-[Unit]
-Description=Shunkhlai careers site
-After=network.target
-
-[Service]
-Type=simple
-User=shunhlai
-WorkingDirectory=/srv/shunhlai
-# DATABASE_URL and the Clerk keys live here, chmod 600, owned by the service user.
-EnvironmentFile=/etc/shunhlai/app.env
-ExecStart=/usr/bin/npm run start
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
+An SSH tunnel makes the server's PostgreSQL appear on the laptop's port 15432.
+Leave it running in its own terminal:
 
 ```bash
-sudo systemctl daemon-reload && sudo systemctl enable --now shunhlai
-journalctl -u shunhlai -f
+ssh -N -o ServerAliveInterval=30 -L 15432:localhost:5432 administrator@103.168.179.147
 ```
 
-### pm2, if they prefer it
+It must forward to `localhost:5432`, not `192.168.2.23:5432`: the far end of
+the tunnel connects from the server itself, and only `localhost` is accepted.
+Silence after the password is success; `ServerAliveInterval` stops an idle
+tunnel from being dropped.
 
-```bash
-pm2 start "npm run start" --name shunhlai --update-env
-pm2 save && pm2 startup
+Then, in `.env.local`:
+
+```
+DATABASE_URL=postgresql://app_user:PASSWORD@localhost:15432/app_db
 ```
 
-pm2 inherits the environment of the shell that started it, so export
-`DATABASE_URL` there (or use `--env-file`) — and remember that `pm2 restart`
-without `--update-env` keeps the old one.
+No `?sslmode=` — the tunnel is already encrypted. **This is the production
+database** (invariant 1 in `docs/ARCHITECTURE.md`): `bun run dev` against it
+writes live data, and so does `db:migrate`, `user:create` or Drizzle Studio.
+
+Any other variable in `.env.local` that `src/lib/db/url.ts` reads —
+`POSTGRES_URL`, `DATABASE_URL_UNPOOLED`, the `STORAGE_*` names a Vercel pull
+writes — is a fallback only when `DATABASE_URL` is unset, but a stale one there
+is how a machine silently ends up on the wrong database. Rename them (the
+first deploy used a `NEON_` prefix) rather than leaving them live.
+
+## Moving the data from Neon
+
+Until the switch-over, the public site runs on Vercel against Neon. The
+customer's database gets the schema from `bun run db:migrate` and the rows from
+`scripts/db/copy-from-neon.sh`, which:
+
+- streams `pg_dump --data-only` from Neon straight into `psql` on the tunnel —
+  no dump file, because the rows include applicant CVs;
+- skips `app_user` and `admin_session` — staff accounts exist only on the new
+  server;
+- empties the tables it copies first, so it is re-runnable: once as a
+  rehearsal, once more at the switch-over;
+- runs in a single transaction, so an error leaves the target untouched;
+- drops the `SET transaction_timeout` line that `pg_dump` 17+ writes and
+  PostgreSQL 14 rejects;
+- refuses to run unless the source is a `*.neon.tech` host and the target is
+  the tunnel on `localhost:15432`, and prints a row-count comparison at the end.
+
+It reads `NEON_DATABASE_URL_UNPOOLED` (the source) and `DATABASE_URL` (the
+target) from `.env.local`, and needs the PostgreSQL client tools
+(`brew install libpq`). The rehearsal on 2026-09-26 matched on all nine
+tables. Take the final copy **at** the switch-over, not before: anything
+written to Neon after it is not carried across.
+
+Two Neon databases existed at the time; the live one was `ep-falling-darkness`
+(10 articles, the newer schema). `ep-misty-bar` was an older copy and was not
+migrated.
 
 ### Checks before handing it over
 
-- `psql "$DATABASE_URL" -c '\dt'` lists the eleven tables.
+- `\dt` lists the eleven tables (deploy.md step 6).
 - The site's `/news` renders, and `/admin/news` can save a story.
 - `max_connections` on the server is comfortably above
   `DATABASE_POOL_MAX` × instances.
