@@ -8,23 +8,19 @@ through on the "Releasing a new version" heading every time after.
 
 > ## What has and has not been tested
 >
-> **None of the steps below have been run against the customer's server.** This
-> document, `deploy/shunhlai.service`, `deploy/nginx.conf.example` and
-> `scripts/db/backup.sh` were written without access to that machine and
-> without any credential for it.
+> **Steps 1–10 were run against the customer's server on 2026-09-26**, and this
+> document, `deploy/shunhlai.service` and `deploy/nginx.conf.example` were
+> corrected to what actually worked. Verified there: the unit starts under
+> systemd 249 and stays up, `ProtectSystem=strict` plus `ReadWritePaths` lets
+> Next write its cache, `nginx -t` passes, Node 22 runs the copied `.next`, the
+> migrations apply to PostgreSQL 14, and `/api/health` answers `ok` both
+> directly and through nginx.
 >
-> What *was* verified on a developer laptop: `bun run test`, `bun run lint` and
-> `bun run build` all pass, `/api/health` is covered by unit tests against a
-> real PostgreSQL engine (PGlite), and `scripts/db/backup.sh` was exercised end
-> to end against a stand-in `pg_dump` — its success path, its retention sweep,
-> its two credential paths and three of its failure paths.
->
-> What was **not** verified, and what the first deploy is therefore also a test
-> of: that `systemd` accepts the unit as written; that `ProtectSystem=strict`
-> plus the `ReadWritePaths` lines let Next.js write its cache; that `nginx -t`
-> passes; that `pg_dump` connects; that Node 22 runs the copied `.next`. Expect
-> to adjust something. Paragraphs that are an assumption rather than a
-> checked fact are marked **UNVERIFIED**.
+> **Still not verified**: anything reached from outside the customer's network
+> (their firewall forwarding, DNS for `career.shunkhlai.mn`, TLS), steps 11–12
+> (the backup cron, a restore, the rollback drill) and the "Releasing a new
+> version" loop. Paragraphs that are an assumption rather than a checked fact
+> are marked **UNVERIFIED**.
 
 ---
 
@@ -33,14 +29,27 @@ through on the "Releasing a new version" heading every time after.
 ```
                      ┌──────────────────────────────── one Ubuntu 22.04 host ──┐
   browser ──:443──►  │  nginx  ──:3000──►  next start  ──:5432──►  PostgreSQL  │
-                     │                     (systemd)              16           │
+                     │                     (systemd)              14           │
                      └─────────────────────────────────────────────────────────┘
 ```
 
 The app and the database are on the same machine, `192.168.2.23` on the
-customer's private network. Nothing outside that network can reach it; you get
-in over SSH via `103.168.179.147`. That is also why the site cannot be deployed
-to Vercel — Vercel cannot route to a private address.
+customer's private network. You get in over SSH as `administrator` via
+`103.168.179.147`, which lands directly on that host. That is also why the site
+cannot be deployed to Vercel — Vercel cannot route to a private address.
+
+The site's public name is **`career.shunkhlai.mn`** (singular).
+`careers.shunkhlai.mn`, with an *s*, is the company's older careers site on
+the ERP server — `103.168.179.122` publicly, `10.16.9.51` on their internal
+DNS — and it is also the ERP API this app calls (`NEXT_PUBLIC_API_URL`). The
+customer's first brief named `10.16.9.51` as "the Next.js server"; it is that
+ERP host, it does not accept SSH from inside the network, and this app does
+not run there.
+
+Facts checked on the host, 2026-09-26: 1.9 GB RAM, 6 GB swap, 48 GB disk,
+Node 22 from NodeSource at `/usr/bin/node`, **PostgreSQL 14** (not 16), and
+`pg_hba.conf` accepting `app_user` from `localhost` only — a connection from
+the host's own LAN address is refused.
 
 **The server has 1.9 GB of RAM.** That single fact shapes the rest of this
 document: `next build` peaks well above what is left after PostgreSQL has taken
@@ -75,6 +84,11 @@ Work down this list. Each item has a section below it.
 never committed to this repository, and it never appears in a pull request, a
 chat message or a screenshot.**
 
+If IT has created the role but nobody has the password, IT (or someone they
+authorise) can set one without it ever touching shell history:
+`sudo -u postgres psql`, then `\password app_user`. Letters and digits only
+keeps it usable in a URL without escaping.
+
 It lives in exactly one place on the server: `/etc/shunhlai/app.env`, owned by
 `root`, mode `640`, group-readable by the `shunhlai` service account. Nowhere
 else. Not in `/srv/shunhlai`, not in a shell profile, not in your notes.
@@ -96,11 +110,16 @@ Once, on the server, as a user with `sudo`.
 
 ```bash
 # Node 22 — match the version the build machine uses (see step 3).
+command -v node npm       # expect /usr/bin/node and /usr/bin/npm (the unit uses that path)
 node --version            # expect v22.x
-# PostgreSQL client tools, for migrations and backups.
-sudo apt install -y postgresql-client-16
-# nginx, if it is not already there.
-sudo apt install -y nginx
+# psql / pg_dump 14 come with the server's PostgreSQL; nothing to install.
+psql --version
+# nginx was not installed.
+sudo apt update && sudo apt install -y nginx
+# bun, system-wide so the service account can use it. The installer needs unzip.
+sudo apt install -y unzip
+curl -fsSL https://bun.sh/install | sudo BUN_INSTALL=/usr/local bash
+bun --version
 ```
 
 The service account owns the release tree and nothing else. It cannot log in.
@@ -115,11 +134,13 @@ sudo install -d -o root     -g shunhlai -m 750 /etc/shunhlai
 sudo install -d -o shunhlai -g shunhlai -m 750 /var/backups/shunhlai
 ```
 
-> `shared/uploads` is created because the systemd unit names it as writable.
-> **Nothing writes to it today** — applicant CVs, photos and news media are
-> stored as rows in PostgreSQL, not as files (see `docs/postgres.md`). It
-> exists so that the first feature which does write a file does not run into
-> `ProtectSystem=strict` as a mystery.
+> `shared/uploads` is where uploaded files live: new uploads are written to
+> disk by `src/server/files/store.ts` and indexed in the `stored_file` table
+> (the base64 tables are read-only legacy). It survives releases because it is
+> outside them, it is one of the two paths the unit makes writable, and
+> `UPLOAD_DIR` in step 5 must point at it — the code's own production default,
+> `/var/lib/shunhlai/uploads`, is *not* writable under `ProtectSystem=strict`.
+> It is also data a database backup does not contain; see step 11.
 
 ---
 
@@ -131,8 +152,27 @@ sudo install -d -o shunhlai -g shunhlai -m 750 /var/backups/shunhlai
 git checkout main && git pull
 bun install
 bun run test && bun run lint     # do not ship a red build
-bun run build
+
+# Build with the PRODUCTION public values, given explicitly. Every
+# NEXT_PUBLIC_* is compiled into the bundle at build time, and a plain
+# `bun run build` takes them from your .env.local — which, pulled from
+# Vercel's development environment, carries the pk_test Clerk key. Values set
+# in the process environment win over the .env files.
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_… \
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in \
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up \
+NEXT_PUBLIC_SITE_URL=https://career.shunkhlai.mn \
+NEXT_PUBLIC_API_URL=https://careers.shunkhlai.mn \
+NEXT_PUBLIC_ORIGIN_URL=https://careers.shunkhlai.mn \
+  bun run build
+
+# Check what was baked in. Expect a non-zero count, then 0.
+grep -rl 'pk_live_' .next/static .next/server | wc -l
+grep -rlE 'pk_test_[A-Za-z0-9]+' .next/static .next/server | wc -l
 ```
+
+The publishable key is public — it ships to every browser — so it is safe on a
+command line. The secret key is not, and is not needed at build time.
 
 `next build` writes `.next/`. The server needs that, plus the files the app
 reads at runtime.
@@ -146,14 +186,28 @@ COMMIT=$(git rev-parse HEAD)
 echo "$RELEASE $COMMIT"
 ```
 
-Copy it across. `rsync` over SSH, in one shot:
+Copy it across. The SSH user cannot write into `/srv/shunhlai/releases` (the
+service account owns it), so it goes to `/tmp` first and is moved into place
+with `sudo`:
 
 ```bash
-rsync -az --delete \
-  .next package.json bun.lock next.config.ts drizzle drizzle.config.ts \
-  public src scripts \
-  <you>@103.168.179.147:/srv/shunhlai/releases/$RELEASE/
+# On your laptop
+rsync -az --exclude='/.next/cache' --exclude='/.next/dev' \
+  .next package.json bun.lock next.config.ts tsconfig.json drizzle drizzle.config.ts \
+  public src scripts deploy \
+  administrator@103.168.179.147:/tmp/shunhlai-release/
+
+# On the server — the same two values, typed again (a new shell has neither)
+RELEASE=<the timestamp above>; COMMIT=<the commit above>
+sudo mv /tmp/shunhlai-release /srv/shunhlai/releases/$RELEASE
+echo "$COMMIT" | sudo tee /srv/shunhlai/releases/$RELEASE/COMMIT
+sudo chown -R shunhlai:shunhlai /srv/shunhlai/releases/$RELEASE
 ```
+
+The two excludes matter: `.next/dev` is `next dev`'s output (2.5 GB on the
+machine this was first built on) and `.next/cache` is the build cache (half a
+gigabyte); the release is about 65 MB without them. No `.env*` file is in the
+list, and none should ever be — the server's settings are step 5.
 
 Why those paths and not just `.next`:
 
@@ -165,17 +219,13 @@ Why those paths and not just `.next`:
 - `src/` — the app is not bundled into a single standalone output, so the
   server-side modules are still read from here; `scripts/` holds the admin-user
   CLI and the backup script.
+- `tsconfig.json` — sits beside `next.config.ts`, which is TypeScript and is
+  loaded at boot (the journal shows "Running next.config.ts").
+- `deploy/` — the systemd unit and nginx config that steps 8 and 9 install.
 
-> **UNVERIFIED.** This file list is derived from what the app imports, not from
-> a copy that has been booted on that server. If `next start` complains about a
-> missing file on the first deploy, add it here and to this list.
-
-Record the commit in the release, so `/api/health` can report what is running
-(there is no `.git` on the server to ask):
-
-```bash
-ssh <you>@103.168.179.147 "echo $COMMIT > /srv/shunhlai/releases/$RELEASE/COMMIT"
-```
+This list booted on the server as-is on 2026-09-26. The `COMMIT` file written
+above is how `/api/health` reports what is running — there is no `.git` on the
+server to ask.
 
 ### If you prefer not to rsync from a laptop
 
@@ -190,20 +240,20 @@ On the server, in the new release directory:
 
 ```bash
 cd /srv/shunhlai/releases/$RELEASE
-sudo -u shunhlai bun install --production=false
+sudo -u shunhlai HOME=/srv/shunhlai bun install
 ```
 
-`--production=false` is deliberate: `next start` still resolves a handful of
-packages that `package.json` lists under `devDependencies`. Installing with
-`--production` gives a server that starts and then fails on the first request
-with a module-not-found, which is a confusing way to find out.
+A plain `bun install` includes `devDependencies`, which is deliberate: `next
+start` still resolves a handful of packages listed there. Installing with
+`--production` gives a server that starts
+and then fails on the first request with a module-not-found, which is a
+confusing way to find out. `HOME` points bun's cache at a directory the service
+account owns. This has to run on the server, not be copied from a laptop:
+`@node-rs/argon2` and friends ship per-platform binaries, and a macOS
+`node_modules` has the wrong ones. It took about 20 seconds.
 
 This repository uses **bun**, not npm. Do not run `npm install` here — it
 writes a second lockfile and the two disagree.
-
-> **UNVERIFIED**: `bun install` on a 1.9 GB machine. It is far lighter than
-> `next build`, but if it is killed, `bun install --no-cache` or installing
-> from a copied `node_modules` are the fallbacks.
 
 ---
 
@@ -223,17 +273,37 @@ DATABASE_URL=postgresql://app_user:<password-from-IT>@127.0.0.1:5432/app_db
 # Optional; connections per instance, default 10.
 DATABASE_POOL_MAX=10
 
-# The /admin newsroom login. A long random string, not a memorable one.
-ADMIN_PASSWORD=<generate-with: openssl rand -base64 24>
-ADMIN_SESSION_SECRET=<generate-with: openssl rand -hex 32>
+# Signs the cookie of the ADMIN_PASSWORD fallback login only — account sessions
+# are random tokens hashed into admin_session. Unused while the fallback is
+# closed, but set it anyway so it is never derived from something guessable.
+# Generate it on the server:  openssl rand -hex 32
+ADMIN_SESSION_SECRET=<64 hex characters>
+# ADMIN_PASSWORD is deliberately absent — see below.
 
-# Clerk, from the Clerk dashboard → API keys.
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
+# Where uploaded files go. REQUIRED: the code's production default
+# (/var/lib/shunhlai/uploads) is read-only under the unit's ProtectSystem=strict.
+UPLOAD_DIR=/srv/shunhlai/shared/uploads
+# nginx (step 9) sets X-Forwarded-For; this lets the admin login's rate limit
+# see the visitor's address instead of 127.0.0.1.
+TRUST_PROXY_HEADERS=true
 
-# The recruitment backend (ERP). Leave unset to use the bundled mock.
+# This site's own public address (link previews, canonical URLs).
+NEXT_PUBLIC_SITE_URL=https://career.shunkhlai.mn
+# The recruitment backend (ERP) — careers., with an s. A different host.
 NEXT_PUBLIC_API_URL=https://careers.shunkhlai.mn
 NEXT_PUBLIC_ORIGIN_URL=https://careers.shunkhlai.mn
+
+# Clerk, the PRODUCTION instance (pk_live_ / sk_live_), from the Clerk
+# dashboard → API keys. The publishable key must match the one the build used.
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_…
+CLERK_SECRET_KEY=sk_live_…
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+
+# News cover uploads from /admin. All three, or the upload route refuses.
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
 
 # What /api/health reports. Set APP_COMMIT on every release (step 8) —
 # there is no .git on the server for the app to read it from.
@@ -241,12 +311,31 @@ APP_VERSION=0.1.0
 APP_COMMIT=
 ```
 
-`DATABASE_URL` points at `127.0.0.1`, not `192.168.2.23`: PostgreSQL is on this
-same host, and a loopback connection never leaves the machine.
+Writing it without the secrets passing through your clipboard twice: create it
+with `sudo tee /etc/shunhlai/app.env <<EOF … EOF` holding placeholders such as
+`PASTE_CLERK_SECRET_HERE`, with `ADMIN_SESSION_SECRET=$(openssl rand -hex 32)`
+so the shell generates that one, then `sudo nano` it to replace the
+placeholders. Check it without printing a value:
 
-The `NEXT_PUBLIC_*` variables are compiled into the browser bundle **at build
-time**, so setting them here only affects server-side reads. If one of them
-needs to change, it needs a rebuild (step 3), not a restart. `DATABASE_URL` is
+```bash
+sudo cut -d= -f1 /etc/shunhlai/app.env          # names only
+sudo grep -c PASTE /etc/shunhlai/app.env        # expect 0
+sudo ls -l /etc/shunhlai/app.env                # expect -rw-r----- root shunhlai
+```
+
+**No `ADMIN_PASSWORD`.** It is the shared-password fallback for an install
+whose `app_user` table is still empty, and step 7 fills that table. Leaving
+the variable out closes the fallback for good rather than leaving a second
+door that happens to be locked today.
+
+`DATABASE_URL` points at `127.0.0.1`, not `192.168.2.23`: PostgreSQL is on this
+same host, a loopback connection never leaves the machine, and it is the only
+source `pg_hba.conf` accepts for `app_user` — `192.168.2.23` is refused.
+
+The `NEXT_PUBLIC_*` variables are compiled into the bundle **at build time**
+(step 3), so setting them here does not change what the site uses; they are
+listed so the file is the complete record of what the release was built for.
+If one of them needs to change, it needs a rebuild, not a restart. `DATABASE_URL` is
 the opposite — read at runtime, on first use — which is why a build does not
 need it.
 
@@ -261,10 +350,13 @@ edits.
 
 ```bash
 cd /srv/shunhlai/releases/$RELEASE
-sudo -u shunhlai --preserve-env=DATABASE_URL \
-  env $(grep -E '^DATABASE_URL=' /etc/shunhlai/app.env | xargs) \
-  bunx drizzle-kit migrate
+sudo -u shunhlai HOME=/srv/shunhlai bash -c \
+  'set -a; . /etc/shunhlai/app.env; set +a; bunx drizzle-kit migrate'
 ```
+
+The settings file is read *inside* the `sudo`, as the service account (whose
+group may read it). A `$(grep … /etc/shunhlai/app.env)` on the command line
+would run as you first, before `sudo`, and fail with "Permission denied".
 
 This applies the committed SQL in `drizzle/`. It is additive and safe to re-run
 — drizzle records which migrations have been applied.
@@ -273,11 +365,16 @@ Use `migrate`, **never `db:push`** on this server. `push` diffs the schema and
 applies whatever it thinks is needed, which on a database holding real
 applicant data can mean dropping a column.
 
-Check it landed — eight tables:
+Check it landed — eleven tables, and four rows in `drizzle.__drizzle_migrations`:
 
 ```bash
-psql "$DATABASE_URL" -c '\dt'
+sudo bash -c 'set -a; . /etc/shunhlai/app.env; psql "$DATABASE_URL" -c "\dt"'
 ```
+
+The first deploy ran this step (and step 7) **from a laptop** instead, through
+an SSH tunnel to the database — see "Reaching the database from a laptop" in
+`docs/postgres.md`. Either works; the tunnel needs nothing installed on the
+server.
 
 ---
 
@@ -285,20 +382,18 @@ psql "$DATABASE_URL" -c '\dt'
 
 ```bash
 cd /srv/shunhlai/releases/$RELEASE
-sudo -u shunhlai env $(grep -E '^DATABASE_URL=' /etc/shunhlai/app.env | xargs) \
-  bun run user:create -- --email admin@shunkhlai.mn --name "Admin" --role admin
+sudo -u shunhlai HOME=/srv/shunhlai bash -c 'set -a; . /etc/shunhlai/app.env; set +a; \
+  bun run user:create -- --email admin@shunkhlai.mn --name "Admin" --role admin'
 ```
 
 It asks for the password twice, at the terminal, with the echo off. It is never
 an argument — `argv` is visible in `ps` and lands in your shell history — and
 never logged. The stored value is an argon2id hash.
 
-> **Read this before you rely on it.** As of this release, **nothing signs in
-> against the `app_user` table yet.** `/admin` authenticates with the
-> `ADMIN_PASSWORD` from step 5. Creating the admin row is the right thing to do
-> now — the row is what the next slice will switch the login over to — but the
-> credential that actually works today is `ADMIN_PASSWORD`. See
-> `docs/postgres.md`.
+`/admin/login` signs in against this table (email and password, sessions in
+`admin_session`). The `ADMIN_PASSWORD` fallback only opens while the table is
+empty, which is why step 5 leaves that variable out: once this row exists,
+there is no shared password. See `docs/postgres.md`.
 
 ---
 
@@ -341,11 +436,30 @@ sudo -u shunhlai mv -Tf /srv/shunhlai/current.new /srv/shunhlai/current
 Install the unit (first deploy only):
 
 ```bash
+# ReadWritePaths= skips a path that does not exist yet, and .next/cache is not
+# in the copied release — so without this, Next cannot write its cache.
+sudo -u shunhlai mkdir -p /srv/shunhlai/current/.next/cache
 sudo cp /srv/shunhlai/current/deploy/shunhlai.service /etc/systemd/system/
 sudo systemd-analyze verify /etc/systemd/system/shunhlai.service   # catches typos
 sudo systemctl daemon-reload
 sudo systemctl enable --now shunhlai
+sleep 10; curl -fsS --max-time 10 http://127.0.0.1:3000/api/health; echo
+sudo ss -ltnp | grep 3000     # expect 127.0.0.1:3000 only — never 0.0.0.0 or *
 ```
+
+Two things in the unit were learned the hard way on the first deploy, and the
+comments beside them in `deploy/shunhlai.service` say why:
+
+- **`ExecStart` passes `-H localhost`**, and it must be exactly that. Without
+  `-H`, Next listens on every interface (it ignores a `HOSTNAME` variable). With
+  `-H 127.0.0.1`, every page behind Clerk's proxy **hangs forever while static
+  files still load**: Clerk rewrites each request to its own URL built with
+  host `localhost`, Next sees an origin that is not its own and proxies the
+  request back to itself, endlessly.
+- **`RestrictAddressFamilies` includes `AF_NETLINK`.** Without a hostname, Next
+  lists network interfaces once it is listening; blocked, that throws
+  `uv_interface_addresses … errno 97` and leaves a server that accepts
+  connections and never answers them.
 
 On every later release, just:
 
@@ -369,11 +483,29 @@ so the restart is what picks up the new release.
 ```bash
 sudo cp /srv/shunhlai/current/deploy/nginx.conf.example \
         /etc/nginx/sites-available/shunhlai
-sudo nano /etc/nginx/sites-available/shunhlai     # set server_name
+# server_name is already career.shunkhlai.mn; check it with:
+grep server_name /etc/nginx/sites-available/shunhlai
+
+# The config uses $connection_upgrade, which needs this map in the http{} block.
+# Without it `nginx -t` fails on an unknown variable.
+sudo tee /etc/nginx/conf.d/upgrade.conf >/dev/null <<'EOF'
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+EOF
+
 sudo ln -sf /etc/nginx/sites-available/shunhlai /etc/nginx/sites-enabled/shunhlai
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
+sleep 2
+curl -fsS --max-time 10 -H 'Host: career.shunkhlai.mn' http://127.0.0.1/api/health; echo
 ```
+
+The `sleep` is not decoration: a reload swaps configs gracefully, and a request
+sent in the same instant can still be answered by the old one — on the first
+deploy that was a `404` from the stock "Welcome to nginx" site, which looks
+exactly like a broken config and is not.
 
 The upload limit there (`client_max_body_size 6m`) is set just above the app's
 own 5 MB CV limit on purpose, so that an oversized CV is refused by the app
@@ -381,17 +513,27 @@ with a message the applicant can read rather than by nginx with a bare error
 page. If `MAX_CV_BYTES` in `src/lib/apply-schema.ts` ever changes, change that
 line with it.
 
-**TLS**: the file points at `certbot --nginx`, and also explains why that will
-not work as things stand — Let's Encrypt cannot reach a host on a private
-network. Settle this with the customer's IT (a DNS-01 challenge, or a
-certificate from their internal CA) before promising HTTPS.
+**Reaching it from outside** is IT's part, requested on 2026-09-26: forward
+ports 80 and 443 on a public address to `192.168.2.23`, point
+`career.shunkhlai.mn` at that address (and at `192.168.2.23` on their internal
+DNS), and add the Clerk production DNS records under `shunkhlai.mn` —
+`clerk`, `accounts`, `clkmail`, `clk._domainkey`, `clk2._domainkey`, exact
+values in the Clerk dashboard under Configure → Domains. Until those Clerk
+records verify, applicant sign-in does not work on any host; the news, jobs and
+`/admin` do not depend on them.
+
+**TLS**: once port 80 is forwarded and the name resolves publicly, Let's
+Encrypt can reach the host and `certbot --nginx -d career.shunkhlai.mn` (see
+the comment in the config) works. Before that it cannot. **UNVERIFIED** —
+waiting on IT. If they prefer not to forward port 80, the alternatives are a
+DNS-01 challenge or a certificate from their own CA.
 
 ---
 
 ## 10. Verify
 
 ```bash
-curl -fsS http://127.0.0.1:3000/api/health | jq
+curl -fsS --max-time 10 http://127.0.0.1:3000/api/health; echo
 ```
 
 Healthy — HTTP 200:
@@ -430,12 +572,13 @@ Then the real checks:
 
 ```bash
 curl -fsS http://127.0.0.1:3000/api/health     # 200
-curl -I https://careers.shunkhlai.mn/          # through nginx, 200
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: career.shunkhlai.mn' http://127.0.0.1/   # through nginx, 200
+curl -I https://career.shunkhlai.mn/           # from outside, once IT's part and TLS are done
 ```
 
 - `/news` renders and `/admin/news` can save a story.
 - `/careers` lists jobs.
-- `psql "$DATABASE_URL" -c '\dt'` shows eight tables.
+- The eleven tables are there (the check at the end of step 6).
 
 ### Logs
 
@@ -456,6 +599,13 @@ rotate, and nothing writes to a filesystem the unit makes read-only.
 
 `scripts/db/backup.sh` writes a timestamped, gzipped `pg_dump` in custom
 format, and deletes dumps older than the retention window.
+
+> **It does not cover uploaded files.** New uploads are bytes on disk under
+> `/srv/shunhlai/shared/uploads` (see step 2), with only their index in the
+> database. A restore from a dump alone brings back rows that point at files
+> that may be gone. Until the script covers that directory too, back it up
+> alongside — e.g. a nightly `tar czf` of it into `/var/backups/shunhlai`.
+> **Open item**, not yet done on the server.
 
 Install it:
 
@@ -493,7 +643,7 @@ ls -lh /var/backups/shunhlai
 ```
 
 > **UNVERIFIED against a real database.** The script's logic was exercised
-> against a stand-in `pg_dump`, not PostgreSQL 16. The first real run is the
+> against a stand-in `pg_dump`, not PostgreSQL 14. The first real run is the
 > test. A dump under 1 KB is refused rather than kept, and a run killed part
 > way leaves a `.partial` that is cleaned up, not a truncated file that looks
 > like a good backup.
@@ -530,7 +680,7 @@ sudo -u postgres psql -c "alter database app_db_restore rename to app_db"
 
 # 6. Start the app and confirm.
 sudo systemctl start shunhlai
-curl -fsS http://127.0.0.1:3000/api/health | jq
+curl -fsS --max-time 10 http://127.0.0.1:3000/api/health; echo
 ```
 
 A rename needs no other session connected to the database — step 1 is what
@@ -541,7 +691,7 @@ Keep `app_db_broken_*` until you are certain, then drop it. It is the only
 evidence of what went wrong.
 
 > **UNVERIFIED**: this sequence has not been run. It is the standard
-> `pg_restore` procedure, written against PostgreSQL 16's documented
+> `pg_restore` procedure, written against PostgreSQL's documented
 > behaviour. Rehearse it on a copy before you need it (step 12).
 
 ---
@@ -553,30 +703,40 @@ The short loop, once the first deploy is done. Roughly five minutes.
 ```bash
 # On your laptop or CI
 git checkout main && git pull
-bun install && bun run test && bun run lint && bun run build
-RELEASE=$(date -u +%Y%m%dT%H%M%SZ); COMMIT=$(git rev-parse HEAD)
-rsync -az --delete .next package.json bun.lock next.config.ts drizzle \
-  drizzle.config.ts public src scripts \
-  <you>@103.168.179.147:/srv/shunhlai/releases/$RELEASE/
+bun install && bun run test && bun run lint
+# ...then the production build exactly as in step 3, NEXT_PUBLIC_* values and all,
+# and its two grep checks.
+RELEASE=$(date -u +%Y%m%dT%H%M%SZ); COMMIT=$(git rev-parse HEAD); echo "$RELEASE $COMMIT"
+rsync -az --exclude='/.next/cache' --exclude='/.next/dev' \
+  .next package.json bun.lock next.config.ts tsconfig.json drizzle drizzle.config.ts \
+  public src scripts deploy \
+  administrator@103.168.179.147:/tmp/shunhlai-release/
 
 # On the server
-ssh <you>@103.168.179.147
-RELEASE=<the timestamp you just used>
-echo "<the commit>" | sudo -u shunhlai tee /srv/shunhlai/releases/$RELEASE/COMMIT
-cd /srv/shunhlai/releases/$RELEASE && sudo -u shunhlai bun install --production=false
+ssh administrator@103.168.179.147
+RELEASE=<the timestamp above>; COMMIT=<the commit above>
+R=/srv/shunhlai/releases/$RELEASE
+sudo mv /tmp/shunhlai-release $R
+echo "$COMMIT" | sudo tee $R/COMMIT
+sudo chown -R shunhlai:shunhlai $R
+sudo -u shunhlai mkdir -p $R/.next/cache     # the unit's ReadWritePaths needs it to exist
+cd $R && sudo -u shunhlai HOME=/srv/shunhlai bun install
 
 # Migrations, if this release has any new ones in drizzle/
-sudo -u shunhlai env $(grep -E '^DATABASE_URL=' /etc/shunhlai/app.env | xargs) \
-  bunx drizzle-kit migrate
+sudo -u shunhlai HOME=/srv/shunhlai bash -c \
+  'set -a; . /etc/shunhlai/app.env; set +a; bunx drizzle-kit migrate'
 
-sudo sed -i "s|^APP_COMMIT=.*|APP_COMMIT=$(cat /srv/shunhlai/releases/$RELEASE/COMMIT)|" \
-  /etc/shunhlai/app.env
-sudo -u shunhlai ln -sfn /srv/shunhlai/releases/$RELEASE /srv/shunhlai/current.new
+sudo sed -i "s|^APP_COMMIT=.*|APP_COMMIT=$(cut -c1-7 $R/COMMIT)|" /etc/shunhlai/app.env
+sudo -u shunhlai ln -sfn $R /srv/shunhlai/current.new
 sudo -u shunhlai mv -Tf /srv/shunhlai/current.new /srv/shunhlai/current
 sudo systemctl restart shunhlai
 
-curl -fsS http://127.0.0.1:3000/api/health | jq
+sleep 10; curl -fsS --max-time 10 http://127.0.0.1:3000/api/health; echo
 ```
+
+If `deploy/shunhlai.service` changed in this release, also
+`sudo cp $R/deploy/shunhlai.service /etc/systemd/system/ && sudo systemctl daemon-reload`
+before the restart.
 
 If the health check does not return 200 within about thirty seconds, roll back.
 Do not debug a broken release while it is the live one.
@@ -610,7 +770,7 @@ sudo -u shunhlai ln -sfn $PREVIOUS /srv/shunhlai/current.new
 sudo -u shunhlai mv -Tf /srv/shunhlai/current.new /srv/shunhlai/current
 sudo systemctl restart shunhlai
 
-curl -fsS http://127.0.0.1:3000/api/health | jq   # expect the previous commit
+curl -fsS --max-time 10 http://127.0.0.1:3000/api/health; echo   # expect the previous commit
 ```
 
 That is the whole rollback: the previous release was never modified, so there
@@ -659,7 +819,12 @@ against that server yet, is a live possibility.
 | Service restarts in a loop | `journalctl -u shunhlai -n 100`; after 5 failures in a minute systemd gives up — `systemctl reset-failed shunhlai` to retry |
 | `EROFS` / permission denied in the log | `ProtectSystem=strict` — the path needs a `ReadWritePaths=` line in the unit |
 | 413 on a CV upload | `client_max_body_size` in nginx vs `MAX_CV_BYTES` in the app |
-| Site up, `/admin` rejects the password | `ADMIN_PASSWORD` in `/etc/shunhlai/app.env`; the `app_user` table is not wired to the login yet |
+| Site up, `/admin` rejects the password | The account in `app_user` — `is_active`, and the email as typed. A signed-in user changes their own password at `/admin/account`; a forgotten one means a new account with `user:create` (step 7). There is no shared password once the table has a row |
+| Pages hang, but `/icon.png` loads | `ExecStart` must end in `-H localhost` — not `127.0.0.1`, not missing (step 8) |
+| `uv_interface_addresses … errno 97` in the journal, requests hang | `AF_NETLINK` missing from `RestrictAddressFamilies`, and no `-H` on `ExecStart` (step 8) |
+| `404` from nginx right after a reload | Timing — the old config answered. Wait two seconds and ask again (step 9) |
+| `cannot stat /tmp/…` after an `rsync` from the laptop | The copy never arrived (usually a mistyped SSH password). Re-run it and check with `ls` on the server |
+| Applicant sign-in fails, rest of the site works | Clerk's DNS records under `shunkhlai.mn` — Clerk dashboard → Configure → Domains shows which are unverified |
 
 Anything not on this list: `journalctl -u shunhlai -n 200` first, every time.
 The app logs its database failures there in full, which is exactly the detail

@@ -35,13 +35,13 @@ upstream shunhlai_app {
 server {
     listen 80;
     listen [::]:80;
-    server_name careers.shunkhlai.mn;   # <-- the customer's hostname
+    server_name career.shunkhlai.mn;    # <-- the customer's hostname (careers., with an s, is the ERP)
 
     # ── TLS ──────────────────────────────────────────────────────────────────
     # Certbot writes the redirect and the 443 server block itself:
     #
     #   sudo apt install certbot python3-certbot-nginx
-    #   sudo certbot --nginx -d careers.shunkhlai.mn
+    #   sudo certbot --nginx -d career.shunkhlai.mn
     #
     # It edits this file in place, adds `listen 443 ssl` with the certificate
     # paths, and installs a systemd timer that renews twice a day. Run it only
