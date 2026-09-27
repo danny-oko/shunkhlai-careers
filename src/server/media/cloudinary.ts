@@ -34,6 +34,7 @@ export const MEDIA_ROOT = "shunhlai";
 export const MEDIA_FOLDERS = {
   hero: `${MEDIA_ROOT}/hero`,
   culture: `${MEDIA_ROOT}/culture`,
+  history: `${MEDIA_ROOT}/history`,
   news: `${MEDIA_ROOT}/news`,
 } as const;
 

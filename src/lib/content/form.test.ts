@@ -192,3 +192,27 @@ describe("formDocument — culture", () => {
     expect(document.walls.benefits.items).toHaveLength(1);
   });
 });
+
+describe("formDocument — history", () => {
+  it("reads records in index order and drops a blank one", () => {
+    const document = formDocument(
+      "history",
+      form({
+        "entries.3.year": "2003",
+        "entries.3.title": "Лаборатори",
+        "entries.3.body": "Тайлбар",
+        "entries.3.image": "/b.webp",
+        "entries.3.alt": "Б",
+        "entries.0.year": "1993",
+        "entries.0.title": "Гараа",
+        "entries.0.body": "Тайлбар",
+        "entries.0.image": "/a.webp",
+        "entries.0.alt": "А",
+        "entries.1.year": " ",
+        "entries.1.title": "",
+      }),
+    ) as { entries: Array<{ year: string }> };
+
+    expect(document.entries.map((entry) => entry.year)).toEqual(["1993", "2003"]);
+  });
+});

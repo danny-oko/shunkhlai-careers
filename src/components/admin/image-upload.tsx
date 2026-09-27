@@ -47,7 +47,7 @@ export function ImageUpload({
   className,
 }: {
   /** Which folder under `shunhlai/` the picture is filed in. */
-  folder: "hero" | "culture" | "news";
+  folder: "hero" | "culture" | "history" | "news";
   label?: string;
   onUploaded: (url: string) => void;
   className?: string;

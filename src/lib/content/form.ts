@@ -124,6 +124,10 @@ export function formDocument(key: ContentKey, data: FormData): unknown {
     };
   }
 
+  if (key === "history") {
+    return { entries: rows(data, "entries", ["year", "title", "body", "image", "alt"]) };
+  }
+
   if (key === "culture") {
     return {
       heading: str(data, "heading"),

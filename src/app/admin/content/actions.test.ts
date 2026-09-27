@@ -97,7 +97,7 @@ describe("a valid save", () => {
   it("revalidates the page the section is on, and the desk", async () => {
     await saveSectionAction({}, statsForm());
     expect(cache.revalidatePath).toHaveBeenCalledWith("/about", "page");
-    expect(cache.revalidatePath).toHaveBeenCalledWith("/admin/content");
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/admin/content", "layout");
   });
 
   it("revalidates the footer as a layout, because it is on every page", async () => {

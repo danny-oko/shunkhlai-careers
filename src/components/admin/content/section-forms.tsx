@@ -10,6 +10,7 @@ import {
   CulturePreview,
   FooterPreview,
   HeroPreview,
+  HistoryPreview,
   Thumb,
 } from "@/components/admin/content/section-preview";
 import {
@@ -29,6 +30,7 @@ import type {
   CultureWall,
   FooterContent,
   HeroContent,
+  HistoryContent,
 } from "@/lib/content/schema";
 import { cn } from "@/lib/utils";
 import { CONTENT_SECTIONS } from "@/lib/content/defaults";
@@ -246,6 +248,118 @@ export function HeroForm({ value, stored }: { value: HeroContent; stored: boolea
             className="min-w-48 flex-1"
           />
         </div>
+      </FieldGroup>
+    </SectionShell>
+  );
+}
+
+/* --- history (about) ------------------------------------------------------ */
+
+export function HistoryForm({ value, stored }: { value: HistoryContent; stored: boolean }) {
+  const { state, action, isPending, errors, dirty, markDirty } = useSection("history");
+  const entries = useRows(value.entries, markDirty);
+
+  return (
+    <SectionShell
+      section="history"
+      title={CONTENT_SECTIONS.history.title}
+      blurb={CONTENT_SECTIONS.history.blurb}
+      href={pageHref("history")}
+      stored={stored}
+      state={state}
+      isPending={isPending}
+      dirty={dirty}
+      onDirty={markDirty}
+      action={action}
+      preview={<HistoryPreview value={{ entries: entries.rows.map((row) => row.value) }} />}
+    >
+      <FieldGroup
+        legend="Үе шатууд"
+        hint="Дээрээс доош уншигдах дарааллаар. Он нь зургийн хажуугийн жагсаалтад гарна."
+      >
+        {errors.entries && (
+          <p role="alert" className="text-[0.8125rem] text-destructive">
+            {errors.entries}
+          </p>
+        )}
+
+        {entries.rows.map((row, index) => (
+          <Row
+            key={row.id}
+            index={index}
+            total={entries.rows.length}
+            removeLabel={`${index + 1}-р үе шатыг хасах`}
+            onRemove={() => entries.remove(row.id)}
+            onMove={(to) => entries.move(row.id, to)}
+          >
+            <div className="flex items-start gap-3">
+              <Thumb src={row.value.image} className="h-20 w-15" />
+
+              <div className="flex min-w-0 flex-1 flex-col gap-3">
+                <div className="flex flex-wrap items-start gap-3">
+                  <Field
+                    name={`entries.${index}.year`}
+                    label="Он"
+                    value={row.value.year}
+                    onChange={(year) => entries.update(row.id, { year })}
+                    error={errors[`entries.${index}.year`]}
+                    placeholder="1993"
+                    className="w-24"
+                  />
+                  <Field
+                    name={`entries.${index}.title`}
+                    label="Гарчиг"
+                    value={row.value.title}
+                    onChange={(title) => entries.update(row.id, { title })}
+                    error={errors[`entries.${index}.title`]}
+                    className="min-w-48 flex-1"
+                  />
+                </div>
+
+                <Field
+                  name={`entries.${index}.body`}
+                  label="Тайлбар"
+                  value={row.value.body}
+                  onChange={(body) => entries.update(row.id, { body })}
+                  error={errors[`entries.${index}.body`]}
+                  multiline
+                />
+
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field
+                    name={`entries.${index}.image`}
+                    label="Зураг"
+                    value={row.value.image}
+                    onChange={(image) => entries.update(row.id, { image })}
+                    error={errors[`entries.${index}.image`]}
+                    placeholder="/history/photo-1993-price-board.webp"
+                    hint="3:4 харьцаагаар төвөөс нь тайрч харуулна."
+                    className="min-w-56 flex-1"
+                  />
+                  <ImageUpload
+                    folder="history"
+                    label="Байршуулах"
+                    onUploaded={(image) => entries.update(row.id, { image })}
+                  />
+                </div>
+
+                <Field
+                  name={`entries.${index}.alt`}
+                  label="Зургийн тайлбар (alt)"
+                  value={row.value.alt}
+                  onChange={(alt) => entries.update(row.id, { alt })}
+                  error={errors[`entries.${index}.alt`]}
+                />
+              </div>
+            </div>
+          </Row>
+        ))}
+
+        <RowAdd
+          label="Үе шат нэмэх"
+          disabled={entries.rows.length >= CONTENT_LIMITS.historyEntries}
+          onClick={() => entries.add({ year: "", title: "", body: "", image: "", alt: "" })}
+        />
       </FieldGroup>
     </SectionShell>
   );

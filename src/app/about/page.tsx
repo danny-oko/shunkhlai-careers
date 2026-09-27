@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * The Academy's figures and the culture wall are rows in `site_content`, so
+ * The history timeline, the Academy's figures and the culture wall are rows in `site_content`, so
  * this page reads the database on every render rather than being baked at
  * build: an admin saving them sees the change on the next load. The reads
  * cannot fail the page — `getContent` answers with what the page shipped with
@@ -28,7 +28,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AboutPage() {
-  const [stats, culture] = await Promise.all([
+  const [history, stats, culture] = await Promise.all([
+    getContent("history"),
     getContent("about_stats"),
     getContent("culture"),
   ]);
@@ -40,7 +41,7 @@ export default async function AboutPage() {
           not looking at it. */}
       <h1 className="sr-only">Бидний тухай - Шунхлай ХХК</h1>
 
-      <HistoryTimeline />
+      <HistoryTimeline entries={history.entries} />
       {/* Closes on the Academy's 70/20/10 principle: the section's own label
           takes the screen and breaks apart to leave it standing. What that
           principle came to in figures is below the culture wall instead. */}

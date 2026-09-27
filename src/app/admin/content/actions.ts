@@ -84,7 +84,7 @@ export async function saveSectionAction(
    * so it revalidates as a layout — every page at once.
    */
   for (const { path, type } of CONTENT_SECTIONS[section].paths) revalidatePath(path, type);
-  revalidatePath("/admin/content");
+  revalidatePath("/admin/content", "layout");
 
   return { ok: true, section, message: "Хадгалагдлаа." };
 }

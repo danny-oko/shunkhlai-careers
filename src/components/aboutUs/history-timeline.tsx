@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { SectionRule } from "@/components/brand/section-rule";
 import { useScrollProgress } from "@/components/landing/use-scroll-progress";
-import { eras } from "@/lib/company";
+import type { HistoryEntry } from "@/lib/content/schema";
 import { cn } from "@/lib/utils";
 
 /** How much scroll one record is held for, once the stage is pinned. */
@@ -44,11 +44,6 @@ const REVEAL_MS = SWEEP_MS + SCATTER_MS / 2 + TILE_MS;
 /** Degrees the rings turn over the whole run. */
 const RING_TURN = 120;
 
-/** Every record in reading order, carrying the span it belongs to. */
-const slides = eras.flatMap((era, eraIndex) =>
-  era.entries.map((entry, entryIndex) => ({ era, eraIndex, entry, entryIndex })),
-);
-
 type Photo = {
   src: string;
   alt: string;
@@ -57,30 +52,26 @@ type Photo = {
 /**
  * Every photograph the stage can show, and which one each record asks for.
  *
- * A record with its own picture shows that; the rest show their span's. The
- * list is deduplicated because a span photograph can be asked for by more
- * than one record, and the frame holds one <img> per photograph.
+ * The list is deduplicated because two records can carry the same picture,
+ * and the frame holds one <img> per photograph - so the frame holds still
+ * across them instead of running the tiles over the same image.
  */
-const { photos, photoOf } = (() => {
+function photographsOf(entries: readonly HistoryEntry[]) {
   const photos: Photo[] = [];
   const seen = new Map<string, number>();
 
-  const photoOf = slides.map(({ era, entry }) => {
-    const src = entry.image ?? era.image;
-    const known = seen.get(src);
+  const photoOf = entries.map((entry) => {
+    const known = seen.get(entry.image);
     if (known !== undefined) return known;
 
     const index = photos.length;
-    photos.push({
-      src,
-      alt: entry.image ? (entry.imageAlt ?? "") : era.alt,
-    });
-    seen.set(src, index);
+    photos.push({ src: entry.image, alt: entry.alt });
+    seen.set(entry.image, index);
     return index;
   });
 
   return { photos, photoOf };
-})();
+}
 
 /**
  * Each tile's own offset into the sweep, fixed for the life of the page.
@@ -172,7 +163,8 @@ function useMedia(query: string) {
  * the ones that are not open are `inert`, so they are neither tabbed into
  * nor read out.
  */
-export function HistoryTimeline() {
+export function HistoryTimeline({ entries: slides }: { entries: readonly HistoryEntry[] }) {
+  const { photos, photoOf } = React.useMemo(() => photographsOf(slides), [slides]);
   const sectionRef = React.useRef<HTMLElement>(null);
   const { progress, isReduced } = useScrollProgress(sectionRef);
   const isWide = useMedia(WIDE);
@@ -192,7 +184,7 @@ export function HistoryTimeline() {
 
   // How far through the whole run, for the rings. Off the pinned scroll where
   // there is one, and off the record otherwise, so they turn either way.
-  const runProgress = isPinned ? progress : picked / (slides.length - 1);
+  const runProgress = isPinned ? progress : picked / Math.max(1, slides.length - 1);
 
   const { shown, incoming } = usePhotographChange(photoOf[active], isReduced);
 
@@ -290,7 +282,7 @@ export function HistoryTimeline() {
                   // open, so the years around the one growing hold their
                   // place instead of being pushed along by it.
                   <li
-                    key={`${slide.era.period}-${slide.entry.title}`}
+                    key={index}
                     className="flex h-7 items-center lg:h-10"
                   >
                     <button
@@ -305,7 +297,7 @@ export function HistoryTimeline() {
                           : "text-[0.8125rem] font-medium text-foreground/30 hover:text-foreground/70 sm:text-[0.9375rem]",
                       )}
                     >
-                      {slide.entry.year}
+                      {slide.year}
                     </button>
                   </li>
                 );
@@ -395,7 +387,7 @@ export function HistoryTimeline() {
             >
               {slides.map((slide, index) => (
                 <div
-                  key={`${slide.era.period}-${slide.entry.title}`}
+                  key={index}
                   inert={index !== active}
                   className={cn(
                     "[grid-area:1/1] transition-opacity duration-500 ease-out motion-reduce:transition-none",
@@ -407,10 +399,10 @@ export function HistoryTimeline() {
                       it in both places put the same number on the screen
                       twice. */}
                   <h3 className="text-lg leading-snug font-medium tracking-[-0.02em] text-balance sm:text-[1.375rem]">
-                    {slide.entry.title}
+                    {slide.title}
                   </h3>
                   <p className="mt-4 text-[0.875rem] leading-[1.7] text-foreground/65 hyphens-auto sm:mt-5 sm:text-[0.9375rem] sm:leading-[1.75] lg:text-justify">
-                    {slide.entry.body}
+                    {slide.body}
                   </p>
                 </div>
               ))}

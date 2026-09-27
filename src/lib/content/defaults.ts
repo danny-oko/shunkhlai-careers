@@ -4,8 +4,10 @@ import type {
   ContentValue,
   FooterContent,
   HeroContent,
+  HistoryContent,
 } from "./schema";
 import { CULTURE_DEFAULT } from "./culture-default";
+import { eras } from "@/lib/company";
 
 /**
  * What each section said before it was editable — and what it says again the
@@ -88,6 +90,23 @@ export const ABOUT_STATS_DEFAULT: AboutStatsContent = {
 };
 
 /**
+ * Түүхэн замнал as `company.ts` holds it, flattened out of its spans: the
+ * stage only ever showed the records, each over its own photograph (or its
+ * span's, for a record without one).
+ */
+export const HISTORY_DEFAULT: HistoryContent = {
+  entries: eras.flatMap((era) =>
+    era.entries.map((entry) => ({
+      year: entry.year,
+      title: entry.title,
+      body: entry.body,
+      image: entry.image ?? era.image,
+      alt: entry.image ? (entry.imageAlt ?? "") : era.alt,
+    })),
+  ),
+};
+
+/**
  * Annotated as the mapped type rather than inferred with `satisfies`: the
  * readers are generic in the key (`getContent<K>`), and only this annotation
  * lets `CONTENT_DEFAULTS[key]` be `ContentValue<K>` rather than a union of all
@@ -96,6 +115,7 @@ export const ABOUT_STATS_DEFAULT: AboutStatsContent = {
 export const CONTENT_DEFAULTS: { [K in ContentKey]: ContentValue<K> } = {
   hero: HERO_DEFAULT,
   footer: FOOTER_DEFAULT,
+  history: HISTORY_DEFAULT,
   "about_stats": ABOUT_STATS_DEFAULT,
   culture: CULTURE_DEFAULT,
 };
@@ -123,6 +143,11 @@ export const CONTENT_SECTIONS = {
     title: "Хөл хэсэг",
     blurb: "Бүх хуудасны хөлд гарах хаяг, холбоо барих мэдээлэл.",
     paths: [{ path: "/", type: "layout" }],
+  },
+  history: {
+    title: "Бидний тухай - Түүхэн замнал",
+    blurb: "/about хуудсыг нээх он дараалсан үе шатууд: он, гарчиг, тайлбар, зураг.",
+    paths: [{ path: "/about", type: "page" }],
   },
   "about_stats": {
     title: "Бидний тухай - тоон үзүүлэлт",
