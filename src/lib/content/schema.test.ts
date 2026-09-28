@@ -9,6 +9,7 @@ import {
   cultureSchema,
   footerSchema,
   heroSchema,
+  historySchema,
   isContentKey,
 } from "./schema";
 
@@ -28,8 +29,8 @@ describe("the defaults are valid documents", () => {
     expect(CONTENT_SCHEMAS[key].safeParse(CONTENT_DEFAULTS[key]).success).toBe(true);
   });
 
-  it("names exactly the four sections the desk edits", () => {
-    expect([...CONTENT_KEYS]).toEqual(["hero", "footer", "about_stats", "culture"]);
+  it("names exactly the five sections the desk edits", () => {
+    expect([...CONTENT_KEYS]).toEqual(["hero", "footer", "history", "about_stats", "culture"]);
     expect(isContentKey("hero")).toBe(true);
     expect(isContentKey("__proto__")).toBe(false);
     expect(isContentKey("news")).toBe(false);
@@ -218,6 +219,37 @@ describe("culture wall", () => {
     expect(cultureSchema.safeParse(doc([])).success).toBe(false);
     const { clubs: _clubs, ...two } = doc([tile]).walls;
     expect(cultureSchema.safeParse({ heading: "x", walls: two }).success).toBe(false);
+  });
+});
+
+describe("history timeline", () => {
+  const entry = {
+    year: "1993",
+    title: "Бизнесийн гараа",
+    body: "1993 онд ...",
+    image: "/history/photo-1993-price-board.webp",
+    alt: "Үнийн самбар",
+  };
+
+  it("keeps a record as typed", () => {
+    expect(historySchema.parse({ entries: [entry] }).entries[0]).toEqual(entry);
+  });
+
+  it("refuses an empty timeline", () => {
+    const result = historySchema.safeParse({ entries: [] });
+    expect(result.success).toBe(false);
+    expect(contentFieldErrors(result.error!).entries).toBe("Дор хаяж нэг үе шат шаардлагатай.");
+  });
+
+  it("refuses a record without a photograph", () => {
+    const result = historySchema.safeParse({ entries: [{ ...entry, image: " " }] });
+    expect(result.success).toBe(false);
+    expect(contentFieldErrors(result.error!)["entries.0.image"]).toBe("Зураг шаардлагатай.");
+  });
+
+  it("refuses more records than the rail holds", () => {
+    const result = historySchema.safeParse({ entries: Array(13).fill(entry) });
+    expect(result.success).toBe(false);
   });
 });
 

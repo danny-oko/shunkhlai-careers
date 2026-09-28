@@ -46,6 +46,11 @@ export const CONTENT_LIMITS = {
   tiles: 60,
   /** The dialog runs a tile's photographs as a strip. */
   tileImages: 12,
+  historyYear: 12,
+  historyTitle: 120,
+  historyBody: 1000,
+  /** One year per record on the rail; past this the rail no longer fits a phone. */
+  historyEntries: 12,
 } as const;
 
 /** What the admin sees when the section could not be written. */
@@ -276,16 +281,45 @@ export const cultureSchema = z.object({
   }),
 });
 
+/* --- history timeline (about) ---------------------------------------------- */
+
+/**
+ * "Түүхэн замнал" on `/about`: the records the pinned stage steps through,
+ * in reading order.
+ *
+ * `year` is a string because it is printed as typed on the rail beside the
+ * photograph ("1993", or a span if HR ever wants one). Every record carries
+ * its own photograph: the stage has no other picture to fall back on.
+ */
+export const historySchema = z.object({
+  entries: z
+    .array(
+      z.object({
+        year: text(CONTENT_LIMITS.historyYear, "Он шаардлагатай."),
+        title: text(CONTENT_LIMITS.historyTitle, "Гарчиг шаардлагатай."),
+        body: text(CONTENT_LIMITS.historyBody, "Тайлбар шаардлагатай."),
+        image: imageSrc,
+        alt: text(CONTENT_LIMITS.alt, "Зургийн тайлбар шаардлагатай."),
+      }),
+    )
+    .min(1, "Дор хаяж нэг үе шат шаардлагатай.")
+    .max(
+      CONTENT_LIMITS.historyEntries,
+      `${CONTENT_LIMITS.historyEntries} үе шатаас олон байж болохгүй.`,
+    ),
+});
+
 /* --- the registry --------------------------------------------------------- */
 
 export const CONTENT_SCHEMAS = {
   hero: heroSchema,
   footer: footerSchema,
+  history: historySchema,
   "about_stats": aboutStatsSchema,
   culture: cultureSchema,
 } as const;
 
-export const CONTENT_KEYS = ["hero", "footer", "about_stats", "culture"] as const;
+export const CONTENT_KEYS = ["hero", "footer", "history", "about_stats", "culture"] as const;
 
 export type ContentKey = (typeof CONTENT_KEYS)[number];
 
@@ -295,6 +329,8 @@ export type HeroContent = z.output<typeof heroSchema>;
 export type FooterContent = z.output<typeof footerSchema>;
 export type AboutStatsContent = z.output<typeof aboutStatsSchema>;
 export type CultureContent = z.output<typeof cultureSchema>;
+export type HistoryContent = z.output<typeof historySchema>;
+export type HistoryEntry = HistoryContent["entries"][number];
 export type CultureTile = CultureContent["walls"][CultureWall]["items"][number];
 
 export function isContentKey(value: string): value is ContentKey {

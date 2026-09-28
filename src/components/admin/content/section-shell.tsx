@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DISCARD_MESSAGE } from "@/components/admin/unsaved-guard";
+import { DISCARD_MESSAGE, useUnloadGuard } from "@/components/admin/unsaved-guard";
 import { cn } from "@/lib/utils";
 
 /**
@@ -398,8 +398,7 @@ function StatusLine({ status }: { status: Status }) {
  *
  * `section` rides as a hidden field because all three forms post to the same
  * action — it is what tells the action which schema to parse against and which
- * row to write. The same value is the panel's `id`, which is what the jump
- * rail at the top of the page links to.
+ * row to write.
  *
  * The head carries the one thing the old stack never said plainly: **where
  * this copy comes out**. The blurb describes it in words and the chip beside
@@ -445,6 +444,8 @@ export function SectionShell({
   const mine = state.section === section;
   const formError = mine ? state.fieldErrors?.form : undefined;
   const status = statusOf({ isPending, mine, state, dirty, stored });
+  // Each section is its own screen, so leaving it with edits loses them.
+  useUnloadGuard(dirty && !isPending);
 
   return (
     <form

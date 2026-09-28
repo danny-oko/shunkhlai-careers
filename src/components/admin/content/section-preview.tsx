@@ -9,6 +9,7 @@ import type {
   CultureWall,
   FooterContent,
   HeroContent,
+  HistoryContent,
 } from "@/lib/content/schema";
 import { cn } from "@/lib/utils";
 
@@ -233,6 +234,31 @@ export function CulturePreview({
             +{items.length - shown.length}
           </span>
         )}
+      </div>
+    </Stage>
+  );
+}
+
+/**
+ * Түүхэн замнал: the rail of years, each over the photograph its record
+ * opens on, in the order the scroll reads them.
+ */
+export function HistoryPreview({ value }: { value: HistoryContent }) {
+  return (
+    <Stage>
+      <p className="text-[0.8125rem] font-semibold">Түүхэн замнал</p>
+      <div className="mt-3 flex items-start gap-2 overflow-hidden">
+        {value.entries.map((entry, index) => (
+          <div key={index} className="flex w-14 shrink-0 flex-col gap-1">
+            <Thumb src={entry.image} className="h-[4.5rem] w-14" />
+            <p className="text-brand text-[0.75rem] leading-none font-semibold tabular-nums">
+              {entry.year || "—"}
+            </p>
+            <p className="line-clamp-2 text-[0.625rem] leading-snug text-ink-muted">
+              {entry.title}
+            </p>
+          </div>
+        ))}
       </div>
     </Stage>
   );
