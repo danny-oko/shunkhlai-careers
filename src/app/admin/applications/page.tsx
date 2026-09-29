@@ -3,7 +3,6 @@ import { AlertTriangle, Inbox } from "lucide-react";
 
 import { FilterPills } from "@/components/admin/application-filters";
 import { ApplicationRow } from "@/components/admin/application-row";
-import { ApplicationSource } from "@/components/admin/application-source";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/server/admin/guard";
 import { type ApplicationDesk, loadApplicationDesk } from "@/server/applicant/application-desk";
@@ -109,8 +108,6 @@ export default async function AdminApplicationsPage({
           )}
         </p>
       </div>
-
-      <ApplicationSource source={desk.source} />
 
       {/* The filters count against each other, so the numbers on the pills are
           the number of rows pressing them shows. Both rows are links: the

@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { ApplicantRecordView } from "@/components/admin/applicant-record";
 import { ApplicationDetail } from "@/components/admin/application-detail";
-import { ApplicationSource } from "@/components/admin/application-source";
 import { Button } from "@/components/ui/button";
 import {
   mayRetryApplications,
@@ -100,25 +99,20 @@ export default async function AdminApplicationPage({
   const retryable = status === "attention" || status === "retrying" || status === "unknown";
 
   return (
-    <>
-      <ApplicationDetail
-        application={application}
-        source={source.source}
-        openPostings={source.openPostings}
-        retry={
-          retryable && mayRetryApplications(user) ? (
-            <RetryButton applicationKey={application.key} />
-          ) : undefined
-        }
-        profile={
-          record ? (
-            <ApplicantRecordView record={record} applicationKey={application.key} />
-          ) : undefined
-        }
-      />
-      <div className="mx-auto w-full max-w-3xl px-5 pb-10 lg:px-8">
-        <ApplicationSource source={source.source} />
-      </div>
-    </>
+    <ApplicationDetail
+      application={application}
+      source={source.source}
+      openPostings={source.openPostings}
+      retry={
+        retryable && mayRetryApplications(user) ? (
+          <RetryButton applicationKey={application.key} />
+        ) : undefined
+      }
+      profile={
+        record ? (
+          <ApplicantRecordView record={record} applicationKey={application.key} />
+        ) : undefined
+      }
+    />
   );
 }
