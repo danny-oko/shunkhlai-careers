@@ -154,7 +154,7 @@ export const applicantAccount = pgTable(
 
 /**
  * The CV and profile photo (base64), split into chunks — see the note at the
- * top: D1 capped a value at 2 MB and a CV may be up to 5 MB (MAX_CV_BYTES),
+ * top: D1 capped a value at 2 MB and a CV may be up to 4 MB (MAX_CV_BYTES),
  * ~6.7 MB as base64. Postgres would take the whole string, but the chunking
  * stays so the port does not rewrite rows it does not have to.
  */

@@ -62,11 +62,11 @@ server {
     }
 
     # ── Upload size ──────────────────────────────────────────────────────────
-    # The app's own ceiling is 5 MB for a CV (MAX_CV_BYTES in
+    # The app's own ceiling is 4 MB for a CV (MAX_CV_BYTES in
     # src/lib/apply-schema.ts), and the route allows 64 KB on top for multipart
     # framing (MAX_UPLOAD_REQUEST_BYTES in src/app/api/me/[...path]/route.ts).
     # 6m sits just above that deliberately: nginx should not be the thing that
-    # rejects a legitimate 5 MB CV, because its 413 is a bare HTML page, while
+    # rejects a legitimate 4 MB CV, because its 413 is a bare HTML page, while
     # the app answers the same request with the message the applicant can act
     # on. nginx is only the backstop against a body far too large to buffer on
     # a machine with 1.9 GB of RAM.

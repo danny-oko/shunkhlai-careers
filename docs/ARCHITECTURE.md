@@ -197,6 +197,10 @@ elsewhere and copy `.next` over rather than running `next build` on it.
   your work is the way to keep the tree clean.
 - `bun run lint:strict` fails on `src/app/api/applicant/[...path]/route.ts` for
   pre-existing reasons. CI does not run it.
+- **Vercel refuses any request body over 4.5 MB** with its own 413
+  (`FUNCTION_PAYLOAD_TOO_LARGE`) before the app runs, and nothing reaches the
+  function logs. That is why `MAX_CV_BYTES` is 4 MB, not 5; a bigger upload
+  limit on Vercel needs a direct-to-storage upload, not a bigger constant.
 - Tests must never touch a real database. `src/server/news/store.ts` used to write
   `.mock-data/news.json` during a test run and wiped the developer's newsroom.
 - Several worktrees of this repo live side by side under `../slice-*`. Check which

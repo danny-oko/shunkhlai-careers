@@ -31,7 +31,7 @@ import {
 } from "@/server/applicant/erp-sync";
 import { hasErp } from "@/server/applicant/erp";
 import { recordLocalChange, sectionByRemove, syncScheduled } from "@/server/applicant/erp-model";
-import { MAX_CV_BYTES } from "@/lib/apply-schema";
+import { CV_TOO_LARGE_MESSAGE, MAX_CV_BYTES } from "@/lib/apply-schema";
 
 /**
  * The signed-in applicant's own data, on the ERP's endpoint names
@@ -57,10 +57,10 @@ import { MAX_CV_BYTES } from "@/lib/apply-schema";
 
 export const dynamic = "force-dynamic";
 
-// The browser already refuses files over 5 MB (apply-schema); this is the
-// server-side backstop for direct POSTs, so the fallback copy stays generic.
+// The browser already refuses a CV over `MAX_CV_BYTES` (apply-rules); this is
+// the server-side backstop for a request that skipped it.
 const MAX_UPLOAD_REQUEST_BYTES = MAX_CV_BYTES + 64 * 1024; // multipart overhead
-const FILE_TOO_LARGE_MESSAGE = "Алдаа гарлаа. Дахин оролдоно уу.";
+const FILE_TOO_LARGE_MESSAGE = CV_TOO_LARGE_MESSAGE;
 
 type Ctx = RouteContext<"/api/me/[...path]">;
 

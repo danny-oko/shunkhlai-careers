@@ -14,7 +14,14 @@ export const REGISTER_ID_PATTERN = /^[А-ЯӨҮ]{2}\d{8}$/;
 /** Mongolian mobile: eight digits, optionally prefixed with +976. */
 export const PHONE_PATTERN = /^(\+?976[\s-]?)?\d{4}[\s-]?\d{4}$/;
 
-export const MAX_CV_BYTES = 5 * 1024 * 1024;
+/**
+ * 4 MB, not 5: Vercel, which serves the public site until the switch-over,
+ * refuses any request body over 4.5 MB with its own 413
+ * (`FUNCTION_PAYLOAD_TOO_LARGE`) before the app runs, so a 4.3–5 MB CV passed
+ * the picker's check and then failed with nothing in the logs. 4 MB plus the
+ * multipart framing stays under that on every host.
+ */
+export const MAX_CV_BYTES = 4 * 1024 * 1024;
 
 export const ACCEPTED_CV_TYPES = [
   "application/pdf",
@@ -25,6 +32,9 @@ export const ACCEPTED_CV_TYPES = [
 export const ACCEPTED_CV_EXTENSIONS = [".pdf", ".doc", ".docx"];
 
 const MAX_CV_MB = MAX_CV_BYTES / (1024 * 1024);
+
+/** Shown by the picker, by `/api/me`, and for a 413 from whatever sits in front of it. */
+export const CV_TOO_LARGE_MESSAGE = `Файл ${MAX_CV_MB} MB-аас том байна. Жижиг файл сонгоно уу.`;
 
 /** The limits as the CV pickers show them. */
 export const CV_LIMITS_TEXT = `PDF, DOC эсвэл DOCX · ${MAX_CV_MB} MB хүртэл`;
@@ -39,9 +49,7 @@ export function describeCvFileError(file: File): string | null {
   if (!hasAcceptedType && !hasAcceptedExtension) {
     return "PDF, DOC эсвэл DOCX файл оруулна уу.";
   }
-  if (file.size > MAX_CV_BYTES) {
-    return `Файл ${MAX_CV_MB} MB-аас том байна. Жижиг файл сонгоно уу.`;
-  }
+  if (file.size > MAX_CV_BYTES) return CV_TOO_LARGE_MESSAGE;
   return null;
 }
 

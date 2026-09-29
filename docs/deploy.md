@@ -508,7 +508,7 @@ deploy that was a `404` from the stock "Welcome to nginx" site, which looks
 exactly like a broken config and is not.
 
 The upload limit there (`client_max_body_size 6m`) is set just above the app's
-own 5 MB CV limit on purpose, so that an oversized CV is refused by the app
+own 4 MB CV limit on purpose, so that an oversized CV is refused by the app
 with a message the applicant can read rather than by nginx with a bare error
 page. If `MAX_CV_BYTES` in `src/lib/apply-schema.ts` ever changes, change that
 line with it.
