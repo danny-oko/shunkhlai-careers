@@ -36,10 +36,13 @@ vi.mock("@/lib/db", async () => {
 });
 
 import { applicantAccount, applicationLog } from "@/lib/db/schema";
-import { ApplicantRecordView } from "@/components/admin/applicant-record";
+import {
+  ApplicantAvatar,
+  ApplicantCv,
+  ApplicantRecordView,
+} from "@/components/admin/applicant-record";
 import { ApplicationDetail } from "@/components/admin/application-detail";
 import { ApplicationRow } from "@/components/admin/application-row";
-import { ApplicationSource } from "@/components/admin/application-source";
 import { getApplicantRecord } from "@/server/applicant/applicant-record";
 import {
   type DeskSource,
@@ -181,8 +184,16 @@ const recordMarkup = async () => {
   if (!record) throw new Error("the seeded account was not found");
   return {
     key: row.key,
+    // The three pieces the page draws for an `admin`: the header's photo and
+    // CV, and the анкет.
     html: renderToStaticMarkup(
-      React.createElement(ApplicantRecordView, { record, applicationKey: row.key }),
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(ApplicantAvatar, { record, applicationKey: row.key }),
+        React.createElement(ApplicantCv, { record, applicationKey: row.key }),
+        React.createElement(ApplicantRecordView, { record }),
+      ),
     ),
   };
 };
@@ -306,39 +317,5 @@ describe("the applicant's record", () => {
     for (const retmsg of [WITHDRAW_RETMSG, LOG_RETMSG]) {
       expect(html, retmsg).not.toContain(retmsg);
     }
-  });
-});
-
-/* --- the source banner ---------------------------------------------------- */
-
-describe("the source banner", () => {
-  const render = (source: DeskSource) =>
-    renderToStaticMarkup(React.createElement(ApplicationSource, { source }));
-
-  it("names the mirror as the source, and says what it does not hold", () => {
-    const html = render(ERP_UP);
-    expect(html).toContain("Эх сурвалж: энэ сайтын толь");
-    expect(html).toContain("ERP-д шууд ирсэн өргөдөл энэ жагсаалтад ороогүй болно.");
-  });
-
-  it("reports a reachable ERP, and how many adverts it is carrying", () => {
-    expect(render(ERP_UP)).toContain("ERP хариу өглөө — 4 зар нээлттэй байна.");
-  });
-
-  it("reports the fallback in Mongolian, from the classified reason", () => {
-    const html = render(ERP_DOWN);
-    expect(html).toContain("ERP-д холбогдож чадсангүй");
-    expect(html).toContain("жагсаалт тольноос уншигдлаа");
-    // The strip turns destructive only for a real failure.
-    expect(html).toContain("border-destructive/30");
-  });
-
-  it("does not shout at a deployment that simply has no ERP configured", () => {
-    const html = render({
-      rows: "mirror",
-      erp: { reachable: false, reason: "erp_not_configured" },
-    });
-    expect(html).toContain("ERP хаяг тохируулаагүй байна");
-    expect(html).not.toContain("border-destructive/30");
   });
 });

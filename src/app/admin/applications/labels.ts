@@ -112,36 +112,6 @@ export const REASON_UNKNOWN = "Тодорхойгүй шалтгаан";
 export const reasonLabel = (error: string | undefined): string =>
   error ? (REASONS[error] ?? REASON_UNKNOWN) : REASON_UNKNOWN;
 
-/* --- the source strip ---------------------------------------------------- */
-
-/**
- * The sentence the page opens with, in both of its states.
- *
- * It is two facts, not one, and both are always true: the rows are this site's
- * mirror (the ERP has no endpoint that lists applications across applicants —
- * see `application-desk.ts`), and the ERP either answered this render or did
- * not. Collapsing them into a single "source: ERP" would be the lie the whole
- * banner exists to avoid.
- */
-export const SOURCE_TITLE = "Эх сурвалж: энэ сайтын толь";
-
-export const SOURCE_SCOPE =
-  "ERP-д бүх нэр дэвшигчийн өргөдлийг нэг дор унших хаяг байхгүй тул энд зөвхөн " +
-  "энэ сайтаар дамжин ирсэн өргөдөл харагдана. ERP-д шууд ирсэн өргөдөл энэ " +
-  "жагсаалтад ороогүй болно.";
-
-export function erpReachLabel(
-  erp: { reachable: true; postings: number } | { reachable: false; reason: string },
-): string {
-  if (erp.reachable) {
-    return `ERP хариу өглөө — ${erp.postings} зар нээлттэй байна.`;
-  }
-  if (erp.reason === "erp_not_configured") {
-    return "ERP хаяг тохируулаагүй байна — зарын төлөв шалгагдсангүй.";
-  }
-  return `${reasonLabel(erp.reason)} — зарын төлөв шалгагдсангүй, жагсаалт тольноос уншигдлаа.`;
-}
-
 /* --- dates --------------------------------------------------------------- */
 
 /**

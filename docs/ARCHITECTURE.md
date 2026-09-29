@@ -102,11 +102,11 @@ and every server action. It checks the session cookie against `admin_session`
 (which stores only a hash of the token) and the account behind it in
 `app_user`; deactivating an account ends its sessions.
 
-`/admin/applications` lists every application in the mirror and says on screen
-that the mirror — not the ERP — is what it is showing, because the ERP exposes
-no cross-applicant listing (see `docs/applications.md`). It makes one public
-ERP read for liveness and posting state, and falls back with a banner when that
-fails. Reading is open to both roles; two things are `admin` only
+`/admin/applications` lists every application in the mirror — not the ERP,
+which exposes no cross-applicant listing (see `docs/applications.md`). The
+page no longer says so on screen: the source banner was removed at the owner's
+request. It makes one public ERP read for liveness and posting state, and
+leaves the posting state out when that fails. Reading is open to both roles; two things are `admin` only
 (the same shape as `mayDeleteArticles`): the retry (`mayRetryApplications`) and
 the applicant's own record (`mayViewApplicantData`).
 

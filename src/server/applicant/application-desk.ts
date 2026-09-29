@@ -120,7 +120,7 @@ export type DeskApplicationDetail = DeskApplication & {
  *
  * `rows` is `"mirror"` today and the type says so rather than pretending at a
  * choice: see the header. `erp` is the live half — the one public read the
- * desk makes, and the reason the banner has two faces.
+ * desk makes, which decides whether the posting state can be shown.
  */
 export type DeskSource = {
   rows: "mirror";

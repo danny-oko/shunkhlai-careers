@@ -168,15 +168,16 @@ endpoint in the collection that carries an application — `getRecruitmenRequest
 and the `recruitmentorders` inside `get` — answers for **one applicant**,
 addressed by a bearer token `auth/login` mints from that applicant's регистр and
 phone. There is no admin-scoped listing, and `/api/system/*` is the CMS, not
-recruitment. So the list is the mirror (`applicant_account.data_json`), and the
-page carries a banner saying so, together with the caveat that follows from it:
-an application made straight to the ERP is not in this list.
+recruitment. So the list is the mirror (`applicant_account.data_json`): an
+application made straight to the ERP is not in this list. The page used to
+carry a banner saying so; it was removed on 2026-09-29 at the owner's request,
+so the caveat now lives here only.
 
 The desk does make **one** ERP read — `getRecruitmentOrderList`, the public
 posting list the careers pages use, no token and no applicant's credentials.
 It answers whether the ERP is up at all and whether the posting somebody
 applied to is still advertised. When it fails, every row stays on screen and
-the banner changes to say the ERP was not reached; the reason is classified by
+the posting state is simply left out; the reason is classified by
 `classifyPushError`, exactly as a push failure is.
 
 **PII.** The list shows a name, a posting, a date and the push state. No
