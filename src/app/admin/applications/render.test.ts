@@ -17,6 +17,12 @@ import type { TestDatabase } from "@/lib/db/testing";
  * — and then read back through the real `listApplications` / `getApplication`
  * and rendered. So the assertions below cover the whole path, not a fixture
  * that was already clean.
+ *
+ * One block below inverts the rule rather than repeating it. `ApplicantRecordView`
+ * exists to print an applicant's own details for an `admin`, so its test proves
+ * the регистр **is** on the page — and that the two raw ERP messages still are
+ * not, because "we decided to show the person's own fields" was never a decision
+ * to repeat whatever the upstream system said about them.
  */
 
 const state = vi.hoisted(() => ({ pg: null as TestDatabase | null }));
@@ -30,9 +36,11 @@ vi.mock("@/lib/db", async () => {
 });
 
 import { applicantAccount, applicationLog } from "@/lib/db/schema";
+import { ApplicantRecordView } from "@/components/admin/applicant-record";
 import { ApplicationDetail } from "@/components/admin/application-detail";
 import { ApplicationRow } from "@/components/admin/application-row";
 import { ApplicationSource } from "@/components/admin/application-source";
+import { getApplicantRecord } from "@/server/applicant/applicant-record";
 import {
   type DeskSource,
   getApplication,
@@ -49,8 +57,15 @@ const CV_NAME = "Бат_Дорж_CV.pdf";
 const WITHDRAW_RETMSG = `Бат Доржийн РД ${REGNO}, утас ${PHONE} — цуцлах боломжгүй`;
 const LOG_RETMSG = `ORA-01438: ${REGNO} / ${PHONE}`;
 
-/** Everything that may never appear in the markup of any screen here. */
-const SECRETS = [REGNO, PHONE, CV_NAME, WITHDRAW_RETMSG, LOG_RETMSG];
+/** A family member's own регистр — the record shows it, the desk never does. */
+const FAMILY_REGNO = "УБ65010101";
+
+/**
+ * What may never appear on the desk itself: the list, and the detail view an
+ * `editor` gets. `ApplicantRecordView` is the deliberate exception and has its
+ * own block at the bottom — except for the last two, which are nobody's.
+ */
+const SECRETS = [REGNO, PHONE, CV_NAME, FAMILY_REGNO, WITHDRAW_RETMSG, LOG_RETMSG];
 
 const ERP_UP: DeskSource = { rows: "mirror", erp: { reachable: true, postings: 4 } };
 const ERP_DOWN: DeskSource = {
@@ -76,6 +91,24 @@ beforeEach(async () => {
       },
       cv: { filename: CV_NAME },
       picture: true,
+      education: [
+        {
+          entryid: 1,
+          universityid: 68,
+          universityname: "/68/ МУИС-ГХСС",
+          educationlevelname: "Бакалавр",
+          todate: "2022-06-15",
+        },
+      ],
+      family: [
+        {
+          entryid: 2,
+          relativename: "/01/ Эцэг",
+          lastname: "Цэрэн",
+          firstname: "Дорж",
+          famregno: FAMILY_REGNO,
+        },
+      ],
       erp: { withdrawRefused: { "4242": WITHDRAW_RETMSG } },
       applications: [
         {
@@ -127,7 +160,7 @@ const listMarkup = async () => {
   );
 };
 
-const detailMarkup = async (source: DeskSource = ERP_UP) => {
+const detailMarkup = async (source: DeskSource = ERP_UP, profile?: React.ReactNode) => {
   const [row] = await listApplications();
   const application = await getApplication(row.key);
   if (!application) throw new Error("the seeded application was not found");
@@ -136,8 +169,22 @@ const detailMarkup = async (source: DeskSource = ERP_UP) => {
       application,
       source,
       openPostings: new Set([786]),
+      profile,
     }),
   );
+};
+
+/** The applicant's own record, rendered the way the page renders it. */
+const recordMarkup = async () => {
+  const [row] = await listApplications();
+  const record = await getApplicantRecord(EMAIL);
+  if (!record) throw new Error("the seeded account was not found");
+  return {
+    key: row.key,
+    html: renderToStaticMarkup(
+      React.createElement(ApplicantRecordView, { record, applicationKey: row.key }),
+    ),
+  };
 };
 
 /* --- the list ------------------------------------------------------------- */
@@ -183,10 +230,23 @@ describe("the detail view", () => {
     const html = await detailMarkup();
     expect(html).toContain("Хавсаргасан");
     expect(html).not.toContain(CV_NAME);
-    // No second route serving applicant files: the CV stays behind `/api/me/cv`,
-    // which answers the signed-in applicant with their own file and nobody else.
-    expect(html).not.toContain("/api/me/cv");
-    expect(html).not.toMatch(/href="[^"]*cv[^"]*"/iu);
+    // Nothing on this component serves a file. The CV is a link only on the
+    // record block, which is drawn for an `admin` and passed in as `profile`.
+    expect(html).not.toMatch(/href="[^"]*(?:cv|file)[^"]*"/iu);
+  });
+
+  it("tells a reader without the right why the person is not on the page", async () => {
+    const html = await detailMarkup();
+    expect(html).toContain("зөвхөн админ эрхтэй ажилтан харна");
+  });
+
+  it("drops that line once the record itself is on the page", async () => {
+    const { html: record } = await recordMarkup();
+    const html = await detailMarkup(ERP_UP, React.createElement("div", null, "рекорд"));
+    expect(html).not.toContain("зөвхөн админ эрхтэй ажилтан харна");
+    // And the slot is where the record goes — between the person and the push.
+    expect(html).toContain("рекорд");
+    expect(record).not.toContain("зөвхөн админ эрхтэй ажилтан харна");
   });
 
   it("prints no register number, no phone and nothing the ERP said", async () => {
@@ -202,6 +262,50 @@ describe("the detail view", () => {
   it("says the posting is still advertised only when the ERP answered", async () => {
     expect(await detailMarkup(ERP_UP)).toContain("Зарын төлөв");
     expect(await detailMarkup(ERP_DOWN)).not.toContain("Зарын төлөв");
+  });
+});
+
+/* --- the applicant's own record ------------------------------------------- */
+
+describe("the applicant's record", () => {
+  it("prints the регистр, the утас and the анкет — which is what it is for", async () => {
+    const { html } = await recordMarkup();
+
+    expect(html).toContain(REGNO);
+    expect(html).toContain(PHONE);
+    expect(html).toContain("МУИС-ГХСС");
+    expect(html).toContain("Бакалавр");
+    expect(html).toContain("2022.06.15");
+    // A family member's own регистр is part of the анкет they filled in.
+    expect(html).toContain(FAMILY_REGNO);
+    // Reference codes are stripped on the way out, everywhere.
+    expect(html).not.toContain("/68/");
+    expect(html).not.toContain("/01/");
+  });
+
+  it("warns that the утас is also the applicant's ERP password", async () => {
+    const { html } = await recordMarkup();
+    expect(html).toContain("ERP-д нэвтрэх нууц үг");
+  });
+
+  it("links the CV at the role-checked route, and offers a PDF for reading too", async () => {
+    const { html, key } = await recordMarkup();
+
+    expect(html).toContain(CV_NAME);
+    expect(html).toContain(`/admin/applications/${key}/file/cv`);
+    expect(html).toContain(`/admin/applications/${key}/file/cv?view=1`);
+    // The photo is a link as well: no base64 in the page.
+    expect(html).toContain(`/admin/applications/${key}/file/photo`);
+    expect(html).not.toContain("data:image");
+    // And never the applicant's own download, which is not this reader's.
+    expect(html).not.toContain("/api/me/cv");
+  });
+
+  it("still prints nothing the ERP said about them", async () => {
+    const { html } = await recordMarkup();
+    for (const retmsg of [WITHDRAW_RETMSG, LOG_RETMSG]) {
+      expect(html, retmsg).not.toContain(retmsg);
+    }
   });
 });
 

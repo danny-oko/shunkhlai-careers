@@ -4,7 +4,7 @@ Read this before exploring the tree. It exists so a new session (human or agent)
 can find the right file without grepping the whole repo, and so the invariants
 below don't have to be rediscovered the expensive way — by breaking one.
 
-Last verified: 2026-09-26.
+Last verified: 2026-09-29.
 
 ## What this is
 
@@ -50,6 +50,8 @@ src/app/
   admin/news/**                editor desk              → src/app/admin/news/actions.ts
   admin/applications/**        every incoming application
                                                         → src/server/applicant/application-desk.ts
+    [key]/file/[kind]          an applicant's CV / photo, admin only
+                                                        → src/server/applicant/applicant-record.ts
   admin/login/                 staff sign-in            → src/server/admin/sign-in.ts
   account/**                   applicant area (Clerk)   → src/app/api/me/*
   careers/, careers/[id]/      job listings             → src/lib/jobs/*
@@ -86,7 +88,10 @@ Covers are either an uploaded key (`med_…`, chunked base64 in the DB, served b
 
 **Applicant.** Clerk session → `/api/me/*` → writes the local mirror, then pushes
 to the ERP. `src/lib/api/*` speaks to the ERP; `src/server/mock/` stands in when
-it is unreachable. Applicant files (CV, photo) are chunked base64 rows.
+it is unreachable. Applicant files (CV, photo) are files under `UPLOAD_DIR`
+with a `stored_file` row for the metadata (`src/server/files/`); the old
+`applicant_file` base64 chunks are still read for accounts the migration has
+not moved, and nothing writes them.
 
 **Admin.** `requireAdmin()` in `src/server/admin/guard.ts` gates every admin page
 and every server action. It checks the session cookie against `admin_session`
@@ -97,8 +102,16 @@ and every server action. It checks the session cookie against `admin_session`
 that the mirror — not the ERP — is what it is showing, because the ERP exposes
 no cross-applicant listing (see `docs/applications.md`). It makes one public
 ERP read for liveness and posting state, and falls back with a banner when that
-fails. Reading is open to both roles; the retry is `admin` only
-(`mayRetryApplications`, the same shape as `mayDeleteArticles`).
+fails. Reading is open to both roles; two things are `admin` only
+(the same shape as `mayDeleteArticles`): the retry (`mayRetryApplications`) and
+the applicant's own record (`mayViewApplicantData`).
+
+The detail view also carries the applicant's анкет, CV and photo —
+`src/server/applicant/applicant-record.ts`, a **second** read that the page
+makes only for an `admin`, so the desk's own row shapes stay free of регистр,
+утас and CV. The bytes come from
+`/admin/applications/<key>/file/<cv|photo>`, which checks the session and the
+role itself because no layout runs for a route handler.
 
 ## Performance rules
 

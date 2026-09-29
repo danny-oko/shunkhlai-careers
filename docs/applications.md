@@ -183,16 +183,71 @@ the banner changes to say the ERP was not reached; the reason is classified by
 регистр, no phone, no email — the detail view is addressed by the row's
 idempotency key rather than by email so that no URL, bookmark or access log
 carries one. The detail view adds the account email (HR's way to reach them)
-and states whether a CV exists, without its file name and without a link: the
-bytes stay behind `/api/me/cv`, which serves the signed-in applicant their own
-file. Nothing upstream is ever rendered — `erp.withdrawRefused` in the document
-and `application_log.error_message` in the legacy table both hold raw `retmsg`
-text, and both are dropped by `application-desk.ts`.
+and states whether a CV exists. Nothing upstream is ever rendered —
+`erp.withdrawRefused` in the document and `application_log.error_message` in the
+legacy table both hold raw `retmsg` text, and both are dropped by
+`application-desk.ts`.
 
-**Roles.** Reading is open to `editor` and `admin`. «Дахин илгээх» — the only
-control with an effect outside this site — is `admin` only
-(`mayRetryApplications` in `src/server/admin/guard.ts`), checked in the action
-and not only in the UI.
+The applicant's own record is the one exception, and it is a separate read
+behind a separate permission — see «The person behind the row» below.
+
+**Roles.** Reading the desk is open to `editor` and `admin`. Two things are
+`admin` only, both checked where they happen rather than only in the UI:
+«Дахин илгээх», the one control with an effect outside this site
+(`mayRetryApplications`), and the applicant's анкет and CV
+(`mayViewApplicantData`) — both in `src/server/admin/guard.ts`.
+
+## The person behind the row
+
+The desk answers "did this application arrive". HR opens it for a second
+reason: to read the candidate. So `/admin/applications/<key>` also carries the
+applicant's анкет — everything they filled in at `/account/**` — their CV and
+their photo.
+
+**It is a second read, not a wider row.** `DeskApplication` and
+`DeskApplicationDetail` still carry no регистр, no утас and no CV, because they
+feed the list and the list is read over somebody's shoulder.
+`getApplicantRecord(email)` in `src/server/applicant/applicant-record.ts` is a
+separate call a caller has to make by name, and the page makes it only when
+`mayViewApplicantData(user)` — `admin` — is true. An `editor` gets the desk and
+one line saying why the rest is not there; the read never happens for them, so
+there is nothing in the HTML to un-hide.
+
+**What it shows.** The personal section, the address, the driving classes, the
+two «Бусад» answers, both emergency contacts, and every repeating section:
+боловсрол, гадаад хэл, компьютерийн ур чадвар, ажлын туршлага, гэр бүл,
+сонирхсон ажлын байр. The four lists the ERP pulls in and this site has never
+had a form for — `qualifications`, `projects`, `internships`, `relatives` — are
+printed off whatever keys their rows turn out to have, under a dictionary label
+or under the raw key: nothing documents their columns, and a value HR can read
+under an odd label beats a value they never see.
+
+The builder does every bit of the formatting — dates through the desk's own
+`deskDate`, ERP reference codes (`/03/ Эгч`) stripped, ids and empty fields
+dropped, `maritalstatus` resolved against the option list the last ERP pull
+left in the document — so the component is a dumb renderer and the tests assert
+on exactly what reaches the screen. Nothing upstream is copied: the document's
+`erp` block is read for the marital list and for nothing else, and its
+`withdrawRefused` never leaves it.
+
+**The утас is a credential.** It is the applicant's ERP password
+(`src/lib/api/README.md`) and the регистр is the other half of that login. They
+are on the screen because HR cannot phone a candidate they have no number for,
+and the screen says as much above them rather than leaving a reader to treat
+the утас as an ordinary field.
+
+**The files.** `GET /admin/applications/<key>/file/<cv|photo>` serves the bytes,
+and it checks the session and the role itself. That is not belt-and-braces: a
+route handler is a bare GET, no layout runs for it, and the page's own
+`requireAdminUser()` protects nothing on that path — without the check, every
+applicant's CV would be one guessable URL away. It is addressed by the
+application's key for the same reason the detail page is, answers
+`private, no-store` and `nosniff`, and never takes a name or a type from the
+request. A PDF may be read in the browser (`?view=1` → `Content-Disposition:
+inline`); anything else downloads, because a browser will not render a `.doc`
+anyway and inline is not worth offering to a file whose stored type might not be
+what its name claims. The applicant's own `/api/me/cv` is untouched and still
+serves them their own file and nobody else's.
 
 The machinery behind it is unchanged: `listStuckApplications`,
 `retryApplication` and `sweepStuckApplications` are still exported from
