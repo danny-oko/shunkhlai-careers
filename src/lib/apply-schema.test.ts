@@ -96,16 +96,22 @@ describe("describeCvFileError", () => {
   it("says why in Mongolian (the account and apply toasts show it as is)", () => {
     expect(describeCvFileError(cv("cv.png", "image/png"))).toBe("PDF, DOC эсвэл DOCX файл оруулна уу.");
     expect(describeCvFileError(cv("cv.pdf", "application/pdf", MAX_CV_BYTES + 1))).toBe(
-      "Файл 5 MB-аас том байна. Жижиг файл сонгоно уу.",
+      "Файл 4 MB-аас том байна. Жижиг файл сонгоно уу.",
     );
-    expect(CV_LIMITS_TEXT).toBe("PDF, DOC эсвэл DOCX · 5 MB хүртэл");
+    expect(CV_LIMITS_TEXT).toBe("PDF, DOC эсвэл DOCX · 4 MB хүртэл");
   });
 
-  it("holds the size limit at exactly 5 MB", () => {
+  it("holds the size limit at exactly 4 MB", () => {
     expect(describeCvFileError(cv("cv.pdf", "application/pdf", MAX_CV_BYTES))).toBeNull();
     expect(
       describeCvFileError(cv("cv.pdf", "application/pdf", MAX_CV_BYTES + 1)),
-    ).toMatch(/5 MB/);
+    ).toMatch(/4 MB/);
+  });
+
+  it("keeps a whole upload under Vercel's 4.5 MB request cap", () => {
+    // Vercel answers a larger body with its own 413 before the app runs; the
+    // largest file that got through, measured on 2026-09-29, was ~4,487,500 B.
+    expect(MAX_CV_BYTES + 64 * 1024).toBeLessThan(4_487_500);
   });
 });
 

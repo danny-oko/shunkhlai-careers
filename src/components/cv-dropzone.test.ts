@@ -70,7 +70,7 @@ describe("CvDropzone", () => {
   it("speaks Mongolian and shows the limits from apply-schema", () => {
     const zone = render(vi.fn());
     expect(zone.textContent).toContain("CV-гээ энд чирж оруулах эсвэл");
-    expect(zone.textContent).toContain("PDF, DOC эсвэл DOCX · 5 MB хүртэл");
+    expect(zone.textContent).toContain("PDF, DOC эсвэл DOCX · 4 MB хүртэл");
     expect(zone.textContent).not.toMatch(/Drop|browse|max/);
     expect(host.querySelector("input")!.accept).toBe(".pdf,.doc,.docx");
   });

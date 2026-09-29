@@ -87,8 +87,8 @@ export function fileBackend(): "disk" | "database" {
 }
 
 /**
- * Base64 characters per chunk row when `fileBackend()` is `database`. A 5 MB CV
- * (`MAX_CV_BYTES`) is about seven rows.
+ * Base64 characters per chunk row when `fileBackend()` is `database`. A 4 MB CV
+ * (`MAX_CV_BYTES`) is about six rows.
  */
 export const CHUNK_CHARS = 1024 * 1024;
 

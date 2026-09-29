@@ -23,6 +23,9 @@ export type ApiErrorShape = {
   fieldErrors?: Record<string, string[]>;
 };
 
+/** What a 413 means to the person who picked the file. */
+export const UPLOAD_TOO_LARGE_MESSAGE = "Файл хэт том байна. Жижиг файл сонгоно уу.";
+
 /** Normalises anything a call can throw into a single predictable shape. */
 export function toApiError(error: unknown): ApiErrorShape {
   if (error instanceof ApiError) {
@@ -51,7 +54,13 @@ export function toApiError(error: unknown): ApiErrorShape {
       message:
         axiosError.response.data?.retmsg ||
         axiosError.response.data?.message ||
-        "Алдаа гарлаа. Дахин оролдоно уу.",
+        // A 413 without a `retmsg` is not the app's answer (`/api/me` sends
+        // one): it is the host refusing the body before the app ran —
+        // Vercel's 4.5 MB cap, or nginx's `client_max_body_size` — with a bare
+        // page. "Try again" would send the same file into the same wall.
+        (axiosError.response.status === 413
+          ? UPLOAD_TOO_LARGE_MESSAGE
+          : "Алдаа гарлаа. Дахин оролдоно уу."),
       status: axiosError.response.status,
       fieldErrors: axiosError.response.data?.errors,
     };
