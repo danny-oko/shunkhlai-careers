@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { contentDisposition, cvResponse } from "./cv-download";
+import { canPreview, contentDisposition, cvResponse } from "./cv-download";
 
 describe("contentDisposition", () => {
   it("keeps an ASCII name as is", () => {
@@ -23,6 +23,16 @@ describe("contentDisposition", () => {
   });
 });
 
+describe("canPreview", () => {
+  it("is a PDF and nothing else — the browser downloads the rest anyway", () => {
+    expect(canPreview("cv.pdf")).toBe(true);
+    expect(canPreview("CV.PDF")).toBe(true);
+    for (const name of ["cv.doc", "cv.docx", "cv", "cv.pdf.docx", "cv.html"]) {
+      expect(canPreview(name), name).toBe(false);
+    }
+  });
+});
+
 describe("cvResponse", () => {
   it("serves the decoded bytes with the MIME type from the name, uncached", async () => {
     const res = cvResponse({ filename: "cv.doc", data: Buffer.from([1, 2, 3]).toString("base64") });
@@ -32,5 +42,20 @@ describe("cvResponse", () => {
     expect(res.headers.get("cache-control")).toBe("private, no-store");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([1, 2, 3]);
+  });
+
+  it("shows a PDF in the browser only when the caller asked for a preview", () => {
+    const pdf = { filename: "Бат.pdf", data: "" };
+    expect(cvResponse(pdf).headers.get("content-disposition")).toMatch(/^attachment;/u);
+    expect(cvResponse(pdf, { preview: true }).headers.get("content-disposition")).toMatch(
+      /^inline;/u,
+    );
+  });
+
+  it("never serves anything but a PDF inline, however it is asked", () => {
+    const doc = { filename: "Бат.docx", data: "" };
+    expect(cvResponse(doc, { preview: true }).headers.get("content-disposition")).toMatch(
+      /^attachment;/u,
+    );
   });
 });

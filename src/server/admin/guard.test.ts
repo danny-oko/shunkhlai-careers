@@ -8,6 +8,7 @@ import {
   isAdminRequest,
   mayDeleteArticles,
   mayRetryApplications,
+  mayViewApplicantData,
   requireAdmin,
   requireAdminUser,
 } from "./guard";
@@ -307,5 +308,39 @@ describe("mayRetryApplications", () => {
   it("redirects a caller with no session, before any role is considered", async () => {
     memory.cookie = null;
     await expect(requireAdmin()).rejects.toThrow("REDIRECT /admin/login");
+  });
+});
+
+/**
+ * The desk's other admin-only read, and the one that leaves the site: an
+ * applicant's анкет and their CV. Same rule, same near misses — spelled out
+ * separately because it is a *read* rather than a control, which is exactly the
+ * case somebody is tempted to leave open.
+ */
+describe("mayViewApplicantData", () => {
+  const user = (role: string) => ({ ...ADMIN_PASSWORD_IDENTITY, role });
+
+  it("is true for an admin and false for an editor", () => {
+    expect(mayViewApplicantData(user("admin"))).toBe(true);
+    expect(mayViewApplicantData(user("editor"))).toBe(false);
+  });
+
+  it("is false for anything else, including near misses", () => {
+    for (const role of ["", "ADMIN", "admin ", "administrator", "hr"]) {
+      expect(mayViewApplicantData(user(role)), role).toBe(false);
+    }
+  });
+
+  it("is true for the ADMIN_PASSWORD fallback, the only way into a fresh box", () => {
+    expect(mayViewApplicantData(ADMIN_PASSWORD_IDENTITY)).toBe(true);
+  });
+
+  it("lets an editor read the desk without reading the person behind a row", async () => {
+    await addUser(); // created as an editor
+    const { token } = await startSession("usr_test");
+    memory.cookie = token;
+
+    await expect(requireAdmin()).resolves.toBeUndefined();
+    expect(mayViewApplicantData(await requireAdminUser())).toBe(false);
   });
 });

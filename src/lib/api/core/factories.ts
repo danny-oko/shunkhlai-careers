@@ -1,3 +1,5 @@
+import { stripCode } from "@/lib/reference-code";
+
 import { apiGet, apiGetList, apiPost } from "./request";
 
 /* -------------------------------------------------------------------------
@@ -33,11 +35,11 @@ export type DropdownOption = {
 
 /**
  * Reference names arrive as `/03/ Name` — drop the leading code for display.
- * Position labels carry hyphenated codes too (`/02-007/ …`, `/100-17/ …`).
+ * Lives in `@/lib/reference-code` so the admin desk's server modules can use
+ * it without importing this file's ERP transport; re-exported here because
+ * every caller has always taken it from the barrel above this module.
  */
-export function stripCode(text: string | null | undefined): string {
-  return (text ?? "").replace(/^\s*\/\s*\d[\d-]*\s*\/\s*/u, "").trim();
-}
+export { stripCode };
 
 export function toOption(row: DropdownRow): DropdownOption {
   return { value: String(row.key), label: stripCode(row.text), raw: row };

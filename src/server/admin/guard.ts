@@ -100,6 +100,27 @@ export function mayRetryApplications(user: AdminIdentity): boolean {
   return user.role === "admin";
 }
 
+/**
+ * May this user read an applicant's own details — their анкет and their CV?
+ *
+ * Reading the applications desk is open to both roles: an `editor` who sees
+ * that a push is stuck is an `editor` who can tell somebody, and the list
+ * carries a name, a posting, a date and a push state, which is all that takes.
+ *
+ * The person behind the row is a different question. Opening it shows the
+ * регистрийн дугаар, the утас — which is also the applicant's ERP password
+ * (`src/lib/api/README.md`) — every family member they listed, and the CV
+ * itself. That is the applicant's own data, handed to somebody who is not
+ * them, and it leaves this site the moment it is downloaded. So it belongs to
+ * the role that already owns the controls with consequences outside the desk,
+ * and the same way as those: checked where the data is read, not only where
+ * the button is drawn. An `editor` gets the desk and a line saying why the
+ * rest is not there.
+ */
+export function mayViewApplicantData(user: AdminIdentity): boolean {
+  return user.role === "admin";
+}
+
 /** The same gate, for callers that need the name, the email or the role. */
 export async function requireAdminUser(): Promise<AdminIdentity> {
   const user = await currentAdmin();
