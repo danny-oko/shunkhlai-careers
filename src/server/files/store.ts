@@ -67,6 +67,41 @@ export function uploadRoot(): string {
 }
 
 /**
+ * Where uploaded bytes are kept on this deployment.
+ *
+ * `disk` everywhere this module was written for: the customer's host, a
+ * laptop, the tests. `database` on Vercel, which still serves the public site
+ * until the switch-over (`docs/deploy.md` step 9): its filesystem is read-only
+ * outside `/tmp`, and `/tmp` belongs to one function instance and is gone with
+ * it. Without this, every upload there resolved to `DEFAULT_UPLOAD_DIR`, the
+ * write threw, and the applicant's CV was lost — the account row already named
+ * it, so the admin desk offered a file that answered "CV хавсаргаагүй байна."
+ *
+ * `database` means the chunk tables (`applicant_file`, `news_media`) that
+ * every reader still falls back to. An explicit `UPLOAD_DIR` always wins, so a
+ * Vercel deployment given real storage would use it.
+ */
+export function fileBackend(): "disk" | "database" {
+  if (process.env.UPLOAD_DIR?.trim()) return "disk";
+  return process.env.VERCEL ? "database" : "disk";
+}
+
+/**
+ * Base64 characters per chunk row when `fileBackend()` is `database`. A 5 MB CV
+ * (`MAX_CV_BYTES`) is about seven rows.
+ */
+export const CHUNK_CHARS = 1024 * 1024;
+
+/** A base64 string cut into `CHUNK_CHARS` pieces, in order. */
+export function toChunks(data: string): string[] {
+  const chunks: string[] = [];
+  for (let at = 0; at < data.length; at += CHUNK_CHARS) {
+    chunks.push(data.slice(at, at + CHUNK_CHARS));
+  }
+  return chunks.length > 0 ? chunks : [""];
+}
+
+/**
  * The path a digest names, or null if the argument is not a digest.
  *
  * This is the only place a string out of the database becomes a filesystem

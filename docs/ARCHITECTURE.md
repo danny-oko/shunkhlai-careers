@@ -91,7 +91,11 @@ to the ERP. `src/lib/api/*` speaks to the ERP; `src/server/mock/` stands in when
 it is unreachable. Applicant files (CV, photo) are files under `UPLOAD_DIR`
 with a `stored_file` row for the metadata (`src/server/files/`); the old
 `applicant_file` base64 chunks are still read for accounts the migration has
-not moved, and nothing writes them.
+not moved. **On Vercel there is no disk to write to**, so there
+`fileBackend()` (`src/server/files/store.ts`) writes CVs, photos and news
+covers as those chunks instead — until the switch-over, or until Vercel is
+given an `UPLOAD_DIR`. A new file is always written before the old one is let
+go: the reverse order is what lost CVs on Vercel.
 
 **Admin.** `requireAdmin()` in `src/server/admin/guard.ts` gates every admin page
 and every server action. It checks the session cookie against `admin_session`
