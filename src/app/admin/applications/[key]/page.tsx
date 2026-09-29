@@ -1,6 +1,10 @@
 import Link from "next/link";
 
-import { ApplicantRecordView } from "@/components/admin/applicant-record";
+import {
+  ApplicantAvatar,
+  ApplicantCv,
+  ApplicantRecordView,
+} from "@/components/admin/applicant-record";
 import { ApplicationDetail } from "@/components/admin/application-detail";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,11 +112,11 @@ export default async function AdminApplicationPage({
           <RetryButton applicationKey={application.key} />
         ) : undefined
       }
-      profile={
-        record ? (
-          <ApplicantRecordView record={record} applicationKey={application.key} />
-        ) : undefined
+      avatar={
+        record ? <ApplicantAvatar record={record} applicationKey={application.key} /> : undefined
       }
+      cv={record ? <ApplicantCv record={record} applicationKey={application.key} /> : undefined}
+      profile={record ? <ApplicantRecordView record={record} /> : undefined}
     />
   );
 }

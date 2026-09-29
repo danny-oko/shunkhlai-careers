@@ -36,7 +36,11 @@ vi.mock("@/lib/db", async () => {
 });
 
 import { applicantAccount, applicationLog } from "@/lib/db/schema";
-import { ApplicantRecordView } from "@/components/admin/applicant-record";
+import {
+  ApplicantAvatar,
+  ApplicantCv,
+  ApplicantRecordView,
+} from "@/components/admin/applicant-record";
 import { ApplicationDetail } from "@/components/admin/application-detail";
 import { ApplicationRow } from "@/components/admin/application-row";
 import { getApplicantRecord } from "@/server/applicant/applicant-record";
@@ -180,8 +184,16 @@ const recordMarkup = async () => {
   if (!record) throw new Error("the seeded account was not found");
   return {
     key: row.key,
+    // The three pieces the page draws for an `admin`: the header's photo and
+    // CV, and the анкет.
     html: renderToStaticMarkup(
-      React.createElement(ApplicantRecordView, { record, applicationKey: row.key }),
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(ApplicantAvatar, { record, applicationKey: row.key }),
+        React.createElement(ApplicantCv, { record, applicationKey: row.key }),
+        React.createElement(ApplicantRecordView, { record }),
+      ),
     ),
   };
 };

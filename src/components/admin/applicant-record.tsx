@@ -1,6 +1,6 @@
 import { Download, Eye, FileText, ShieldAlert, User } from "lucide-react";
 
-import { Field, Section } from "@/components/admin/record-blocks";
+import { Fact, Section } from "@/components/admin/record-blocks";
 import { Button } from "@/components/ui/button";
 import { canPreview } from "@/server/applicant/cv-download";
 import type { ApplicantRecord, RecordEntry, RecordGroup } from "@/server/applicant/applicant-record";
@@ -11,7 +11,8 @@ import type { ApplicantRecord, RecordEntry, RecordGroup } from "@/server/applica
  * Drawn only for an `admin` (`mayViewApplicantData`), and everything on it is
  * somebody's personal data. Two consequences shape the screen:
  *
- * - **the CV and the photo are links, not bytes on this page.** They are
+ * - **the CV and the photo are links, not bytes on this page.** They sit in
+ *   the page header (`ApplicantCv`, `ApplicantAvatar`), and they are
  *   served by `/admin/applications/<key>/file/<kind>`, which checks the role
  *   itself — so this page can be cached by nothing, printed, or screenshotted
  *   without carrying the file, and the file's own request is logged as its own
@@ -52,69 +53,89 @@ const cvCaption = (cv: NonNullable<ApplicantRecord["cv"]>): string =>
     .filter(Boolean)
     .join(" · ");
 
-function Files({ record, href }: { record: ApplicantRecord; href: (kind: string) => string }) {
+/** The file route for this application — role-checked, see the header. */
+const fileHref = (applicationKey: string, kind: "cv" | "photo") =>
+  `/admin/applications/${applicationKey}/file/${kind}`;
+
+/**
+ * The applicant's photo, for the page header. A link to the role-checked
+ * route, never the bytes: the page carries no base64.
+ */
+export function ApplicantAvatar({
+  record,
+  applicationKey,
+}: {
+  record: ApplicantRecord;
+  applicationKey: string;
+}) {
+  if (!record.hasPhoto) return <AvatarPlaceholder />;
+  return (
+    <span className="flex size-16 shrink-0 overflow-hidden border border-border bg-muted">
+      {/* The bytes are behind the role-checked route, and they are
+          `no-store`, so there is nothing for next/image to optimise. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={fileHref(applicationKey, "photo")}
+        alt={`${record.name || "Нэр дэвшигч"} — зураг`}
+        className="size-full object-cover"
+      />
+    </span>
+  );
+}
+
+/** The empty frame the header shows without a photo, or to an `editor`. */
+export function AvatarPlaceholder() {
+  return (
+    <span className="flex size-16 shrink-0 items-center justify-center border border-border bg-muted">
+      <User aria-hidden className="size-6 text-muted-foreground" />
+    </span>
+  );
+}
+
+/**
+ * The CV, for the page header: what it is and the two things to do with it.
+ * It is what an admin opens this page for most often, so it is the first
+ * control on it rather than a section halfway down.
+ */
+export function ApplicantCv({
+  record,
+  applicationKey,
+}: {
+  record: ApplicantRecord;
+  applicationKey: string;
+}) {
   const { cv } = record;
+  const href = fileHref(applicationKey, "cv");
 
   return (
-    <Section title="CV ба зураг">
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-x-8 gap-y-5">
-        <div className="flex min-w-0 items-start gap-3">
-          <FileText aria-hidden className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-          <div className="min-w-0">
-            <p className="text-[0.8125rem] font-medium">CV</p>
-            {cv ? (
-              <p className="mt-0.5 max-w-[46ch] text-[0.75rem] break-words text-muted-foreground">
-                {cvCaption(cv)}
-              </p>
-            ) : (
-              <p className="mt-0.5 text-[0.75rem] text-muted-foreground">Хавсаргаагүй байна.</p>
+    <div className="flex min-w-0 items-start gap-2.5 border border-border px-3.5 py-3 sm:max-w-[22rem]">
+      <FileText aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <p className="text-[0.8125rem] font-medium">CV</p>
+        <p className="mt-0.5 text-[0.75rem] break-words text-muted-foreground">
+          {cv ? cvCaption(cv) : "Хавсаргаагүй байна."}
+        </p>
+        {cv && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {canPreview(cv.filename) && (
+              <Button asChild size="sm">
+                <a href={`${href}?view=1`} target="_blank" rel="noreferrer">
+                  <Eye aria-hidden className="size-3.5" />
+                  Үзэх
+                </a>
+              </Button>
             )}
-            {cv && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button asChild size="sm" variant="outline">
-                  {/* A download, so no `target` — the page stays where it is. */}
-                  <a href={href("cv")} download>
-                    <Download aria-hidden className="size-3.5" />
-                    Татах
-                  </a>
-                </Button>
-                {canPreview(cv.filename) && (
-                  <Button asChild size="sm" variant="ghost">
-                    <a href={`${href("cv")}?view=1`} target="_blank" rel="noreferrer">
-                      <Eye aria-hidden className="size-3.5" />
-                      Шинэ цонхонд үзэх
-                    </a>
-                  </Button>
-                )}
-              </div>
-            )}
+            <Button asChild size="sm" variant="outline">
+              {/* A download, so no `target` — the page stays where it is. */}
+              <a href={href} download>
+                <Download aria-hidden className="size-3.5" />
+                Татах
+              </a>
+            </Button>
           </div>
-        </div>
-
-        <div className="flex items-start gap-3">
-          <div className="text-right">
-            <p className="text-[0.8125rem] font-medium">Зураг</p>
-            <p className="mt-0.5 text-[0.75rem] text-muted-foreground">
-              {record.hasPhoto ? "Хавсаргасан" : "Байхгүй"}
-            </p>
-          </div>
-          <span className="flex size-16 shrink-0 items-center justify-center overflow-hidden border border-border bg-muted">
-            {record.hasPhoto ? (
-              /* The bytes are behind the role-checked route, and they are
-                 `no-store`, so there is nothing for next/image to optimise. */
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={href("photo")}
-                alt={`${record.name || "Нэр дэвшигч"} — зураг`}
-                className="size-full object-cover"
-              />
-            ) : (
-              <User aria-hidden className="size-5 text-muted-foreground" />
-            )}
-          </span>
-        </div>
+        )}
       </div>
-    </Section>
+    </div>
   );
 }
 
@@ -140,15 +161,15 @@ function Entry({ entry }: { entry: RecordEntry }) {
   );
 }
 
-function Group({ group }: { group: RecordGroup }) {
+function Group({ group, id }: { group: RecordGroup; id: string }) {
   return (
-    <Section title={group.title}>
+    <Section title={group.title} id={id}>
       {group.fields && (
-        <dl className="mt-1">
+        <dl className="mt-1 grid gap-x-8 sm:grid-cols-2">
           {group.fields.map((field) => (
-            <Field key={field.label} term={field.label}>
+            <Fact key={field.label} term={field.label}>
               {field.value}
-            </Field>
+            </Fact>
           ))}
         </dl>
       )}
@@ -169,34 +190,46 @@ export const RECORD_NOTICE =
 
 export const RECORD_EMPTY = "Нэр дэвшигч анкетынхаа бусад хэсгийг бөглөөгүй байна.";
 
-export function ApplicantRecordView({
-  record,
-  applicationKey,
-}: {
-  record: ApplicantRecord;
-  /** The row's idempotency key — the file route's address. */
-  applicationKey: string;
-}) {
-  const href = (kind: string) => `/admin/applications/${applicationKey}/file/${kind}`;
+const groupId = (index: number) => `anket-${index + 1}`;
 
+/**
+ * The анкет itself: the notice, an index of its sections, then the sections.
+ * The CV and the photo are not here — they are in the page header
+ * (`ApplicantCv`, `ApplicantAvatar`).
+ */
+export function ApplicantRecordView({ record }: { record: ApplicantRecord }) {
   return (
-    <>
-      <Section title="Нэр дэвшигчийн анкет">
-        <p className="mt-3 flex items-start gap-2 text-[0.75rem] leading-relaxed text-muted-foreground">
-          <ShieldAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-          <span className="max-w-[68ch]">{RECORD_NOTICE}</span>
-        </p>
-      </Section>
+    <div>
+      <p className="flex items-start gap-2 text-[0.75rem] leading-relaxed text-muted-foreground">
+        <ShieldAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+        <span className="max-w-[68ch]">{RECORD_NOTICE}</span>
+      </p>
 
-      <Files record={record} href={href} />
+      {/* A long анкет is a long scroll; this says what is in it and gets to
+          any part in one click. Not drawn for one section — nothing to jump. */}
+      {record.groups.length > 1 && (
+        <nav aria-label="Анкетын хэсгүүд" className="mt-4 flex flex-wrap gap-1.5">
+          {record.groups.map((group, index) => (
+            <a
+              key={group.title}
+              href={`#${groupId(index)}`}
+              className="inline-flex h-8 items-center border border-border px-3 text-[0.8125rem] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              {group.title}
+            </a>
+          ))}
+        </nav>
+      )}
 
-      {record.groups.map((group) => (
-        <Group key={group.title} group={group} />
-      ))}
+      <div className="mt-8">
+        {record.groups.map((group, index) => (
+          <Group key={group.title} group={group} id={groupId(index)} />
+        ))}
+      </div>
 
       {record.empty && (
         <p className="mt-4 text-[0.75rem] text-muted-foreground">{RECORD_EMPTY}</p>
       )}
-    </>
+    </div>
   );
 }
