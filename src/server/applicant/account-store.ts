@@ -5,6 +5,7 @@ import { applicantAccount, applicantFile, applicantProfile, getDb } from "@/lib/
 import { mimeFromName } from "@/lib/file-type";
 import { parseDataUrl, toDataUrl } from "@/server/files/data-url";
 import { type OwnerKind, dropOwnedFile, putOwnedFile, readOwnedFile } from "@/server/files/records";
+import { fileBackend, toChunks } from "@/server/files/store";
 import { LOCAL_ID_BASE } from "./erp-model";
 import type { ApplicantDoc, Row } from "./handlers";
 
@@ -18,7 +19,8 @@ import type { ApplicantDoc, Row } from "./handlers";
  * `applicant_file`, which inflated them by a third and pulled every one of
  * them through Postgres into this process's heap — on a 1.9 GB server, for a
  * 5 MB CV. Those rows are still read for accounts the migration has not moved
- * yet; nothing writes them any more.
+ * yet, and are written only where there is no disk to write to — Vercel,
+ * until the switch-over (`fileBackend` in `src/server/files/store.ts`).
  */
 
 /** What `data_json` holds: the document minus file contents. */
@@ -389,11 +391,40 @@ async function writeFile(
   filename: string | null,
   data: string,
 ): Promise<void> {
-  // Clears both homes first, so a replacement can never leave the old chunks
-  // shadowing the new file.
-  await deleteFile(email, kind);
-
+  // The new file is written before the old one is let go, in both branches. It
+  // used to be the other way round, and on Vercel — where the disk write always
+  // threw — every re-upload deleted the CV the applicant already had.
   const { contentType, base64 } = decodeStored(kind, filename, data);
+
+  if (fileBackend() === "database") {
+    // The chunk shape `readFile` falls back to: a CV as bare base64, a photo as
+    // its whole data URL, the filename on the first row. One transaction, so a
+    // reader sees the old file or the new one and never a mix of the two.
+    const now = new Date();
+    await getDb().transaction(async (tx) => {
+      await tx
+        .delete(applicantFile)
+        .where(and(eq(applicantFile.email, email), eq(applicantFile.kind, kind)));
+      await tx.insert(applicantFile).values(
+        toChunks(kind === "picture" ? data : base64).map((chunk, index) => ({
+          id: crypto.randomUUID(),
+          email,
+          kind,
+          filename: index === 0 ? filename : null,
+          chunkIndex: index,
+          data: chunk,
+          createdAt: now,
+        })),
+      );
+    });
+    // A `stored_file` row is read before the chunks, so one left over would
+    // answer instead of the file just written.
+    await dropOwnedFile(OWNER_KIND[kind], email);
+    return;
+  }
+
+  // `putOwnedFile` replaces the owner's row itself; the legacy chunks go after,
+  // so they cannot shadow the new file (`readFile` prefers it anyway).
   await putOwnedFile({
     ownerKind: OWNER_KIND[kind],
     ownerKey: email,
@@ -401,6 +432,9 @@ async function writeFile(
     contentType,
     filename,
   });
+  await getDb()
+    .delete(applicantFile)
+    .where(and(eq(applicantFile.email, email), eq(applicantFile.kind, kind)));
 }
 
 /** The stored CV (base64) for this account, or null — the download and the ERP push. */

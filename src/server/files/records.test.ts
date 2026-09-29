@@ -26,7 +26,7 @@ vi.mock("@/lib/db", async () => {
 });
 
 const { dropOwnedFile, putOwnedFile, readOwnedFile, statOwnedFile } = await import("./records");
-const { hasBlob, sha256Hex } = await import("./store");
+const { CHUNK_CHARS, fileBackend, hasBlob, sha256Hex } = await import("./store");
 const { applicantFile, newsMedia, storedFile } = await import("@/lib/db/schema");
 const { getMedia, putMedia, dropMedia } = await import("@/server/news/store");
 const accountStore = await import("@/server/applicant/account-store");
@@ -329,5 +329,105 @@ describe("applicant files during the move", () => {
   it("answers null for an applicant with no file in either home", async () => {
     await expect(accountStore.readCv("nobody@example.mn")).resolves.toBeNull();
     await expect(accountStore.readPicture("nobody@example.mn")).resolves.toBeNull();
+  });
+});
+
+/* --- writing, per backend ------------------------------------------------ */
+
+const identity = {
+  clerkUserId: "user_1",
+  email: "a@example.mn",
+  firstname: "Бат",
+  lastname: "Болд",
+};
+
+/** Uploads a CV the way `/api/me` SaveAppCV does: document first, then the file. */
+async function uploadCv(filename: string, text: string) {
+  const account = await accountStore.loadAccount(identity);
+  account.doc.cv = { filename, filedata: Buffer.from(text).toString("base64") };
+  await accountStore.saveAccount(account, identity, account.nextEntryId, { cv: true });
+}
+
+describe("fileBackend", () => {
+  it("is disk wherever UPLOAD_DIR is set, Vercel included", () => {
+    vi.stubEnv("VERCEL", "1");
+    expect(fileBackend()).toBe("disk");
+    vi.unstubAllEnvs();
+  });
+
+  it("is the database on Vercel without UPLOAD_DIR, whose disk is read-only", () => {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("UPLOAD_DIR", "");
+    expect(fileBackend()).toBe("database");
+    vi.unstubAllEnvs();
+  });
+});
+
+describe("applicant uploads on disk", () => {
+  it("keeps the CV the applicant already has when the new one cannot be written", async () => {
+    await uploadCv("Old.pdf", "old cv");
+    // The store directory becomes unwritable, as `/var/lib/...` was on Vercel.
+    vi.stubEnv("UPLOAD_DIR", "/dev/null/not-a-directory");
+
+    await expect(uploadCv("New.pdf", "new cv")).rejects.toThrow();
+    vi.unstubAllEnvs();
+
+    const cv = await accountStore.readCv("a@example.mn");
+    expect(cv!.filename).toBe("Old.pdf");
+    expect(Buffer.from(cv!.data, "base64").toString()).toBe("old cv");
+  });
+
+  it("clears the legacy chunks once the new file is on disk", async () => {
+    await legacyApplicantFile("a@example.mn", "cv", "Old.pdf", "b2xk");
+    await uploadCv("New.pdf", "new cv");
+
+    expect(await memory.db!.db.select().from(applicantFile)).toHaveLength(0);
+    expect((await accountStore.readCv("a@example.mn"))!.filename).toBe("New.pdf");
+  });
+});
+
+describe("uploads on Vercel (database backend)", () => {
+  beforeEach(() => {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("UPLOAD_DIR", "");
+    return () => vi.unstubAllEnvs();
+  });
+
+  it("stores a CV as chunks that the download reads back", async () => {
+    await uploadCv("Анкет.pdf", "x".repeat(CHUNK_CHARS * 2));
+
+    expect(await memory.db!.db.select().from(storedFile)).toHaveLength(0);
+    expect((await memory.db!.db.select().from(applicantFile)).length).toBeGreaterThan(1);
+    const cv = await accountStore.readCv("a@example.mn");
+    expect(cv!.filename).toBe("Анкет.pdf");
+    expect(Buffer.from(cv!.data, "base64").toString()).toBe("x".repeat(CHUNK_CHARS * 2));
+  });
+
+  it("replaces the previous CV rather than mixing the two", async () => {
+    await uploadCv("Old.pdf", "old cv, and longer than the new one");
+    await uploadCv("New.pdf", "new cv");
+
+    const cv = await accountStore.readCv("a@example.mn");
+    expect(cv!.filename).toBe("New.pdf");
+    expect(Buffer.from(cv!.data, "base64").toString()).toBe("new cv");
+  });
+
+  it("stores a photo as the data URL the account page shows", async () => {
+    const url = `data:image/jpeg;base64,${Buffer.from("photo").toString("base64")}`;
+    const account = await accountStore.loadAccount(identity);
+    account.doc.picture = url;
+    await accountStore.saveAccount(account, identity, account.nextEntryId, { picture: true });
+
+    await expect(accountStore.readPicture("a@example.mn")).resolves.toBe(url);
+  });
+
+  it("stores a news cover as chunks that the media route serves", async () => {
+    const key = await putMedia(bytesOf("cover"), "image/png");
+
+    expect(await memory.db!.db.select().from(storedFile)).toHaveLength(0);
+    await expect(getMedia(key)).resolves.toEqual({
+      bytes: Buffer.from(bytesOf("cover")),
+      contentType: "image/png",
+    });
   });
 });

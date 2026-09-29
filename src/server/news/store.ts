@@ -9,6 +9,7 @@ import { coerceBody } from "@/lib/news/legacy";
 import type { RichDoc } from "@/lib/news/shared/rich-text";
 import { uniqueSlug } from "@/lib/news/shared/slug";
 import { dropOwnedFile, putOwnedFile, readOwnedFile } from "@/server/files/records";
+import { fileBackend, toChunks } from "@/server/files/store";
 import {
   NEWS_CATEGORIES,
   type NewsArticle,
@@ -346,6 +347,23 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
  */
 export async function putMedia(bytes: Uint8Array, contentType: string): Promise<string> {
   const key = newId("med_", 6);
+  if (fileBackend() === "database") {
+    // No disk on this deployment (see `fileBackend`): the chunks `getMedia`
+    // already falls back to. The key is new, so there is nothing to replace.
+    const now = new Date();
+    await getDb()
+      .insert(newsMedia)
+      .values(
+        toChunks(Buffer.from(bytes).toString("base64")).map((data, chunkIndex) => ({
+          key,
+          chunkIndex,
+          contentType,
+          data,
+          createdAt: now,
+        })),
+      );
+    return key;
+  }
   await putOwnedFile({ ownerKind: "news_media", ownerKey: key, bytes, contentType });
   return key;
 }
